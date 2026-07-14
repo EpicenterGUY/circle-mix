@@ -11,7 +11,7 @@
     color:#eaf3ff;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     touch-action:none;
   }
-  canvas{display:block;width:100vw;height:100vh;}
+  canvas{display:block;width:100vw;height:100vh;touch-action:none;}
   .hud{
     position:fixed;left:18px;top:16px;width:345px;padding:14px 16px;
     border-radius:18px;background:rgba(8,15,30,.74);border:1px solid rgba(255,255,255,.14);
@@ -190,8 +190,11 @@
     display:flex;align-items:center;justify-content:center;
     background:radial-gradient(circle at 50% 45%,#183b66 0%,#071427 55%,#02040b 100%);
     color:#eaf3ff;pointer-events:auto;
+    touch-action:manipulation;
   }
   #safeMenu *{pointer-events:auto}
+  body.safeTitle canvas,
+  body.safeSettings canvas{pointer-events:none !important;}
   .safeMenuCard{
     width:min(680px,calc(100vw - 28px));
     padding:28px;border-radius:28px;text-align:center;
@@ -229,9 +232,11 @@
     display:none;align-items:center;justify-content:center;
     background:rgba(0,0,0,.58);backdrop-filter:blur(8px);
     pointer-events:auto;
+    touch-action:manipulation;
   }
   #safeOverlay.show{display:flex}
   #safeOverlay *{pointer-events:auto}
+  #safeOverlay.show{pointer-events:auto}
   .safeOverlayCard{
     width:min(620px,calc(100vw - 28px));
     padding:22px;border-radius:24px;
@@ -2306,7 +2311,8 @@
   window.addEventListener("pointermove",e=>{mouseX=e.clientX;mouseY=e.clientY;},{passive:true});
   window.addEventListener("touchmove",e=>{if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;}},{passive:true});
   window.addEventListener("contextmenu",e=>e.preventDefault());
-  window.addEventListener("mousedown",e=>{if(e.button===0)onCut(); if(e.button===2){mouseDownRight=true;filterHeld=true;}});
+  function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.keymapOverlay,.pauseOverlay,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
+  window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; if(e.button===0 && running)onCut(); if(e.button===2 && running){mouseDownRight=true;filterHeld=true;}});
   window.addEventListener("mouseup",e=>{if(e.button===2){mouseDownRight=false;filterHeld=false;}});
   window.addEventListener("keydown",e=>{
     keys[e.code]=true;
@@ -2373,29 +2379,44 @@
   const safeResume=document.getElementById("safeResume");
   const safeExit=document.getElementById("safeExit");
 
+  function safeInputEvent(e){
+    if(!e)return;
+    if(e.cancelable)e.preventDefault();
+    e.stopPropagation();
+  }
+
   function safeBind(el,fn){
     if(!el)return;
     let last=0;
-    const h=e=>{
-      if(e && e.cancelable)e.preventDefault();
+    const run=e=>{
+      safeInputEvent(e);
       const m=performance.now();
-      if(m-last<120)return;
+      if(m-last<180)return;
       last=m;
       try{fn();}catch(err){console.error(err);alert("ERROR: "+err.message);}
     };
-    el.addEventListener("pointerup",h,{passive:false});
-    el.addEventListener("touchend",h,{passive:false});
-    el.addEventListener("click",h,{passive:false});
+    el.addEventListener("pointerdown",safeInputEvent,{passive:false});
+    el.addEventListener("pointerup",run,{passive:false});
+    el.addEventListener("touchend",run,{passive:false});
+    el.addEventListener("click",run,{passive:false});
+  }
+
+  function safeSetState(state){
+    document.body.classList.toggle("safeTitle", state==="title");
+    document.body.classList.toggle("safeSettings", state==="settings");
+    document.body.classList.toggle("safeGame", state==="game");
+    if(safeMenu)safeMenu.style.display=state==="title"?"flex":"none";
+    if(safeOverlay)safeOverlay.classList.toggle("show",state==="settings");
+    canvas.style.pointerEvents=state==="game"?"auto":"none";
+    settingsVisible=state==="settings";
   }
 
   function safeSetMenuVisible(v){
-    if(safeMenu)safeMenu.style.display=v?"flex":"none";
-    canvas.style.pointerEvents=v?"none":"auto";
+    safeSetState(v?"title":(settingsVisible?"settings":"game"));
   }
 
   function safeSetOverlay(v){
-    if(safeOverlay)safeOverlay.classList.toggle("show",!!v);
-    settingsVisible=!!v;
+    safeSetState(v?"settings":(running?"game":"title"));
   }
 
   function safeRefresh(){
@@ -2410,8 +2431,7 @@
 
   const originalStart=start;
   start=function(mode="play"){
-    safeSetMenuVisible(false);
-    safeSetOverlay(false);
+    safeSetState("game");
     document.body.classList.add("safeClean");
     return originalStart(mode);
   };
@@ -2430,6 +2450,7 @@
   toggleSettings=function(force){
     settingsVisible = force!==undefined ? force : !settingsVisible;
     safeSetOverlay(settingsVisible);
+    originalToggleSettings(settingsVisible);
     safeRefresh();
   };
 
@@ -2444,16 +2465,15 @@
   safeBind(safeSetAuto,()=>{autoMode=!autoMode;safeRefresh();updateButtons();});
   safeBind(safeSetMap,()=>{mapMode=mapMode==="tech"?"normal":"tech";selectedMenuMode=mapMode;safeRefresh();restartIfRunning();});
   safeBind(safeSetSfx,()=>{sfxEnabled=!sfxEnabled;safeRefresh();updateButtons();});
-  safeBind(safeSetMusic,()=>{changeMusicVolume(musicVolume>=.95?-.45:.10);safeRefresh();});
+  safeBind(safeSetMusic,()=>{changeMusic(musicVolume>=.95?-.45:.10);safeRefresh();});
   safeBind(safeSetSpdDown,()=>changeSpeed(+0.04));
   safeBind(safeSetSpdUp,()=>changeSpeed(-0.04));
   safeBind(safeSetOffDown,()=>changeOffset(-0.03));
   safeBind(safeSetOffUp,()=>changeOffset(+0.03));
-  safeBind(safeResume,resumeGame);
+  safeBind(safeResume,()=>{safeSetOverlay(false);resumeGame();});
   safeBind(safeExit,exitToMenu);
 
-  safeSetMenuVisible(true);
-  safeSetOverlay(false);
+  safeSetState("title");
   safeRefresh();
 
 
