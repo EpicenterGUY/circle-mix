@@ -891,7 +891,8 @@
   }
 
   function playHitSound(type="cut", quality="PERFECT"){
-    if(!sfxEnabled) return;
+    const effectiveSfxVolume = sfxEnabled ? clamp(sfxVolume, 0, 4) : 0;
+    if(effectiveSfxVolume <= 0.001) return;
     ensureAudioCtx();
     if(!audioCtx) return;
 
@@ -936,7 +937,7 @@
     osc.frequency.setValueAtTime(freq,t);
     osc.frequency.exponentialRampToValueAtTime(Math.max(80,freq*.55),t+dur);
 
-    const finalVol = clamp(vol * sfxVolume, 0.001, .55);
+    const finalVol = clamp(vol * effectiveSfxVolume, 0.001, .55);
     gain.gain.setValueAtTime(0.0001,t);
     gain.gain.exponentialRampToValueAtTime(finalVol,t+.006);
     gain.gain.exponentialRampToValueAtTime(0.0001,t+dur);
@@ -950,7 +951,7 @@
       const g2=audioCtx.createGain();
       g2.connect(audioCtx.destination);
       g2.gain.setValueAtTime(0.0001,t);
-      g2.gain.exponentialRampToValueAtTime(clamp(0.080 * sfxVolume, 0.001, .28),t+.010);
+      g2.gain.exponentialRampToValueAtTime(clamp(0.080 * effectiveSfxVolume, 0.001, .28),t+.010);
       g2.gain.exponentialRampToValueAtTime(0.0001,t+.12);
 
       const osc2=audioCtx.createOscillator();
@@ -980,7 +981,7 @@
       bp.type="bandpass";
       bp.frequency.setValueAtTime(type==="swingCW"?1800:1400,t);
       bp.Q.value=2.8;
-      ng2.gain.setValueAtTime(clamp(0.040*sfxVolume,0.001,.12),t);
+      ng2.gain.setValueAtTime(clamp(0.040*effectiveSfxVolume,0.001,.12),t);
       ng2.gain.exponentialRampToValueAtTime(0.0001,t+nDur);
       nb.connect(bp); bp.connect(ng2); ng2.connect(audioCtx.destination);
       nb.start(t);
@@ -997,7 +998,7 @@
     const noise=audioCtx.createBufferSource();
     const ng=audioCtx.createGain();
     noise.buffer=buffer;
-    ng.gain.setValueAtTime((type==="cut"?.040:.026) * sfxVolume,t);
+    ng.gain.setValueAtTime((type==="cut"?.040:.026) * effectiveSfxVolume,t);
     ng.gain.exponentialRampToValueAtTime(0.0001,t+noiseDur);
     noise.connect(ng);
     ng.connect(audioCtx.destination);
@@ -2043,17 +2044,25 @@
     }
   }
 
+  function formatSpeed(){ return "SPEED " + (1/APPROACH).toFixed(2) + "x"; }
+  function formatOffset(){ return "OFFSET " + SONG_OFFSET.toFixed(2) + "s"; }
+  function formatSfx(){ return "SFX " + Math.round(clamp(sfxVolume,0,4)*100) + "%" + (sfxEnabled ? "" : " OFF"); }
+  function formatMusic(){ return "MUSIC " + Math.round(clamp(musicVolume,0,1)*100) + "%"; }
+  function refreshSettingsUI(){ updateButtons(); }
+
   function updateButtons(){
+    applyMusicVolume();
     autoBox.textContent=autoMode?"AUTO ON":"AUTO OFF";
     mapBox.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
     autoToggle.textContent=autoMode?"AUTO ON":"AUTO OFF";
     autoToggle.classList.toggle("on",autoMode);
     mapToggle.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
     mapToggle.classList.toggle("on",mapMode==="tech");
-    if(speedValue) speedValue.textContent = "SPD " + (1/APPROACH).toFixed(2) + "x";
-    if(offsetValue) offsetValue.textContent = "OFF " + SONG_OFFSET.toFixed(2) + "s";
-    if(sfxValue) sfxValue.textContent = "SFX " + Math.round(sfxVolume*100) + "% " + (sfxEnabled ? "ON" : "OFF");
-    if(musicValue) musicValue.textContent = "MUSIC " + Math.round(musicVolume*100) + "%";
+    if(speedValue) speedValue.textContent = formatSpeed();
+    if(offsetValue) offsetValue.textContent = formatOffset();
+    if(sfxValue) sfxValue.textContent = formatSfx();
+    if(musicValue) musicValue.textContent = formatMusic();
+    if(typeof safeRefresh === "function") safeRefresh();
   }
 
   function endGame(stopAudio=true){
@@ -2253,8 +2262,10 @@
   }
 
   function applyMusicVolume(){
-    song.volume = clamp(musicVolume,0,1);
-    song.muted = musicVolume <= 0.001;
+    const appliedMusicVolume = clamp(musicVolume,0,1);
+    musicVolume = appliedMusicVolume;
+    song.volume = appliedMusicVolume;
+    song.muted = appliedMusicVolume <= 0.001;
   }
 
   function changeMusic(delta){
@@ -2420,13 +2431,19 @@
   }
 
   function safeRefresh(){
+    applyMusicVolume();
     if(safeTech)safeTech.classList.toggle("on",selectedMenuMode==="tech");
     if(safeNormal)safeNormal.classList.toggle("on",selectedMenuMode==="normal");
     if(safeAuto){safeAuto.textContent=autoMode?"AUTO ON":"AUTO OFF";safeAuto.classList.toggle("on",autoMode);}
     if(safeSetAuto){safeSetAuto.textContent=autoMode?"AUTO ON":"AUTO OFF";safeSetAuto.classList.toggle("on",autoMode);}
     if(safeSetMap){safeSetMap.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";safeSetMap.classList.toggle("on",mapMode==="tech");}
-    if(safeSetSfx){safeSetSfx.textContent=sfxEnabled?"SFX ON":"SFX OFF";safeSetSfx.classList.toggle("on",sfxEnabled);}
-    if(safeSetMusic)safeSetMusic.textContent="MUSIC "+Math.round(musicVolume*100)+"%";
+    if(safeSettingsBtn)safeSettingsBtn.textContent="SETTINGS · " + formatSpeed() + " · " + formatMusic() + " · " + formatSfx() + " · " + formatOffset();
+    if(safeSetSfx){safeSetSfx.textContent=formatSfx();safeSetSfx.classList.toggle("on",sfxEnabled);}
+    if(safeSetMusic)safeSetMusic.textContent=formatMusic();
+    if(safeSetSpdDown)safeSetSpdDown.textContent=formatSpeed() + " −";
+    if(safeSetSpdUp)safeSetSpdUp.textContent=formatSpeed() + " ＋";
+    if(safeSetOffDown)safeSetOffDown.textContent=formatOffset() + " −";
+    if(safeSetOffUp)safeSetOffUp.textContent=formatOffset() + " ＋";
   }
 
   const originalStart=start;
@@ -2464,8 +2481,8 @@
 
   safeBind(safeSetAuto,()=>{autoMode=!autoMode;safeRefresh();updateButtons();});
   safeBind(safeSetMap,()=>{mapMode=mapMode==="tech"?"normal":"tech";selectedMenuMode=mapMode;safeRefresh();restartIfRunning();});
-  safeBind(safeSetSfx,()=>{sfxEnabled=!sfxEnabled;safeRefresh();updateButtons();});
-  safeBind(safeSetMusic,()=>{changeMusic(musicVolume>=.95?-.45:.10);safeRefresh();});
+  safeBind(safeSetSfx,()=>{sfxEnabled=!sfxEnabled;refreshSettingsUI();});
+  safeBind(safeSetMusic,()=>changeMusic(musicVolume>=.95?-.45:.10));
   safeBind(safeSetSpdDown,()=>changeSpeed(+0.04));
   safeBind(safeSetSpdUp,()=>changeSpeed(-0.04));
   safeBind(safeSetOffDown,()=>changeOffset(-0.03));
