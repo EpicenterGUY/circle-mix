@@ -43,13 +43,13 @@
   let APPROACH = 0.48;
   const HIT_WINDOW = 0.17;
   const SWING_FLICK_SPEED = 0.78;
-  const SCRATCH_SPEED = 2.15;
+  const SCRATCH_FLICK_SPEED = 1.30;
   const DIAL_ARC_HALF = Math.PI * 0.075;
   const DIAL_ARC_VISUAL = Math.PI * 0.100;
 
   const COLORS = {
     cut:"#5cfffb", swingCW:"#79ff7d", swingCCW:"#ff72d6", slide:"#ffe15a", fx:"#b77cff",
-    scratch:"#ff4f6d", scratchCW:"#ff4f6d", scratchCCW:"#ff9f43",
+    trace:"#dffcff", scratch:"#c94b2d", scratchCW:"#c94b2d", scratchCCW:"#d9782a",
     perfect:"#fff36a", great:"#80ffdb", miss:"#ff4567"
   };
 
@@ -113,17 +113,17 @@
       hitTime,spawnTime:hitTime-APPROACH,
       duration:extra.duration||0,done:false,missed:false,hold:0
     };
-    if(type.startsWith("slide") || type.startsWith("scratch")){
+    if(type.startsWith("slide")){
       n.duration=extra.duration||BEAT*1.7;
       n.endAngle=extra.endAngle!==undefined?extra.endAngle:laneAngle(extra.endLane??lane);
 
       n.turns = extra.turns || 0;
       let raw = n.endAngle - n.angle;
 
-      if(type==="slideCW" || type==="scratchCW"){
+      if(type==="slideCW"){
         while(raw <= 0) raw += TAU;
         n.slideAmount = raw + TAU * n.turns;
-      }else if(type==="slideCCW" || type==="scratchCCW"){
+      }else if(type==="slideCCW"){
         while(raw >= 0) raw -= TAU;
         n.slideAmount = raw - TAU * n.turns;
       }else{
@@ -131,6 +131,13 @@
       }
 
       n.visualEndAngle = n.angle + n.slideAmount;
+    }
+    if(type.startsWith("scratch")){
+      n.duration=extra.duration||BEAT*.55;
+      const dir=type==="scratchCW"?1:-1;
+      n.slideAmount=dir*(extra.amount||Math.PI*.34);
+      n.endAngle=n.angle+n.slideAmount;
+      n.visualEndAngle=n.endAngle;
     }
     if(n.duration){
       n.endBeat = beat + n.duration / (BEAT * CHART_STRETCH);
@@ -149,8 +156,11 @@
   function slide(n,b,lane,endLane,dir="CW",dur=4,turns=0){
     n.push(make(dir==="CW"?"slideCW":"slideCCW",b,lane,{endLane,duration:BEAT*dur,turns}));
   }
-  function scratch(n,b,lane,endLane,dir="CW",dur=3.5){
-    n.push(make(dir==="CW"?"scratchCW":"scratchCCW",b,lane,{endLane,duration:BEAT*dur}));
+  function trace(n,b,lane,endLane=lane,dur=1.5){
+    n.push(make("trace",b,lane,{endLane,duration:BEAT*dur}));
+  }
+  function scratch(n,b,lane,endLane=lane,dir="CW",dur=.55){
+    n.push(make(dir==="CW"?"scratchCW":"scratchCCW",b,lane,{endLane,duration:BEAT*dur,amount:Math.PI*.34}));
   }
 
   function motif(n,start,lanes,step=.75){
@@ -192,12 +202,14 @@
 
     // 0~32 Intro: 4박/2박 CUT 앵커로 기본 박자와 8방향 레인을 설명.
     anchor(n,4,20,4,[0,4,2,6]);
+    trace(n,22.5,0);
     stair(n,24,[0,2,4,6],1.0);
     stair(n,28,[1,3,5,7],1.0);
     swing(n,32,7,"CW");
 
     // 32~64 Verse: CUT 모티프 반복. 첫 SLIDE는 짧고 주변 조작을 비워 둔다.
     motif(n,36,[0,2,4,6,7,5,3,1],1.0);
+    trace(n,46.5,1,5);
     slide(n,48,1,5,"CW",3.5);
     cut(n,53,5);
     swing(n,56,5,"CCW");
@@ -205,19 +217,21 @@
 
     // 72~112 Build: HOLD는 지속음 역할. HOLD 중에는 복잡한 조작 없이 진입/이탈만 배치.
     hold(n,74,6,4.5);
+    trace(n,79,6);
     cut(n,80,6);
     motif(n,84,[6,4,2,0,1,3,5,7],.9);
     slide(n,98,7,3,"CCW",3.5);
-    scratch(n,105,3,6,"CW",2.8);
+    scratch(n,105,3,6,"CW");
     stair(n,110,[6,7,0,1],.55);
 
     // 112~144 Highlight 1: 짧은 CUT 러시 + SWING 마무리 + 포인트 SCRATCH.
     burst(n,116,[0,1,2,3,4,5,6,7],.42);
+    trace(n,120,7);
     swing(n,121,7,"CW");
     slide(n,126,4,0,"CCW",3.2);
     cut(n,132,0);
     burst(n,136,[0,2,4,6,1,3,5,7],.44);
-    scratch(n,143,7,3,"CCW",2.8);
+    scratch(n,143,7,3,"CCW");
 
     // 144~176 Break: 밀도 낮춤. 긴 공백은 앵커 CUT으로만 유지.
     hold(n,150,3,4.5);
@@ -227,7 +241,7 @@
     // 180~224 Build 2: 방향성 있는 CUT에 짧은 SLIDE/SCRATCH 연결을 한 번 소개.
     motif(n,182,[1,3,5,7,0,2,4,6,6,4,2,0],.8);
     slide(n,198,0,5,"CW",3.5);
-    scratch(n,205,5,1,"CCW",2.8);
+    scratch(n,205,5,1,"CCW");
     stair(n,212,[1,2,3,4,5,6,7,0],.55);
     swing(n,218,0,"CW");
 
@@ -237,14 +251,14 @@
     burst(n,232,[4,5,6,7,0,1,2,3,3,2,1,0],.40);
     slide(n,244,0,5,"CW",3.5);
     cut(n,250,5);
-    scratch(n,253,5,1,"CCW",2.8);
+    scratch(n,253,5,1,"CCW");
     burst(n,260,[1,3,5,7,0,2,4,6],.42);
     slide(n,270,1,6,"CW",3.5);
     swing(n,276,6,"CCW");
 
     // 280~320 Final drive: 후반 밀도 상승. 동시/복합 조작 대신 CUT 계단을 중심으로 마무리.
     burst(n,284,[6,7,0,1,2,3,4,5],.40);
-    scratch(n,294,2,7,"CW",2.8);
+    scratch(n,294,2,7,"CW");
     stair(n,300,[7,5,3,1,6,4,2,0],.50);
     slide(n,310,0,4,"CW",3.5);
     swing(n,316,4,"CW");
@@ -253,7 +267,7 @@
     // 320~342 Ending: HOLD로 안정시키고 SCRATCH/SWING/CUT으로 명확하게 종료.
     hold(n,326,3,3.5);
     anchor(n,332,336,2,[0,4,2]);
-    scratch(n,337,6,2,"CCW",2.5);
+    scratch(n,337,6,2,"CCW");
     swing(n,340,2,"CW");
     cut(n,342,4);
 
@@ -268,12 +282,14 @@
 
     // 0~32 Intro: NORMAL보다 빠른 CUT 계단으로 판정감을 잡되 과밀하게 시작하지 않음.
     anchor(n,4,16,3,[0,4,2,6,1]);
+    trace(n,20.8,0,2);
     stair(n,22,[0,2,4,6,1,3,5,7],.70);
     stair(n,28,[7,5,3,1],.55);
     swing(n,31.5,7,"CW");
 
     // 32~64 First phrase: 반복 모티프 + 짧은 러시. SLIDE 뒤에만 가벼운 마무리를 둔다.
     motif(n,36,[0,2,4,6,7,5,3,1,0,1,2,3],.62);
+    trace(n,45,3,7);
     slide(n,46,3,7,"CW",3.2);
     cut(n,51.5,7);
     swing(n,53,7,"CCW");
@@ -285,7 +301,8 @@
     cut(n,80,6);
     motif(n,83,[6,4,2,0,1,3,5,7,7,5,3,1],.60);
     slide(n,96,1,5,"CW",3.5);
-    scratch(n,103,5,0,"CCW",2.8);
+    trace(n,102,5);
+    scratch(n,103,5,0,"CCW");
     burst(n,108,[0,1,2,3,4,5,6,7],.34);
 
     // 112~144 Highlight 1: CUT 러시를 2마디 이하로 제한하고 SWING/SCRATCH로 악센트.
@@ -294,7 +311,7 @@
     slide(n,126,0,4,"CW",3.4);
     cut(n,131.5,4);
     burst(n,134,[4,6,0,2,5,7,1,3,4,5,6,7],.32);
-    scratch(n,142.5,7,3,"CCW",2.8);
+    scratch(n,142.5,7,3,"CCW");
 
     // 144~176 Break: 의도적 저밀도. HOLD와 SLIDE 사이를 비워 체력 회복.
     hold(n,148,3,5.0);
@@ -304,8 +321,9 @@
 
     // 180~224 Build 2: 계단과 방향 전환. SCRATCH는 드랍 전 포인트로 1회.
     motif(n,182,[2,4,6,0,1,3,5,7,7,5,3,1,0,2,4,6],.55);
-    scratch(n,196,6,1,"CW",2.8);
+    scratch(n,196,6,1,"CW");
     burst(n,202,[1,2,3,4,5,6,7,0,0,2,4,6],.31);
+    trace(n,210,6);
     swing(n,211,6,"CCW");
     burst(n,213,[6,4,2,0,1,3,5,7],.34);
     slide(n,219,7,3,"CCW",3.5);
@@ -316,7 +334,7 @@
     burst(n,231,[3,4,5,6,7,0,1,2,2,1,0,7,6,5,4,3],.29);
     swing(n,236,3,"CW");
     slide(n,242,3,0,"CW",3.5);
-    scratch(n,248,0,4,"CCW",2.8);
+    scratch(n,248,0,4,"CCW");
     burst(n,256,[4,6,0,2,5,7,1,3,0,1,2,3,4,5,6,7],.28);
     swing(n,262,7,"CCW");
     slide(n,270,7,2,"CCW",3.5);
@@ -325,7 +343,7 @@
     // 280~320 Final drive: 가장 높은 밀도지만 러시를 끊어 호흡을 준다.
     burst(n,284,[0,1,2,3,4,5,6,7,7,6,5,4],.27);
     swing(n,288,4,"CW");
-    scratch(n,294,0,5,"CW",2.8);
+    scratch(n,294,0,5,"CW");
     burst(n,300,[5,7,1,3,6,0,2,4,7,5,3,1],.28);
     slide(n,312,0,6,"CW",3.5);
     swing(n,318,6,"CW");
@@ -334,7 +352,7 @@
     // 320~342 Ending: 과도한 난사 대신 읽히는 마무리 액션.
     hold(n,326,5,3.5);
     motif(n,332,[5,3,1,7,0,2,4,6],.55);
-    scratch(n,337,6,2,"CCW",2.5);
+    scratch(n,337,6,2,"CCW");
     swing(n,340,2,"CW");
     cut(n,342,4);
 
@@ -428,6 +446,7 @@
     if(n.type==="swingCW")return COLORS.swingCW;
     if(n.type==="swingCCW")return COLORS.swingCCW;
     if(n.type.startsWith("slide"))return COLORS.slide;
+    if(n.type==="trace")return COLORS.trace;
     if(n.type==="fx")return COLORS.fx;
     if(n.type==="scratchCW")return COLORS.scratchCW;
     if(n.type==="scratchCCW")return COLORS.scratchCCW;
@@ -435,7 +454,7 @@
     return "#fff";
   }
   function aligned(angle, extra=0){return distAng(armAngle,angle)<DIAL_ARC_HALF+Math.PI*extra;}
-  function activeHold(n,t){return (n.type==="fx"||n.type.startsWith("slide")||n.type.startsWith("scratch"))&&t>=n.hitTime&&t<=n.hitTime+n.duration;}
+  function activeHold(n,t){return (n.type==="fx"||n.type.startsWith("slide"))&&t>=n.hitTime&&t<=n.hitTime+n.duration;}
 
   function addFeedback(text,x,y,color){feedback.push({text,x,y,color,life:.65});}
   function addParticles(x,y,color,count=12,power=1){
@@ -637,10 +656,11 @@
   }
 
   function checkScratch(n, t){
-    // SCRATCH = Shift를 누른 채 빨간 경로를 슬라이드처럼 따라가기.
+    // SCRATCH = Shift를 누른 채 짧게 좌/우로 긁는 액션. SLIDE처럼 긴 경로를 추적하지 않는다.
     if(!scratchHeld)return false;
-    const a=slideAngle(n,t);
-    return aligned(a,.012);
+    if(!aligned(n.angle,.026))return false;
+    const dir=n.type==="scratchCW"?1:-1;
+    return Math.abs(armVel)>=SCRATCH_FLICK_SPEED && Math.sign(armVel)===dir;
   }
   function onCut(){
     if(!running||paused)return;
@@ -665,7 +685,7 @@
   function updateAuto(t){
     if(!autoMode)return;
 
-    const activePath=chart.find(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("scratch"))&&t>=n.hitTime&&t<=n.hitTime+n.duration);
+    const activePath=chart.find(n=>!n.done&&!n.missed&&n.type.startsWith("slide")&&t>=n.hitTime&&t<=n.hitTime+n.duration);
     if(activePath){
       const a=slideAngle(activePath,t);
       armAngle=a;
@@ -681,7 +701,7 @@
       if(n.type.startsWith("swing") && Math.abs(t-n.hitTime)<.20){
         const dir=n.type==="swingCW"?1:-1;
         armAngle += dir*.08;
-        armVel = dir*SCRATCH_SPEED*1.2;
+        armVel = dir*SCRATCH_FLICK_SPEED*1.5;
       }
       if((n.type==="cut"||n.type.startsWith("swing"))&&Math.abs(t-n.hitTime)<.030){
         judge(n,"PERFECT",noteColor(n));
@@ -691,7 +711,7 @@
 
   function updateArm(dt){
     const tNow = now();
-    if(autoMode && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("scratch"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
+    if(autoMode && chart.some(n=>!n.done&&!n.missed&&n.type.startsWith("slide")&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
       return;
     }
 
@@ -722,6 +742,15 @@
         continue;
       }
 
+      if(n.type==="trace"){
+        if(t>=n.hitTime-.18&&t<=n.hitTime+.24&&(autoMode||aligned(n.angle,.035))){
+          judge(n,Math.abs(t-n.hitTime)<.090?"PERFECT":"GREAT",COLORS.trace);
+        }else if(t>n.hitTime+.28){
+          miss(n);
+        }
+        continue;
+      }
+
       if(n.type.startsWith("swing")){
         if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(autoMode||checkSwing(n))){
           judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n));
@@ -748,12 +777,12 @@
         continue;
       }
 
-      if(n.type.startsWith("slide") || n.type.startsWith("scratch")){
+      if(n.type.startsWith("slide")){
         const end=n.hitTime+n.duration;
-        const isScratch=n.type.startsWith("scratch");
         const a=slideAngle(n,t);
-        const held=autoMode || (isScratch ? checkScratch(n,t) : (filterHeld&&aligned(a,.010)));
+        const held=autoMode || (filterHeld&&aligned(a,.010));
         const color=noteColor(n);
+        const isScratch=false;
         if(t>=n.hitTime&&t<=end){
           if(held){
             n.hold+=dt; score+=3;
@@ -766,6 +795,15 @@
           else miss(n);
         }
         if(t>n.hitTime+.40&&n.hold<.03&&!autoMode)miss(n);
+        continue;
+      }
+
+      if(n.type.startsWith("scratch")){
+        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(autoMode||checkScratch(n,t))){
+          judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n));
+        }else if(t>n.hitTime+.26){
+          miss(n);
+        }
         continue;
       }
     }
@@ -1027,79 +1065,77 @@
     drawRingLabel("CUT",n.angle,r,focus?"#ffffff":color,focus?14:12);
   }
 
-  function drawSwing(n,t){
-    const color=noteColor(n), dir=n.type==="swingCW"?1:-1;
+  function drawTrace(n,t){
+    const r=noteR(n,t), color=COLORS.trace;
     const k=progress(n,t);
-
-    // 중앙 고정 축소 원
-    const r=lerp(outerR, hitR, k);
-    const inner=r*.72;
-    const outerGlow=r*1.08;
+    const focus=n===focusNote;
+    const endAngle=n.endAngle!==undefined?n.endAngle:n.angle;
+    const d=norm(endAngle-n.angle);
 
     ctx.save();
     ctx.translate(cx,cy);
-    ctx.shadowBlur=34;
+    ctx.lineCap="round";
+    ctx.shadowBlur=focus?12:4;
     ctx.shadowColor=color;
-
-    // 큰 축소 원
-    ctx.strokeStyle=color;
-    ctx.lineWidth=12;
-    ctx.beginPath();
-    ctx.arc(0,0,r,0,TAU);
-    ctx.stroke();
-
-    // 바깥 글로우 링
-    ctx.strokeStyle="rgba(255,255,255,.16)";
-    ctx.lineWidth=18;
-    ctx.beginPath();
-    ctx.arc(0,0,outerGlow,0,TAU);
-    ctx.stroke();
-
-    // 안쪽 보조 원
-    ctx.strokeStyle="rgba(255,255,255,.78)";
-    ctx.lineWidth=4;
-    ctx.beginPath();
-    ctx.arc(0,0,inner,0,TAU);
-    ctx.stroke();
-
-    // 원 전체 방향감
-    const sweepStart=-Math.PI/2 + dir*k*.60;
-    ctx.strokeStyle="rgba(255,255,255,.28)";
-    ctx.lineWidth=9;
-    ctx.beginPath();
-    ctx.arc(0,0,outerGlow,sweepStart,sweepStart + dir*Math.PI*1.55,dir<0);
-    ctx.stroke();
-
-    // 회전 방향 표시: 더 큰 화살표
-    ctx.fillStyle="rgba(255,255,255,.96)";
-    ctx.font=`900 ${Math.max(44,baseR*.28)}px system-ui`;
-    ctx.textAlign="center";
-    ctx.textBaseline="middle";
-    ctx.fillText(dir>0?"↻":"↺",0,-baseR*.02);
-    ctx.font=`900 ${Math.max(14,baseR*.065)}px system-ui`;
-    ctx.fillText("FLICK",0,baseR*.20);
-
-    ctx.fillStyle=color;
-    const arrowCount=10;
-    for(let i=0;i<arrowCount;i++){
-      const a=-Math.PI/2 + i*TAU/arrowCount + dir*k*.55;
-      const x=Math.cos(a)*r;
-      const y=Math.sin(a)*r;
-      ctx.save();
-      ctx.translate(x,y);
-      ctx.rotate(a + (dir>0 ? Math.PI*.62 : -Math.PI*.38));
-      ctx.beginPath();
-      ctx.moveTo(22,0);
-      ctx.lineTo(-12,-12);
-      ctx.lineTo(-6,0);
-      ctx.lineTo(-12,12);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+    ctx.strokeStyle=`rgba(223,252,255,${focus?.58:.34})`;
+    ctx.lineWidth=focus?7:4;
+    if(Math.abs(d)>.03){
+      drawDirectedArcSegments(r,n.angle,d,`rgba(223,252,255,${focus?.45:.24})`,focus?7:4,1);
+    }else{
+      ctx.setLineDash([6,8]);
+      ctx.beginPath();ctx.arc(0,0,r,n.angle-Math.PI*.13,n.angle+Math.PI*.13);ctx.stroke();
+      ctx.setLineDash([]);
     }
-
+    ctx.fillStyle=`rgba(255,255,255,${focus?.86:.56})`;
+    ctx.beginPath();ctx.arc(Math.cos(n.angle)*r,Math.sin(n.angle)*r,focus?8:6,0,TAU);ctx.fill();
+    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle=`rgba(223,252,255,${.45+.35*k})`;
+    ctx.font="900 10px system-ui";
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText("TRACE",Math.cos(n.angle)*(r+22),Math.sin(n.angle)*(r+22));
     ctx.restore();
   }
+
+  function drawSwing(n,t){
+    const color=noteColor(n), dir=n.type==="swingCW"?1:-1;
+    const k=progress(n,t);
+    const r=lerp(outerR, hitR, k);
+    const span=Math.PI*.52;
+    const center=n.angle + dir*.18*Math.sin(k*Math.PI);
+
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.lineCap="round";
+    ctx.shadowBlur=n===focusNote?18:8;
+    ctx.shadowColor=color;
+
+    ctx.strokeStyle=`rgba(255,255,255,${n===focusNote?.24:.12})`;
+    ctx.lineWidth=n===focusNote?14:9;
+    ctx.beginPath();
+    ctx.arc(0,0,r,center-span*.62,center+span*.62,dir<0);
+    ctx.stroke();
+
+    ctx.strokeStyle=color;
+    ctx.globalAlpha=n===focusNote?.78:.58;
+    ctx.lineWidth=n===focusNote?9:6;
+    ctx.beginPath();
+    ctx.arc(0,0,r,center-span*.5,center+dir*span,dir<0);
+    ctx.stroke();
+    ctx.globalAlpha=1;
+
+    const arrowA=center+dir*span;
+    ctx.save();
+    ctx.translate(Math.cos(arrowA)*r,Math.sin(arrowA)*r);
+    ctx.rotate(arrowA + (dir>0 ? Math.PI*.62 : -Math.PI*.38));
+    ctx.fillStyle="rgba(255,255,255,.92)";
+    ctx.beginPath();
+    ctx.moveTo(17,0);ctx.lineTo(-9,-9);ctx.lineTo(-5,0);ctx.lineTo(-9,9);ctx.closePath();ctx.fill();
+    ctx.restore();
+
+    drawRingLabel(dir>0?"↻":"↺",center,r+24,"rgba(255,255,255,.86)",n===focusNote?18:14);
+    ctx.restore();
+  }
+
 
   function drawSlide(n,t){
     const active=t>=n.hitTime;
@@ -1280,118 +1316,65 @@
   }
 
   function drawScratch(n,t){
-    const active=t>=n.hitTime;
-    const r=active?hitR:noteR(n,t);
-    const start=n.angle;
-    const d=slideDelta(n);
-    const end=start+d;
-    const dir=d>=0?1:-1;
+    const r=t>=n.hitTime?hitR:noteR(n,t);
+    const dir=n.type==="scratchCW"?1:-1;
     const color=noteColor(n);
-
-    function drawArrowAt(angle,rad,size=11,alpha=.9){
-      ctx.save();
-      ctx.translate(cx+Math.cos(angle)*rad, cy+Math.sin(angle)*rad);
-      ctx.rotate(angle + (dir>0 ? Math.PI*.62 : -Math.PI*.38));
-      ctx.globalAlpha=alpha;
-      ctx.fillStyle="#ffffff";
-      ctx.beginPath();
-      ctx.moveTo(size,0);
-      ctx.lineTo(-size*.55,-size*.60);
-      ctx.lineTo(-size*.35,0);
-      ctx.lineTo(-size*.55,size*.60);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha=1;
-      ctx.restore();
-    }
-
-    if(!active){
-      drawDirectedArcSegments(r,start,d,"rgba(255,96,96,.40)",18,1);
-      drawDirectedArcSegments(r,start,d,"rgba(255,255,255,.16)",5,1);
-
-      const arrowCount=Math.max(3,Math.ceil(Math.abs(d)/(Math.PI*.55)));
-      for(let i=1;i<=arrowCount;i++) drawArrowAt(start+d*(i/(arrowCount+1)),r,10,.72);
-
-      ctx.save();
-      ctx.translate(cx,cy);
-      ctx.shadowBlur=18;
-      ctx.shadowColor=color;
-
-      ctx.fillStyle="#ffffff";
-      ctx.beginPath(); ctx.arc(Math.cos(start)*r,Math.sin(start)*r,12,0,TAU); ctx.fill();
-      ctx.strokeStyle=color; ctx.lineWidth=4; ctx.stroke();
-
-      ctx.fillStyle=color;
-      ctx.beginPath(); ctx.arc(Math.cos(end)*r,Math.sin(end)*r,13,0,TAU); ctx.fill();
-      ctx.strokeStyle="#fff"; ctx.lineWidth=3; ctx.stroke();
-
-      ctx.fillStyle="#07101f";
-      ctx.font="900 10px system-ui";
-      ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText("S",Math.cos(start)*r,Math.sin(start)*r);
-      ctx.fillText("E",Math.cos(end)*r,Math.sin(end)*r);
-
-      const mid=start+d*.5;
-      ctx.fillStyle="rgba(255,255,255,.86)";
-      ctx.font="900 11px system-ui";
-      ctx.fillText("SHIFT",Math.cos(mid)*(r+20),Math.sin(mid)*(r+20));
-      ctx.restore();
-      return;
-    }
-
-    const k=clamp((t-n.hitTime)/n.duration,0,1);
-    const curr=start+d*k;
-
-    if(Math.abs(curr-start)>0.003){
-      drawDirectedArcSegments(hitR,start,curr-start,"rgba(255,180,180,.18)",9,1);
-      drawDirectedArcSegments(hitR,start,curr-start,"rgba(255,255,255,.10)",4,1);
-    }
-    if(Math.abs(end-curr)>0.003){
-      drawDirectedArcSegments(hitR,curr,end-curr,"rgba(255,96,96,.96)",23,1);
-      drawDirectedArcSegments(hitR,curr,end-curr,"rgba(255,255,255,.34)",6,1);
-    }
-
-    const arrowCount=Math.max(3,Math.ceil(Math.abs(end-curr)/(Math.PI*.55)));
-    for(let i=1;i<=arrowCount;i++) drawArrowAt(curr+(end-curr)*(i/(arrowCount+1)),hitR,11,.92);
-
-    const tailSpan=d*Math.min(.16,.05+.11*k);
-    if(Math.abs(tailSpan)>0.003) drawDirectedArcSegments(hitR,curr-tailSpan,tailSpan,"rgba(255,255,255,.20)",10,1);
+    const focus=n===focusNote;
+    const span=Math.PI*.34;
+    const start=n.angle-span*.5;
+    const end=n.angle+span*.5;
 
     ctx.save();
     ctx.translate(cx,cy);
-    ctx.shadowBlur=24;
+    ctx.lineCap="butt";
+    ctx.shadowBlur=focus?14:6;
     ctx.shadowColor=color;
 
-    ctx.fillStyle="rgba(255,255,255,.70)";
-    ctx.beginPath(); ctx.arc(Math.cos(start)*hitR,Math.sin(start)*hitR,11,0,TAU); ctx.fill();
-    ctx.strokeStyle=color; ctx.lineWidth=4; ctx.stroke();
+    ctx.strokeStyle=`rgba(255,255,255,${focus?.26:.13})`;
+    ctx.lineWidth=focus?15:10;
+    ctx.beginPath();ctx.arc(0,0,r,start,end);ctx.stroke();
 
-    ctx.fillStyle=color;
-    ctx.beginPath(); ctx.arc(Math.cos(end)*hitR,Math.sin(end)*hitR,14,0,TAU); ctx.fill();
-    ctx.strokeStyle="#fff"; ctx.lineWidth=3; ctx.stroke();
+    ctx.strokeStyle=color;
+    ctx.lineWidth=focus?8:6;
+    ctx.beginPath();ctx.arc(0,0,r,start,end);ctx.stroke();
 
-    ctx.fillStyle="#07101f";
+    ctx.strokeStyle="rgba(255,238,210,.75)";
+    ctx.lineWidth=2;
+    ctx.setLineDash([4,5]);
+    ctx.beginPath();ctx.arc(0,0,r+7,start,end);ctx.stroke();
+    ctx.setLineDash([]);
+
+    for(let i=0;i<5;i++){
+      const a=start+(end-start)*(i+.5)/5;
+      const rr=r+(i%2?9:-2);
+      ctx.save();
+      ctx.translate(Math.cos(a)*rr,Math.sin(a)*rr);
+      ctx.rotate(a+Math.PI/2);
+      ctx.fillStyle="rgba(255,245,230,.86)";
+      ctx.beginPath();ctx.moveTo(0,-7);ctx.lineTo(5,3);ctx.lineTo(-5,3);ctx.closePath();ctx.fill();
+      ctx.restore();
+    }
+
+    const arrowA=n.angle+dir*span*.62;
+    ctx.save();
+    ctx.translate(Math.cos(arrowA)*(r+18),Math.sin(arrowA)*(r+18));
+    ctx.rotate(arrowA + (dir>0 ? Math.PI*.62 : -Math.PI*.38));
+    ctx.fillStyle="rgba(255,255,255,.92)";
+    ctx.beginPath();ctx.moveTo(12,0);ctx.lineTo(-7,-7);ctx.lineTo(-3,0);ctx.lineTo(-7,7);ctx.closePath();ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle="rgba(255,245,235,.86)";
     ctx.font="900 10px system-ui";
-    ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText("S",Math.cos(start)*hitR,Math.sin(start)*hitR);
-    ctx.fillText("E",Math.cos(end)*hitR,Math.sin(end)*hitR);
-
-    ctx.fillStyle="#fff";
-    ctx.beginPath(); ctx.arc(Math.cos(curr)*hitR,Math.sin(curr)*hitR,n===focusNote?16:12,0,TAU); ctx.fill();
-    ctx.strokeStyle="rgba(0,0,0,.55)"; ctx.lineWidth=3; ctx.stroke();
-
-    const mid=curr+(end-curr)*.5;
-    ctx.fillStyle="rgba(255,255,255,.95)";
-    ctx.font="900 11px system-ui";
-    ctx.fillText("SHIFT",Math.cos(mid)*(hitR+20),Math.sin(mid)*(hitR+20));
-
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText("SHIFT",Math.cos(n.angle)*(r+32),Math.sin(n.angle)*(r+32));
     ctx.restore();
   }
 
 
   function focusAngleFor(n,t){
     if(!n)return 0;
-    if(n.type.startsWith("slide") || n.type.startsWith("scratch"))return t>=n.hitTime?slideAngle(n,t):n.angle;
+    if(n.type.startsWith("slide"))return t>=n.hitTime?slideAngle(n,t):n.angle;
+    if(n.type.startsWith("scratch"))return n.angle;
     if(n.type==="fx")return n.angle;
     return n.angle;
   }
@@ -1424,7 +1407,7 @@
         const a=focusAngleFor(n,t);
         const isScratch=n.type.startsWith("scratch");
         const isSlide=n.type.startsWith("slide");
-        const r=(isSlide||isScratch||n.type==="fx")?hitR:noteR(n,t);
+        const r=(isSlide||n.type==="fx")?hitR:noteR(n,t);
 
         ctx.strokeStyle="rgba(255,255,255,.42)";
         ctx.lineWidth=18;
@@ -1469,6 +1452,7 @@
     if(n.duration>0&&t>n.hitTime+n.duration+.45)return;
     if(n.duration===0&&t>n.hitTime+.36)return;
     if(n.type==="cut")drawCut(n,t);
+    else if(n.type==="trace")drawTrace(n,t);
     else if(n.type.startsWith("swing"))drawSwing(n,t);
     else if(n.type.startsWith("scratch"))drawScratch(n,t);
     else if(n.type==="fx")drawFx(n,t);
