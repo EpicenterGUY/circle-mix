@@ -113,8 +113,8 @@
       hitTime,spawnTime:hitTime-APPROACH,
       duration:extra.duration||0,done:false,missed:false,hold:0
     };
-    if(type.startsWith("slide")){
-      n.duration=extra.duration||BEAT*1.7;
+    if(type.startsWith("slide") || type==="trace"){
+      n.duration=extra.duration||BEAT*(type==="trace"?1.5:1.7);
       n.endAngle=extra.endAngle!==undefined?extra.endAngle:laneAngle(extra.endLane??lane);
 
       n.turns = extra.turns || 0;
@@ -127,7 +127,7 @@
         while(raw >= 0) raw -= TAU;
         n.slideAmount = raw - TAU * n.turns;
       }else{
-        n.slideAmount = raw;
+        n.slideAmount = norm(raw);
       }
 
       n.visualEndAngle = n.angle + n.slideAmount;
@@ -202,6 +202,7 @@
 
     // 0~32 Intro: 4박/2박 CUT 앵커로 기본 박자와 8방향 레인을 설명.
     anchor(n,4,20,4,[0,4,2,6]);
+    trace(n,18,6,0,1.4);
     trace(n,22.5,0);
     stair(n,24,[0,2,4,6],1.0);
     stair(n,28,[1,3,5,7],1.0);
@@ -282,6 +283,7 @@
 
     // 0~32 Intro: NORMAL보다 빠른 CUT 계단으로 판정감을 잡되 과밀하게 시작하지 않음.
     anchor(n,4,16,3,[0,4,2,6,1]);
+    trace(n,17.5,6,0,1.4);
     trace(n,20.8,0,2);
     stair(n,22,[0,2,4,6,1,3,5,7],.70);
     stair(n,28,[7,5,3,1],.55);
@@ -433,10 +435,12 @@
     let d=n.endAngle-n.angle;
     if(n.type==="slideCW"){while(d<=0)d+=TAU;return d;}
     if(n.type==="slideCCW"){while(d>=0)d-=TAU;return d;}
+    if(n.type==="trace")return norm(d);
     return d;
   }
   function slideAngle(n,t){
-    return n.angle + slideDelta(n) * clamp((t-n.hitTime)/n.duration,0,1);
+    const duration=Math.max(n.duration||0,.001);
+    return n.angle + slideDelta(n) * clamp((t-n.hitTime)/duration,0,1);
   }
   function progress(n,t){return clamp((t-n.spawnTime)/(n.hitTime-n.spawnTime),0,1);}
   function noteR(n,t){return lerp(outerR,hitR,progress(n,t));}
@@ -743,11 +747,19 @@
       }
 
       if(n.type==="trace"){
-        if(t>=n.hitTime-.18&&t<=n.hitTime+.24&&(autoMode||aligned(n.angle,.035))){
-          judge(n,Math.abs(t-n.hitTime)<.090?"PERFECT":"GREAT",COLORS.trace);
-        }else if(t>n.hitTime+.28){
-          miss(n);
+        const end=n.hitTime+n.duration;
+        const a=slideAngle(n,t);
+        if(t>=n.hitTime&&t<=end&&(autoMode||aligned(a,.040))){
+          n.hold+=dt;
+          score+=2;
+          if(Math.random()<.45)addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.trace,1,.18);
         }
+        if(t>end){
+          const ratio=n.hold/Math.max(n.duration,.001);
+          if(ratio>=.45)judge(n,ratio>.72?"PERFECT":"GREAT",COLORS.trace);
+          else miss(n);
+        }
+        if(t>n.hitTime+.45&&n.hold<.025&&!autoMode)miss(n);
         continue;
       }
 
@@ -1066,33 +1078,40 @@
   }
 
   function drawTrace(n,t){
-    const r=noteR(n,t), color=COLORS.trace;
+    const active=t>=n.hitTime;
+    const r=active?hitR:noteR(n,t), color=COLORS.trace;
     const k=progress(n,t);
     const focus=n===focusNote;
-    const endAngle=n.endAngle!==undefined?n.endAngle:n.angle;
-    const d=norm(endAngle-n.angle);
+    const d=slideDelta(n);
+    const curr=slideAngle(n,t);
+    const remaining=d*clamp(1-(active?((t-n.hitTime)/Math.max(n.duration,.001)):0),0,1);
+    const alpha=focus?.75:.62;
 
     ctx.save();
     ctx.translate(cx,cy);
     ctx.lineCap="round";
-    ctx.shadowBlur=focus?12:4;
+    ctx.shadowBlur=focus?18:10;
     ctx.shadowColor=color;
-    ctx.strokeStyle=`rgba(223,252,255,${focus?.58:.34})`;
-    ctx.lineWidth=focus?7:4;
     if(Math.abs(d)>.03){
-      drawDirectedArcSegments(r,n.angle,d,`rgba(223,252,255,${focus?.45:.24})`,focus?7:4,1);
+      const pathStart=active?curr:n.angle;
+      const pathDelta=active?remaining:d;
+      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(223,252,255,${alpha})`,focus?6:4,1);
+      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(255,255,255,${focus?.38:.30})`,focus?2.5:1.8,1);
     }else{
+      ctx.strokeStyle=`rgba(223,252,255,${alpha})`;
+      ctx.lineWidth=focus?5:3.5;
       ctx.setLineDash([6,8]);
       ctx.beginPath();ctx.arc(0,0,r,n.angle-Math.PI*.13,n.angle+Math.PI*.13);ctx.stroke();
       ctx.setLineDash([]);
     }
-    ctx.fillStyle=`rgba(255,255,255,${focus?.86:.56})`;
-    ctx.beginPath();ctx.arc(Math.cos(n.angle)*r,Math.sin(n.angle)*r,focus?8:6,0,TAU);ctx.fill();
+    const targetAngle=active?curr:n.angle;
+    ctx.fillStyle=`rgba(255,255,255,${focus?.96:.82})`;
+    ctx.beginPath();ctx.arc(Math.cos(targetAngle)*r,Math.sin(targetAngle)*r,focus?8:6,0,TAU);ctx.fill();
     ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();
-    ctx.fillStyle=`rgba(223,252,255,${.45+.35*k})`;
+    ctx.fillStyle=`rgba(223,252,255,${.55+.20*k})`;
     ctx.font="900 10px system-ui";
     ctx.textAlign="center";ctx.textBaseline="middle";
-    ctx.fillText("TRACE",Math.cos(n.angle)*(r+22),Math.sin(n.angle)*(r+22));
+    ctx.fillText("TRACE",Math.cos(targetAngle)*(r+22),Math.sin(targetAngle)*(r+22));
     ctx.restore();
   }
 
@@ -1685,7 +1704,8 @@
     chart.forEach(n=>drawLandingGhost(n,t));
     chart.forEach(n=>drawApproachRail(n,t));
 
-    chart.forEach(n=>drawNote(n,t));
+    chart.forEach(n=>{if(n.type==="trace")drawNote(n,t);});
+    chart.forEach(n=>{if(n.type!=="trace")drawNote(n,t);});
     drawFocusHalo(focusNote,t);
     drawArm();
     drawEffects(dt);
