@@ -112,6 +112,7 @@ html,body{
   .modeSelect{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:14px 0 10px}
   .modeBtn{padding:9px 13px;border-radius:999px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);color:#eaf3ff;font-weight:900;cursor:pointer}
   .modeBtn.on{background:#5cfffb;color:#06101d}
+  .modeStar{margin-left:4px;color:#fff36a}.modeBtn.on .modeStar{color:#06101d}
   .ruleBox{text-align:left;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:12px;margin:12px 0;color:#cfe0f7;font-size:13px;line-height:1.55}
   .ruleBox b{color:#fff}
   .pauseOverlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.42);backdrop-filter:blur(5px);z-index:30}
@@ -322,7 +323,7 @@ body.safeSettings canvas{
 @keyframes bgRotate{to{transform:rotate(1turn) scale(1.04)}}
 .rhythmHud{position:fixed;inset:14px 18px auto 18px;width:auto;padding:0;background:transparent;border:0;box-shadow:none;backdrop-filter:none;pointer-events:none;display:grid;grid-template-columns:220px 1fr 220px;grid-template-rows:auto auto;gap:8px 16px;text-transform:uppercase}
 .rhythmHud>div{background:linear-gradient(180deg,rgba(6,14,32,.70),rgba(4,9,22,.42));border:1px solid rgba(92,255,251,.22);box-shadow:0 0 22px rgba(92,255,251,.10),inset 0 0 20px rgba(141,107,255,.05);border-radius:14px;padding:9px 14px;color:#eaf7ff;text-shadow:0 0 10px rgba(92,255,251,.28)}
-.rhythmHud span{display:block;color:#80f7ff;font-size:10px;font-weight:800;letter-spacing:.18em}.rhythmHud strong{font-size:22px;font-weight:300;letter-spacing:.06em}.hudScore{grid-column:1;grid-row:1}.hudSong{grid-column:2;grid-row:1;text-align:center}.hudStatus{grid-column:3;grid-row:1;text-align:right}.hudCombo{grid-column:2;grid-row:2;justify-self:center;min-width:190px;text-align:center}.hudCombo strong{font-size:36px;color:white}.hudStatus em{display:block;color:#cdbdff;font-style:normal;font-size:11px;font-weight:900;letter-spacing:.12em}
+.rhythmHud span{display:block;color:#80f7ff;font-size:10px;font-weight:800;letter-spacing:.18em}.rhythmHud strong{font-size:22px;font-weight:300;letter-spacing:.06em}.hudScore{grid-column:1;grid-row:1}.hudSong{grid-column:2;grid-row:1;text-align:center}.hudStatus{grid-column:3;grid-row:1;text-align:right}.hudCombo{grid-column:2;grid-row:2;justify-self:center;min-width:190px;text-align:center}.hudCombo strong{font-size:36px;color:white}.hudStatus em,.hudSong em{display:block;color:#cdbdff;font-style:normal;font-size:11px;font-weight:900;letter-spacing:.12em}.hudSong em{color:#fff36a;margin-top:2px}
 body.safeClean .rhythmHud{display:grid !important}body.safeClean .rhythmHud h1,body.safeClean .rhythmHud .sub,body.safeClean .rhythmHud .row{display:contents !important}
 body.playingClean .rhythmHud{min-width:0;padding:0;background:transparent}.guide,.bottom{opacity:.55}.quickBtn,.tuner,.editorPanel,.keymapCard,.pauseCard,.safeOverlayCard{background:linear-gradient(180deg,rgba(6,14,32,.86),rgba(4,9,22,.72));border-color:rgba(92,255,251,.22)}
 #safeMenu{background:#01030a;overflow:hidden;isolation:isolate}

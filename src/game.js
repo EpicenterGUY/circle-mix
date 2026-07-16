@@ -33,6 +33,16 @@
   const musicDown = document.getElementById("musicDown");
   const musicUp = document.getElementById("musicUp");
   const musicValue = document.getElementById("musicValue");
+  const difficultyBox = document.getElementById("difficultyBox");
+  const modeNormalStar = document.getElementById("modeNormalStar");
+  const modeTechStar = document.getElementById("modeTechStar");
+  const modeNormalBtn = document.getElementById("modeNormalBtn");
+  const modeTechBtn = document.getElementById("modeTechBtn");
+  const modeCustomBtn = document.getElementById("modeCustomBtn");
+  const pauseOverlay = document.getElementById("pauseOverlay");
+  const pauseResume = document.getElementById("pauseResume");
+  const pauseRetry = document.getElementById("pauseRetry");
+  const pauseMenu = document.getElementById("pauseMenu");
 
   const TAU = Math.PI * 2;
   const BPM = 184.6;
@@ -92,6 +102,7 @@
   let paused=false;
   let settingsVisible=false;
   let customChartData=[];
+  const difficultyCache={normal:null,tech:null};
 
   function resize(){
     const dpr = window.devicePixelRatio || 1;
@@ -163,6 +174,96 @@
     }
 
     return n;
+  }
+
+
+  function noteFamily(type){
+    if(type === "cut") return "cut";
+    if(type === "fx") return "hold";
+    if(type.startsWith("trace")) return "trace";
+    if(type.startsWith("slide")) return "slide";
+    if(type.startsWith("swing")) return "swing";
+    if(type.startsWith("scratch")) return "scratch";
+    return "cut";
+  }
+
+  function inputGroup(type){
+    const family=noteFamily(type);
+    if(family === "hold" || family === "slide") return "hold";
+    if(family === "trace") return "move";
+    if(family === "swing") return "flick";
+    if(family === "scratch") return "right-click flick";
+    return "tap";
+  }
+
+  function difficultyTypeSet(notes, centerTime, range=2){
+    const set=new Set();
+    for(const n of notes){
+      if(Math.abs(n.hitTime-centerTime)<=range) set.add(noteFamily(n.type));
+    }
+    return set.size;
+  }
+
+  function calculateChartDifficulty(notes){
+    if(!notes.length) return {stars:1, raw:0};
+    const baseValue={cut:1.00,trace:0.55,hold:1.15,slide:1.35,swing:1.45,scratch:1.50};
+    const ordered=notes.slice().sort((a,b)=>a.hitTime-b.hitTime);
+    let raw=0;
+    let previous=null;
+
+    for(const note of ordered){
+      const family=noteFamily(note.type);
+      let weight=baseValue[family] || 1;
+
+      if(previous){
+        const gap=Math.max(0.04,note.hitTime-previous.hitTime);
+        weight += clamp((0.55-gap)/0.55,0,1)*0.95;
+        weight += (distAng(note.angle, previous.angle)/Math.PI)*0.55;
+        if(inputGroup(note.type)!==inputGroup(previous.type)) weight += 0.34;
+      }
+
+      if(family === "slide" || family === "trace" || family === "scratch"){
+        const length=Math.abs(note.slideAmount ?? norm((note.endAngle??note.angle)-note.angle));
+        const duration=Math.max(note.duration||BEAT*.5, BEAT*.25);
+        weight += clamp(length/TAU,0,1.5)*0.62 + clamp((length/duration)/8,0,1)*0.52;
+      }
+
+      if(family === "hold" || family === "slide"){
+        const end=(note.hitTime||0)+(note.duration||0);
+        const overlap=ordered.filter(other => other!==note && other.hitTime>note.hitTime+.03 && other.hitTime<end-.03).length;
+        weight += Math.min(1.45, overlap*0.24);
+      }
+
+      weight += Math.max(0,difficultyTypeSet(ordered,note.hitTime,2)-1)*0.16;
+      raw += weight;
+      previous=note;
+    }
+
+    const duration=Math.max(1, ordered[ordered.length-1].hitTime-ordered[0].hitTime);
+    const density=ordered.length/duration;
+    const normalized=1 + (raw/duration)*0.50 + Math.sqrt(density)*0.10;
+    return {stars:Math.round(clamp(normalized,1,10)*10)/10, raw};
+  }
+
+  function chartForDifficulty(mode){
+    const raw=mode==="tech" ? generateTechChart() : generateNormalChart();
+    const gapFilled=fillPlayableGaps(raw, mode==="tech" ? 1.10 : 1.75);
+    return gapFilled.filter(n => (n.beat ?? 0) <= CHART_END_BEAT).map(n => ({
+      ...n,
+      hitTime:(n.beat ?? 0)*BEAT*CHART_STRETCH,
+      duration:n.duration||0
+    })).sort((a,b)=>a.hitTime-b.hitTime);
+  }
+
+  function getDifficulty(mode=mapMode){
+    if(mode!=="normal" && mode!=="tech") return null;
+    if(!difficultyCache[mode]) difficultyCache[mode]=calculateChartDifficulty(chartForDifficulty(mode));
+    return difficultyCache[mode];
+  }
+
+  function formatDifficulty(mode=mapMode){
+    const d=getDifficulty(mode);
+    return d ? d.stars.toFixed(1)+"★" : "-";
   }
 
   function addCutRun(n,start,step,lanes,types={}){
@@ -1814,7 +1915,7 @@
   function updateButtons(){
     applyMusicVolume();
     autoBox.textContent=autoMode?"AUTO ON":"AUTO OFF";
-    mapBox.textContent=mapMode==="tech"?"TECH":"NORMAL";
+    mapBox.textContent=(mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
     autoToggle.textContent=autoMode?"AUTO ON":"AUTO OFF";
     autoToggle.classList.toggle("on",autoMode);
     mapToggle.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
@@ -1823,6 +1924,7 @@
     if(offsetValue) offsetValue.textContent = formatOffset();
     if(sfxValue) sfxValue.textContent = formatSfx();
     if(musicValue) musicValue.textContent = formatMusic();
+    if(difficultyBox) difficultyBox.textContent=(mapMode==="tech"?"TECH ":"NORMAL ") + formatDifficulty(mapMode);
     if(typeof safeRefresh === "function") safeRefresh();
   }
 
@@ -2044,6 +2146,8 @@
   function updateModeButtons(){
     if(modeNormalBtn) modeNormalBtn.classList.toggle("on",selectedMenuMode==="normal");
     if(modeTechBtn) modeTechBtn.classList.toggle("on",selectedMenuMode==="tech");
+    if(modeNormalStar) modeNormalStar.textContent=formatDifficulty("normal");
+    if(modeTechStar) modeTechStar.textContent=formatDifficulty("tech");
     if(modeCustomBtn) modeCustomBtn.classList.toggle("on",selectedMenuMode==="custom");
   }
 
@@ -2274,8 +2378,8 @@
 
   function safeRefresh(){
     applyMusicVolume();
-    if(safeTech)safeTech.classList.toggle("on",selectedMenuMode==="tech");
-    if(safeNormal)safeNormal.classList.toggle("on",selectedMenuMode==="normal");
+    if(safeTech){safeTech.classList.toggle("on",selectedMenuMode==="tech");safeTech.textContent="TECH " + formatDifficulty("tech");}
+    if(safeNormal){safeNormal.classList.toggle("on",selectedMenuMode==="normal");safeNormal.textContent="NORMAL " + formatDifficulty("normal");}
     if(safeAuto){safeAuto.textContent=autoMode?"AUTO ON":"AUTO OFF";safeAuto.classList.toggle("on",autoMode);}
     if(safeSetAuto){safeSetAuto.textContent=autoMode?"AUTO ON":"AUTO OFF";safeSetAuto.classList.toggle("on",autoMode);}
     if(safeSetMap){safeSetMap.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";safeSetMap.classList.toggle("on",mapMode==="tech");}
