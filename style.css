@@ -580,3 +580,39 @@ body.playingClean .hudCombo strong::after{content:" COMBO";font-size:.72em;color
 .pauseMessage{display:none;margin:0 0 14px;color:#fff36a;font-size:13px;font-weight:900;letter-spacing:.04em}.pauseMessage.show{display:block}
 @media (pointer:coarse),(max-width:768px){body.safeGame .mobilePauseBtn{display:block}body.safeGame .fullscreenRetryBtn:not([hidden]){display:block}.pauseButtons{grid-template-columns:1fr}.pauseButtons .btn{min-height:48px}}
 body.pausedInputBlocked canvas{pointer-events:none!important}
+
+/* Stable fullscreen root: fullscreen is requested on <html>, while gameRoot keeps all scenes visible-sized. */
+:fullscreen,
+html:fullscreen,
+html:fullscreen body,
+html:fullscreen .gameRoot,
+:fullscreen .gameRoot{
+  width:100%;
+  height:100%;
+  min-width:100vw;
+  min-height:100dvh;
+  overflow:hidden;
+}
+html:fullscreen canvas,
+:fullscreen canvas{
+  width:100vw;
+  height:100dvh;
+}
+
+/* Hide developer/help panels during normal play; only ?debug=1 opts into them. */
+.guide,
+.debugToggleBtn{
+  display:none !important;
+}
+body.debugMode .guide,
+body.debugMode .debugToggleBtn{
+  display:block !important;
+}
+body.safeClean .guide,
+body.playingClean .guide{
+  display:none !important;
+}
+body.debugMode.safeGame:not(.safeClean) .guide,
+body.debugMode.playingClean.showSettings .guide{
+  display:block !important;
+}
