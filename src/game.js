@@ -1206,6 +1206,7 @@
 
   function drawLandingGhost(n,t){
     if(n.done||n.missed)return;
+    if(n.type.startsWith("trace"))return;
     const color=noteColor(n);
     const p=progress(n,t);
     if(p<=0 || p>=1.05)return;
@@ -1414,42 +1415,29 @@
     const d=slideDelta(n);
     const curr=slideAngle(n,t);
     const remaining=d*clamp(1-(active?((t-n.hitTime)/Math.max(n.duration,.001)):0),0,1);
-    const alpha=focus?.88:.78;
-    const traceWidth=focus?Math.min(5,NOTE_WIDTHS.trace+.5):NOTE_WIDTHS.trace;
-    const traceGlow=focus?16:11;
+    const alpha=focus?.56:.38;
+    const traceWidth=focus?Math.min(4,NOTE_WIDTHS.trace):Math.max(2.5,NOTE_WIDTHS.trace-.9);
+    const traceGlow=focus?10:5;
+    const pathStart=active?curr:n.angle;
+    const pathDelta=Math.abs(d)>.03 ? (active?remaining:d) : Math.PI*.26;
 
-    if(Math.abs(d)>.03){
-      const pathStart=active?curr:n.angle;
-      const pathDelta=active?remaining:d;
-      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(223,252,255,${alpha})`,traceWidth,1,color,traceGlow);
-      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(255,255,255,${focus?.44:.34})`,focus?2.2:1.6,1,color,focus?10:7);
-    }else{
-      ctx.save();
-      ctx.translate(cx,cy);
-      ctx.lineCap="round";
-      ctx.shadowBlur=traceGlow;
-      ctx.shadowColor=color;
-      ctx.strokeStyle=`rgba(223,252,255,${alpha})`;
-      ctx.lineWidth=traceWidth;
-      ctx.setLineDash([6,8]);
-      ctx.beginPath();ctx.arc(0,0,r,n.angle-Math.PI*.13,n.angle+Math.PI*.13);ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-    }
+    drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(120,226,255,${alpha})`,traceWidth,1,color,traceGlow);
     ctx.save();
     ctx.translate(cx,cy);
     ctx.lineCap="round";
-    ctx.shadowBlur=focus?16:10;
+    ctx.shadowBlur=focus?12:7;
     ctx.shadowColor=color;
     const targetAngle=active?curr:n.angle;
     const startA=n.angle, endA=n.angle+d;
-    ctx.fillStyle=`rgba(223,252,255,${focus?.28:.20})`;
-    ctx.beginPath();ctx.arc(Math.cos(startA)*r,Math.sin(startA)*r,focus?4.2:3.3,0,TAU);ctx.fill();
-    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,focus?4.2:3.3,0,TAU);ctx.fill();
-    ctx.strokeStyle=`rgba(255,255,255,${focus?.34:.24})`;ctx.lineWidth=1.2;ctx.stroke();
-    ctx.fillStyle=`rgba(255,255,255,${focus?.98:.90})`;
-    ctx.beginPath();ctx.arc(Math.cos(targetAngle)*r,Math.sin(targetAngle)*r,focus?6:4.8,0,TAU);ctx.fill();
-    ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.stroke();
+    ctx.fillStyle=`rgba(120,226,255,${focus?.18:.11})`;
+    ctx.font=`800 ${focus?8:7}px system-ui`;
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+    ctx.fillText("START",Math.cos(startA)*r,Math.sin(startA)*r-10);
+    ctx.fillText("END",Math.cos(endA)*r,Math.sin(endA)*r+10);
+    ctx.fillStyle=`rgba(255,255,255,${focus?.96:.88})`;
+    ctx.beginPath();ctx.arc(Math.cos(targetAngle)*r,Math.sin(targetAngle)*r,focus?5.6:4.4,0,TAU);ctx.fill();
+    ctx.strokeStyle=`rgba(120,226,255,${focus?.86:.70})`;ctx.lineWidth=1.4;ctx.stroke();
     ctx.restore();
   }
 
