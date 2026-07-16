@@ -572,3 +572,11 @@ body.playingClean .hudCombo strong::after{content:" COMBO";font-size:.72em;color
   body.safeGame .hudCombo strong,
   body.playingClean .hudCombo strong{font-size:15px;}
 }
+
+.gameRoot{position:fixed;inset:0;overflow:hidden;background:#020712;}
+.mobilePauseBtn,.fullscreenRetryBtn{position:fixed;z-index:120020;pointer-events:auto;touch-action:manipulation;border:1px solid rgba(92,255,251,.45);background:rgba(2,9,22,.72);color:#eafcff;font-weight:1000;backdrop-filter:blur(8px);box-shadow:0 0 18px rgba(92,255,251,.18)}
+.mobilePauseBtn{display:none;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));min-width:44px;min-height:44px;border-radius:14px;font-size:18px;line-height:1}
+.fullscreenRetryBtn{display:none;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));min-height:38px;padding:0 14px;border-radius:999px;font-size:12px;letter-spacing:.08em}
+.pauseMessage{display:none;margin:0 0 14px;color:#fff36a;font-size:13px;font-weight:900;letter-spacing:.04em}.pauseMessage.show{display:block}
+@media (pointer:coarse),(max-width:768px){body.safeGame .mobilePauseBtn{display:block}body.safeGame .fullscreenRetryBtn:not([hidden]){display:block}.pauseButtons{grid-template-columns:1fr}.pauseButtons .btn{min-height:48px}}
+body.pausedInputBlocked canvas{pointer-events:none!important}
