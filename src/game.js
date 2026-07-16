@@ -23,6 +23,7 @@
   const addCutBtn=document.getElementById("addCutBtn"), addSwingCWBtn=document.getElementById("addSwingCWBtn"), addSwingCCWBtn=document.getElementById("addSwingCCWBtn"), addFxBtn=document.getElementById("addFxBtn"), addSlideCWBtn=document.getElementById("addSlideCWBtn"), addSlideCCWBtn=document.getElementById("addSlideCCWBtn"), addScratchCWBtn=document.getElementById("addScratchCWBtn"), addScratchCCWBtn=document.getElementById("addScratchCCWBtn");
   const seekBackBtn=document.getElementById("seekBackBtn"), seekFwdBtn=document.getElementById("seekFwdBtn"), playPauseBtn=document.getElementById("playPauseBtn"), deleteLastBtn=document.getElementById("deleteLastBtn");
   const exportBtn=document.getElementById("exportBtn"), importBtn=document.getElementById("importBtn"), clearChartBtn=document.getElementById("clearChartBtn"), editorStatus=document.getElementById("editorStatus"), chartText=document.getElementById("chartText");
+  const angleSnapSelect=document.getElementById("angleSnapSelect"), editorAngleInput=document.getElementById("editorAngleInput");
   const speedDown = document.getElementById("speedDown");
   const speedUp = document.getElementById("speedUp");
   const offsetDown = document.getElementById("offsetDown");
@@ -192,7 +193,7 @@
   let sfxEnabled=true;
   let sfxVolume=1.80;
   let musicVolume=0.90;
-  let editorMode=false, selectedLane=0, useCustomChart=false;
+  let editorMode=false, selectedLane=0, selectedEditorAngle=0, editorAngleSnap=8, useCustomChart=false;
   const initialDifficultyParam = new URLSearchParams(window.location.search).get("difficulty");
   let selectedMenuMode=(initialDifficultyParam || "tech").toLowerCase();
   let songTab=(new URLSearchParams(window.location.search).get("tab") || "built-in").toLowerCase();
@@ -283,21 +284,36 @@
     return Math.max(0, (audioTime > 0.03 ? audioTime : fallbackTime) - SONG_OFFSET);
   }
   function laneAngle(lane){return -Math.PI/2 + lane*TAU/8;}
+  function normalizeAngleDeg(angle){return ((Number(angle||0)%360)+360)%360;}
+  function chartAngleToRad(angle){return -Math.PI/2 + normalizeAngleDeg(angle)*Math.PI/180;}
+  function legacyLaneToAngle(lane){return normalizeAngleDeg((Number(lane)||0)*45);}
+  function noteAngleDeg(n){
+    const raw = n.angle ?? n.directionIndex ?? n.lane ?? 0;
+    return n.angle !== undefined ? normalizeAngleDeg(raw) : legacyLaneToAngle(raw);
+  }
+  function noteEndAngleDeg(n){
+    const raw = n.endAngle ?? n.endDirectionIndex ?? n.endLane;
+    return raw !== undefined ? (n.endAngle !== undefined ? normalizeAngleDeg(raw) : legacyLaneToAngle(raw)) : undefined;
+  }
+  function roundAngleForJson(angle){ return Number(normalizeAngleDeg(angle).toFixed(3)); }
 
   function make(type, beat, lane, extra={}){
+    const angleDeg = extra.angleDeg !== undefined ? normalizeAngleDeg(extra.angleDeg) : legacyLaneToAngle(lane);
+    const endAngleDeg = extra.endAngleDeg !== undefined ? normalizeAngleDeg(extra.endAngleDeg) : (extra.endLane!==undefined ? legacyLaneToAngle(extra.endLane) : undefined);
     const hitTime=beat*BEAT*CHART_STRETCH;
     const n={
-      type,lane,angle:laneAngle(lane),
+      type,lane,angle:chartAngleToRad(angleDeg), angleDeg,
       beat,
       endBeat:beat,
       endLane:extra.endLane,
-      endAngle:extra.endLane!==undefined?laneAngle(extra.endLane):extra.endAngle,
+      endAngle:endAngleDeg!==undefined?chartAngleToRad(endAngleDeg):extra.endAngle,
+      endAngleDeg,
       hitTime,spawnTime:hitTime-APPROACH,
       duration:extra.duration||0,done:false,missed:false,hold:0
     };
     if(type.startsWith("slide") || type.startsWith("trace")){
       n.duration=extra.duration||BEAT*(type.startsWith("trace")?1.5:1.7);
-      n.endAngle=extra.endAngle!==undefined?extra.endAngle:laneAngle(extra.endLane??lane);
+      n.endAngle=extra.endAngle!==undefined?extra.endAngle:chartAngleToRad(endAngleDeg ?? angleDeg);
 
       n.turns = extra.turns || 0;
       let raw = n.endAngle - n.angle;
@@ -800,9 +816,15 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane)||0, { endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns }); }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns }); }
 
   function generateChart(){
+    if(useCustomChart){
+      const data={notes:customChartData};
+      const checked=chartTools.validateChart(data);
+      if(!checked.ok){ alert("채보 오류로 플레이를 시작할 수 없습니다.\n"+checked.errors.join("\n")); return []; }
+      return (customChartData||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT*CHART_STRETCH; n.spawnTime=n.hitTime-APPROACH; return n; }).sort((a,b)=>a.hitTime-b.hitTime);
+    }
     if(selectedSong?.source==="local"){
       const data=selectedSong.charts?.[mapMode];
       const checked=chartTools.validateChart(data);
@@ -2745,27 +2767,28 @@
   }
   function beatNow(){return Math.max(0, now()/(BEAT*CHART_STRETCH));}
   function updateEditorStatus(){
-    if(editorStatus) editorStatus.textContent="custom notes: "+customChartData.length+" / beat "+beatNow().toFixed(2)+" / lane "+(selectedLane+1);
+    if(editorStatus) editorStatus.textContent="custom notes: "+customChartData.length+" / beat "+beatNow().toFixed(2)+" / ANGLE "+roundAngleForJson(selectedEditorAngle)+"° / snap "+(editorAngleSnap||"FREE");
+    if(editorAngleInput) editorAngleInput.value=roundAngleForJson(selectedEditorAngle);
     if(playPauseBtn) playPauseBtn.textContent=song.paused?"PLAY":"PAUSE";
     if(editorToggle) editorToggle.classList.toggle("on",editorMode);
   }
   function rebuildCustomChart(){useCustomChart=customChartData.length>0;chart=generateChart();updateEditorStatus();}
   function snapBeat(b,grid=.25){return Math.round(b/grid)*grid;}
   function addEditorNote(type){
-    const b=snapBeat(beatNow(),.25), lane=selectedLane;
-    const d={type,beat:b,lane};
+    const b=snapBeat(beatNow(),.25), lane=Math.round(selectedEditorAngle/45)%8;
+    const d={type,beat:b,angle:roundAngleForJson(selectedEditorAngle)};
     if(type==="fx") d.durationBeat=4;
     if(type==="slideCW"||type==="slideCCW"){
       d.durationBeat=4;
-      d.endLane=(lane+3)%8;
+      d.endAngle=roundAngleForJson(selectedEditorAngle + (type==="slideCW"?135:-135));
     }
     if(type==="scratchCW"||type==="scratchCCW"){
       d.durationBeat=.55;
-      d.endLane=(lane+(type==="scratchCW"?1:7))%8;
+      d.endAngle=roundAngleForJson(selectedEditorAngle + (type==="scratchCW"?45:-45));
     }
     customChartData.push(d);customChartData.sort((a,b)=>a.beat-b.beat);rebuildCustomChart();playHitSound(type,"PERFECT");
   }
-  function exportChart(){chartText.value=JSON.stringify({title:"ANiMA custom chart",bpm:BPM,offset:SONG_OFFSET,notes:customChartData},null,2);}
+  function exportChart(){chartText.value=JSON.stringify({title:"ANiMA custom chart",bpm:BPM,offset:SONG_OFFSET,schema:"angle-v1",notes:customChartData},null,2);}
   function importChart(){try{const data=JSON.parse(chartText.value);customChartData=Array.isArray(data)?data:(data.notes||[]);if(typeof data.offset==="number")SONG_OFFSET=data.offset;rebuildCustomChart();updateButtons();}catch(e){chartText.value="IMPORT ERROR: "+e.message;}}
   function toggleEditor(force){editorMode=force!==undefined?force:!editorMode;if(editorMode)toggleSettings(true);if(editorPanel)editorPanel.classList.toggle("show",editorMode);updateEditorStatus();}
 
@@ -2858,7 +2881,11 @@
   bindPress(clearChartBtn,()=>{customChartData=[];useCustomChart=false;rebuildCustomChart();});
   keymapOverlay.addEventListener("click",e=>{if(e.target===keymapOverlay)toggleKeymap(false);});
   if(debugMode)setDebugOverlayVisible(true);
-  if(laneGrid) laneGrid.addEventListener("click",e=>{const btn=e.target.closest("[data-lane]");if(!btn)return;selectedLane=Number(btn.dataset.lane)||0;laneGrid.querySelectorAll("[data-lane]").forEach(b=>b.classList.toggle("on",b===btn));updateEditorStatus();});
+  function snapEditorAngle(raw){ if(!editorAngleSnap) return normalizeAngleDeg(raw); const step=360/editorAngleSnap; return normalizeAngleDeg(Math.round(raw/step)*step); }
+  function setEditorAngle(raw){ selectedEditorAngle=snapEditorAngle(raw); selectedLane=Math.round(selectedEditorAngle/45)%8; if(laneGrid) laneGrid.querySelectorAll("[data-lane]").forEach(b=>b.classList.toggle("on",Number(b.dataset.lane)===selectedLane)); updateEditorStatus(); }
+  if(angleSnapSelect) angleSnapSelect.addEventListener("change",()=>{editorAngleSnap=angleSnapSelect.value==="FREE"?0:Number(angleSnapSelect.value)||8; setEditorAngle(selectedEditorAngle);});
+  if(editorAngleInput) editorAngleInput.addEventListener("change",()=>setEditorAngle(Number(editorAngleInput.value)||0));
+  if(laneGrid) laneGrid.addEventListener("click",e=>{const btn=e.target.closest("[data-lane]");if(!btn)return;setEditorAngle((Number(btn.dataset.lane)||0)*45);});
 
   window.addEventListener("mousemove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();},{passive:true});
   window.addEventListener("pointermove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();pointerActive=true;},{passive:true});
@@ -2887,7 +2914,7 @@
     if(e.code==="Comma"&&!e.repeat){ changeOffset(-0.03); }
     if(e.code==="Period"&&!e.repeat){ changeOffset(+0.03); }
     if(editorMode&&!e.repeat){
-      if(/^Digit[1-8]$/.test(e.code)){selectedLane=Number(e.code.slice(-1))-1;updateEditorStatus();}
+      if(/^Digit[1-8]$/.test(e.code)){setEditorAngle((Number(e.code.slice(-1))-1)*45);}
       if(e.code==="KeyC")addEditorNote("cut");
       if(e.code==="KeyX")addEditorNote("swingCW");
       if(e.code==="KeyV")addEditorNote("swingCCW");
