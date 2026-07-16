@@ -52,6 +52,16 @@
   const enterFullscreenBtn = document.getElementById("enterFullscreenBtn");
   const fullscreenRetryBtn = document.getElementById("fullscreenRetryBtn");
   const pauseMessage = document.getElementById("pauseMessage");
+  const pauseSettingsOverlay = document.getElementById("pauseSettingsOverlay");
+  const pauseSettingsBack = document.getElementById("pauseSettingsBack");
+  const pauseSetSpdDown = document.getElementById("pauseSetSpdDown");
+  const pauseSetSpdUp = document.getElementById("pauseSetSpdUp");
+  const pauseSetOffDown = document.getElementById("pauseSetOffDown");
+  const pauseSetOffUp = document.getElementById("pauseSetOffUp");
+  const pauseSetMusic = document.getElementById("pauseSetMusic");
+  const pauseSetSfx = document.getElementById("pauseSetSfx");
+  const pauseSetAuto = document.getElementById("pauseSetAuto");
+  const pauseSetFull = document.getElementById("pauseSetFull");
   const resultOverlay = document.getElementById("resultOverlay");
   const resultScore = document.getElementById("resultScore");
   const resultRank = document.getElementById("resultRank");
@@ -144,7 +154,7 @@
   let paused=false;
   let settingsVisible=false;
   let fullscreenInterrupted=false;
-  let pauseOpenedSettings=false;
+  let pauseSettingsOpen=false;
   let customChartData=[];
   const difficultyCache={normal:null,tech:null};
 
@@ -2171,7 +2181,7 @@
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     document.body.classList.remove("pausedInputBlocked");
     fullscreenInterrupted=false;
-    pauseOpenedSettings=false;
+    closePauseSettings();
     setPauseMessage("");
     lastMs=performance.now();
     ensureAudioCtx();
@@ -2184,7 +2194,7 @@
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     document.body.classList.remove("pausedInputBlocked");
     hideResult();
-    pauseOpenedSettings=false;
+    closePauseSettings();
     paused=false;
     start(editorMode?"editor":"play");
   }
@@ -2193,7 +2203,7 @@
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     document.body.classList.remove("pausedInputBlocked");
     hideResult();
-    pauseOpenedSettings=false;
+    closePauseSettings();
     fullscreenInterrupted=false;
     paused=false;
     endGame(true);
@@ -2255,6 +2265,7 @@
     try{ await prepareSelectedAudio(); }catch(err){ alert(err.message); return false; }
     paused=false;
     if(pauseOverlay) pauseOverlay.classList.remove("show");
+    closePauseSettings();
     hideResult();
     if(selectedMenuMode==="normal") mapMode="normal";
     if(selectedMenuMode==="tech") mapMode="tech";
@@ -2392,6 +2403,46 @@
     if(enterFullscreenBtn) enterFullscreenBtn.hidden=!fullscreenInterrupted;
     if(resumeBtn) resumeBtn.textContent=fullscreenInterrupted ? "RESUME WINDOWED" : "RESUME";
     if(exitBtn) exitBtn.textContent=fullscreenInterrupted ? "EXIT TO SONG SELECT" : "EXIT";
+  }
+
+  function syncPauseSettingsUI(){
+    if(pauseSetSpdDown) pauseSetSpdDown.textContent = formatSpeed() + " −";
+    if(pauseSetSpdUp) pauseSetSpdUp.textContent = formatSpeed() + " ＋";
+    if(pauseSetOffDown) pauseSetOffDown.textContent = formatOffset() + " −";
+    if(pauseSetOffUp) pauseSetOffUp.textContent = formatOffset() + " ＋";
+    if(pauseSetMusic) pauseSetMusic.textContent = formatMusic();
+    if(pauseSetSfx){
+      pauseSetSfx.textContent = formatSfx();
+      pauseSetSfx.classList.toggle("on", sfxEnabled);
+    }
+    if(pauseSetAuto){
+      pauseSetAuto.textContent = gameState.autoEnabled ? "AUTO PLAY ON" : "AUTO PLAY OFF";
+      pauseSetAuto.classList.toggle("on", gameState.autoEnabled);
+      pauseSetAuto.setAttribute("aria-pressed", gameState.autoEnabled ? "true" : "false");
+    }
+  }
+
+  function openPauseSettings(){
+    if(!paused) showPause();
+    if(!paused) return;
+    pauseSettingsOpen = true;
+    settingsVisible = false;
+    document.body.classList.remove("showSettings");
+    document.body.classList.add("pauseSettingsOpen");
+    if(quickSettingsBtn) quickSettingsBtn.classList.remove("on");
+    if(pauseOverlay) pauseOverlay.classList.add("show");
+    if(pauseSettingsOverlay) pauseSettingsOverlay.classList.add("show");
+    syncPauseSettingsUI();
+  }
+
+  function closePauseSettings(){
+    pauseSettingsOpen = false;
+    document.body.classList.remove("pauseSettingsOpen", "showSettings");
+    if(quickSettingsBtn) quickSettingsBtn.classList.remove("on");
+    if(pauseSettingsOverlay) pauseSettingsOverlay.classList.remove("show");
+    if(paused && pauseOverlay) pauseOverlay.classList.add("show");
+    settingsVisible = false;
+    setPauseMessage("");
   }
 
   async function lockLandscapeSafe(){
@@ -2533,7 +2584,7 @@
   bindPress(quickEditorBtn,()=>{ window.location.href="./editor.html"; });
   bindPress(quickFullBtn,requestFullscreenSafe);
   bindPress(resumeBtn,resumeGame);
-  bindPress(settingsBtn,()=>{ pauseOpenedSettings=paused; toggleSettings(true); });
+  bindPress(settingsBtn,openPauseSettings);
   bindPress(enterFullscreenBtn,requestFullscreenEnter);
   bindPress(fullscreenRetryBtn,requestFullscreenEnter);
   bindPress(mobilePauseBtn,showPause);
@@ -2598,7 +2649,7 @@
     }
     if(e.code==="KeyM"&&!e.repeat&&(!running||debugMode)){mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();}
     if(e.code==="KeyK"&&!e.repeat)toggleKeymap();
-    if(e.code==="Escape"&&!e.repeat){ if(keymapOverlay&&keymapOverlay.classList.contains("show")) toggleKeymap(false); else if(paused) resumeGame(); else showPause(); }
+    if(e.code==="Escape"&&!e.repeat){ if(keymapOverlay&&keymapOverlay.classList.contains("show")) toggleKeymap(false); else if(pauseSettingsOpen) closePauseSettings(); else if(paused) resumeGame(); else showPause(); }
     if(e.code==="KeyF"&&!e.repeat)requestFullscreenSafe();
     if(e.code==="KeyH"&&!e.repeat)toggleSettings();
     if(e.code==="KeyE"&&!e.repeat){toggleSettings(true); toggleEditor();}
@@ -2841,17 +2892,25 @@
   toggleSettings=function(force){
     settingsVisible = force!==undefined ? force : !settingsVisible;
     if(settingsVisible && isMobileViewport()) originalToggleKeymap(false);
-    if(paused && pauseOpenedSettings){
-      document.body.classList.toggle("showSettings", settingsVisible);
-      if(quickSettingsBtn) quickSettingsBtn.classList.toggle("on", settingsVisible);
-      if(!settingsVisible && pauseOverlay) pauseOverlay.classList.add("show");
+    if(paused){
+      if(settingsVisible) openPauseSettings();
+      else closePauseSettings();
     }else{
       safeSetOverlay(settingsVisible);
       originalToggleSettings(settingsVisible);
     }
-    if(!settingsVisible) pauseOpenedSettings=false;
     safeRefresh();
   };
+
+  bindPress(pauseSettingsBack,closePauseSettings);
+  bindPress(pauseSetSpdDown,()=>{changeSpeed(+0.04);syncPauseSettingsUI();});
+  bindPress(pauseSetSpdUp,()=>{changeSpeed(-0.04);syncPauseSettingsUI();});
+  bindPress(pauseSetOffDown,()=>{changeOffset(-0.03);syncPauseSettingsUI();});
+  bindPress(pauseSetOffUp,()=>{changeOffset(+0.03);syncPauseSettingsUI();});
+  bindPress(pauseSetMusic,()=>{changeMusic(musicVolume>=.95?-.45:.10);syncPauseSettingsUI();});
+  bindPress(pauseSetSfx,()=>{sfxEnabled=!sfxEnabled;refreshSettingsUI();syncPauseSettingsUI();});
+  bindPress(pauseSetAuto,()=>{toggleAuto("pause-settings");syncPauseSettingsUI();});
+  bindPress(pauseSetFull,requestFullscreenSafe);
 
   safeBind(safeStart,()=>showSongSelect());
   safeBind(safeEditor,()=>{ window.location.href="./editor.html"; });
