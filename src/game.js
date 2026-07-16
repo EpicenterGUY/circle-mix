@@ -296,6 +296,20 @@
     return raw !== undefined ? (n.endAngle !== undefined ? normalizeAngleDeg(raw) : legacyLaneToAngle(raw)) : undefined;
   }
   function roundAngleForJson(angle){ return Number(normalizeAngleDeg(angle).toFixed(3)); }
+  function directionSign(value){
+    const v=String(value||"").toUpperCase();
+    if(v==="CW")return 1;
+    if(v==="CCW")return -1;
+    return 0;
+  }
+  function signedSweepRad(type, extra, rawDelta){
+    if(extra.sweepAngle !== undefined && Number.isFinite(Number(extra.sweepAngle))) return Number(extra.sweepAngle) * Math.PI / 180;
+    if(extra.turns !== undefined && Number.isFinite(Number(extra.turns)) && Number(extra.turns)!==0){
+      const dir=directionSign(extra.direction) || (type.endsWith("CW")&&!type.endsWith("CCW")?1:(type.endsWith("CCW")?-1:Math.sign(rawDelta)||1));
+      return dir * Math.abs(Number(extra.turns)) * TAU;
+    }
+    return null;
+  }
 
   function make(type, beat, lane, extra={}){
     const angleDeg = extra.angleDeg !== undefined ? normalizeAngleDeg(extra.angleDeg) : legacyLaneToAngle(lane);
@@ -317,8 +331,12 @@
 
       n.turns = extra.turns || 0;
       let raw = n.endAngle - n.angle;
+      const explicitSweep = type.startsWith("trace") ? signedSweepRad(type, extra, raw) : null;
 
-      if(type==="slideCW" || type==="traceCW"){
+      if(explicitSweep !== null){
+        n.slideAmount = explicitSweep;
+        n.sweepAngle = Number((explicitSweep * 180 / Math.PI).toFixed(3));
+      }else if(type==="slideCW" || type==="traceCW"){
         while(raw <= 0) raw += TAU;
         n.slideAmount = raw + TAU * n.turns;
       }else if(type==="slideCCW" || type==="traceCCW"){
@@ -816,7 +834,7 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns }); }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle }); }
 
   function generateChart(){
     if(useCustomChart){
@@ -1169,7 +1187,7 @@
     updateAutoDebug(t);
     if(!gameState.autoEnabled)return;
 
-    const activePath=chart.find(n=>!n.done&&!n.missed&&n.type.startsWith("slide")&&t>=n.hitTime&&t<=n.hitTime+n.duration);
+    const activePath=chart.find(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&t>=n.hitTime&&t<=n.hitTime+n.duration);
     if(activePath){
       const a=slideAngle(activePath,t);
       armAngle=a;
@@ -1196,7 +1214,7 @@
 
   function updateArm(dt){
     const tNow = now();
-    if(gameState.autoEnabled && chart.some(n=>!n.done&&!n.missed&&n.type.startsWith("slide")&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
+    if(gameState.autoEnabled && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
       return;
     }
 
@@ -1243,7 +1261,7 @@
         }
         if(t>end){
           const ratio=n.hold/Math.max(n.duration,.001);
-          if(ratio>=.45){ addWave(slideAngle(n,end),COLORS.trace); judge(n,ratio>.72?"PERFECT":"GREAT",COLORS.trace); }
+          if(ratio>=.45){ addWave(slideAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END"); judge(n,ratio>.72?"PERFECT":"GREAT",COLORS.trace); }
           else miss(n);
         }
         if(t>n.hitTime+.45&&n.hold<.025&&!gameState.autoEnabled)miss(n);
@@ -1709,12 +1727,23 @@
     ctx.restore();
   }
 
+  function linkedTraceForSwing(n){
+    return chart.find(p=>p.type?.startsWith("trace") && !p.missed && p.hitTime+p.duration<=n.hitTime+.08 && n.hitTime-(p.hitTime+p.duration)<=.35 && distAng(slideAngle(p,p.hitTime+p.duration),n.angle)<Math.PI*.12);
+  }
   function drawSwing(n,t){
+    const link=linkedTraceForSwing(n);
+    if(link){
+      const ratio=clamp((t-link.hitTime)/Math.max(link.duration,.001),0,1);
+      if(ratio<.78)return;
+      ctx.globalAlpha=ratio<1?lerp(.22,.55,clamp((ratio-.78)/.22,0,1)):1;
+    }
     const color=noteColor(n), dir=n.type==="swingCW"?1:-1;
     const k=progress(n,t);
     const r=lerp(outerR, hitR, k);
     const span=Math.PI*.52;
-    const center=n.angle + dir*.18*Math.sin(k*Math.PI);
+    const center=n.angle + dir*.18*Math.sin(k*Math.PI) + (link ? dir*Math.PI*.08 : 0);
+    const linkDir=link?Math.sign(slideDelta(link)||dir):0;
+    const isReversal=link && linkDir && linkDir!==dir;
 
     ctx.save();
     ctx.translate(cx,cy);
@@ -1745,8 +1774,9 @@
     ctx.moveTo(17,0);ctx.lineTo(-9,-9);ctx.lineTo(-5,0);ctx.lineTo(-9,9);ctx.closePath();ctx.fill();
     ctx.restore();
 
-    drawRingLabel(dir>0?"↻":"↺",center,r+24,"rgba(255,255,255,.86)",n===focusNote?18:14);
+    drawRingLabel(isReversal?"REV":(link?"EXIT":(dir>0?"↻":"↺")),center,r+24,isReversal?"rgba(255,114,214,.9)":"rgba(255,255,255,.86)",n===focusNote?18:14);
     ctx.restore();
+    ctx.globalAlpha=1;
   }
 
 
