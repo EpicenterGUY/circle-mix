@@ -659,3 +659,116 @@ body.debugMode.safeSettings .tuner,body.debugMode.playingClean.showSettings .tun
 /* Tutorial scene */
 .tutorialPrompt,.tutorialComplete{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:radial-gradient(circle,rgba(92,255,251,.13),rgba(2,5,14,.86));backdrop-filter:blur(8px)}
 .tutorialPrompt[hidden],.tutorialComplete[hidden],.tutorialHud[hidden]{display:none!important}.tutorialPromptCard{width:min(420px,92vw);padding:26px;border:1px solid rgba(92,255,251,.45);border-radius:24px;background:linear-gradient(180deg,rgba(8,20,38,.96),rgba(3,8,18,.94));box-shadow:0 0 42px rgba(92,255,251,.18);text-align:center}.tutorialPromptCard span,.tutorialHud em{color:#5cfffb;letter-spacing:.16em;font-weight:900;font-size:12px}.tutorialPromptCard h2{margin:8px 0 10px}.tutorialPromptCard p{color:#cfe8ff}.tutorialPromptCard .btn{width:100%;margin-top:10px}.tutorialHud{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:45;width:min(640px,94vw);padding:14px 16px;border:1px solid rgba(92,255,251,.36);border-radius:18px;background:rgba(5,13,28,.78);box-shadow:0 0 28px rgba(92,255,251,.14);backdrop-filter:blur(6px);pointer-events:auto}.tutorialTop{display:flex;justify-content:space-between;color:#fff36a;font-weight:900}.tutorialHud h2{margin:6px 0 2px;color:#fff}.tutorialHud p{margin:0 0 6px;color:#dffcff}.tutorialActions{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}.tutorialCountdown{position:absolute;right:16px;top:-52px;color:#fff36a;font-size:32px;font-weight:1000;text-shadow:0 0 20px #fff36a}.safeRestartStep{display:none}body.tutorialMode .hudScore strong::after{content:' TUTORIAL';font-size:10px;color:#5cfffb;margin-left:6px}body.tutorialMode #retryBtn{font-size:0}body.tutorialMode #retryBtn:after{content:'RESTART STEP';font-size:14px}@media(max-width:768px) and (orientation:landscape){.tutorialHud{top:8px;bottom:auto;width:min(520px,90vw);padding:10px 12px}.tutorialHud h2{font-size:18px}.tutorialHud p{font-size:12px}.tutorialActions .btn{padding:7px 10px}.tutorialCountdown{top:auto;bottom:-44px}}
+
+/* Tutorial-only HUD and panel layout. */
+body.tutorialMode .hudScore,
+body.tutorialMode .hudStatus,
+body.tutorialMode .hudCombo{
+  display:none !important;
+}
+body.tutorialMode .rhythmHud{
+  grid-template-columns:1fr;
+  grid-template-rows:auto;
+  left:50%;
+  right:auto;
+  width:min(360px,calc(100vw - 28px));
+  transform:translateX(-50%);
+}
+body.tutorialMode .hudSong{
+  grid-column:1;
+  display:block !important;
+  text-align:center;
+  background:rgba(3,8,18,.36) !important;
+}
+body.tutorialMode .hudSong span,
+body.tutorialMode .hudSong em{
+  display:block !important;
+}
+body.tutorialMode .hudSong span{color:#5cfffb;}
+body.tutorialMode .hudSong em{color:#fff36a;}
+body.tutorialMode .hudSong strong{font-size:16px;}
+body.tutorialMode .hudSong em{font-size:10px;}
+.tutorialHud{
+  box-sizing:border-box;
+  pointer-events:none;
+}
+.tutorialHud .btn,
+.tutorialHud button{
+  pointer-events:auto;
+}
+body.tutorialSidePanel .tutorialHud{
+  left:auto;
+  right:24px;
+  top:50%;
+  bottom:auto;
+  width:280px;
+  transform:translateY(-50%);
+  padding:12px 14px;
+}
+body.tutorialTopPanel .tutorialHud{
+  left:50%;
+  right:auto;
+  top:calc(64px + env(safe-area-inset-top));
+  bottom:auto;
+  width:min(620px,calc(100vw - 28px));
+  transform:translateX(-50%);
+  padding:8px 12px;
+}
+body.tutorialMode:not(.tutorialSidePanel):not(.tutorialTopPanel) .tutorialHud{
+  top:calc(64px + env(safe-area-inset-top));
+  bottom:auto;
+  width:min(620px,calc(100vw - 28px));
+  padding:8px 12px;
+}
+body.tutorialMode .tutorialHud h2{font-size:18px;line-height:1.05;margin:4px 0 1px;}
+body.tutorialMode .tutorialHud p{font-size:12px;line-height:1.25;margin:0 0 3px;}
+body.tutorialMode .tutorialHud em{font-size:10px;}
+body.tutorialMode .tutorialActions{margin-top:6px;}
+body.tutorialMode .tutorialActions .btn{min-height:0;margin-top:0;padding:7px 10px;font-size:11px;}
+body.tutorialIntro .tutorialHud{
+  left:50%;
+  right:auto;
+  top:50%;
+  bottom:auto;
+  width:min(420px,calc(100vw - 28px));
+  transform:translate(-50%,-50%);
+  padding:22px 20px;
+  text-align:center;
+}
+body.tutorialIntro .tutorialHud h2{font-size:clamp(28px,5vw,42px);margin:8px 0 6px;}
+body.tutorialIntro .tutorialHud p{font-size:15px;line-height:1.4;}
+.tutorialCountdown{
+  pointer-events:none;
+}
+body.tutorialMode .tutorialCountdown{
+  left:50%;
+  right:auto;
+  top:auto;
+  bottom:-48px;
+  transform:translateX(-50%);
+  font-size:30px;
+}
+body.tutorialIntro .tutorialCountdown{
+  position:static;
+  transform:none;
+  margin-top:12px;
+  min-height:38px;
+}
+@media(max-width:768px) and (orientation:portrait){
+  body.tutorialMode .tutorialHud{display:none !important;}
+}
+@media(max-width:932px) and (orientation:landscape){
+  body.tutorialMode .rhythmHud{top:calc(4px + env(safe-area-inset-top));width:min(280px,42vw);}
+  body.tutorialMode .hudSong strong{font-size:13px;}
+  body.tutorialMode .tutorialHud{
+    top:calc(48px + env(safe-area-inset-top));
+    bottom:auto;
+    width:min(520px,calc(100vw - 26px));
+    padding:6px 10px;
+  }
+  body.tutorialMode .tutorialHud h2{display:inline;margin-right:8px;font-size:15px;}
+  body.tutorialMode .tutorialHud p{display:inline;font-size:11px;}
+  body.tutorialMode .tutorialHud em{display:none;}
+  body.tutorialMode .tutorialActions{position:absolute;right:8px;top:4px;margin:0;}
+  body.tutorialMode .tutorialActions .btn{padding:5px 8px;font-size:10px;}
+}
