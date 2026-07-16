@@ -2,7 +2,7 @@
   const $ = id => document.getElementById(id);
   const TAU = Math.PI * 2;
   const NOTE_TYPES = ["cut","fx","slideCW","slideCCW","trace","traceCW","traceCCW","swingCW","swingCCW","scratchCW","scratchCCW"];
-  const state = { notes: [], selected: new Set(), type: "cut", audioUrl: null, jacketData: null, clipboard: [], undo: [], redo: [], db: null, autoPreview:false, lastMetro:-1 };
+  const state = { notes: [], selected: new Set(), type: "cut", audioUrl: null, audioFile: null, jacketFile: null, jacketData: null, clipboard: [], undo: [], redo: [], db: null, autoPreview:false, lastMetro:-1 };
   const audio = $("audio"), preview = $("preview"), ctx = preview.getContext("2d"), tl = $("timelineCanvas"), tx = tl.getContext("2d");
   const fields = ["songId","title","artist","bpm","offset","difficulty","previewStart"];
   const meta = () => Object.fromEntries(fields.map(id => [id, id==="bpm"||id==="offset"||id==="previewStart" ? Number($(id).value)||0 : $(id).value.trim() || ""]));
@@ -48,14 +48,47 @@
   tl.addEventListener("click",e=>{ const r=tl.getBoundingClientRect(), x=(e.clientX-r.left)*tl.width/r.width, t=x/Number($("zoom").value); audio.currentTime=Math.max(0,t); const idx=state.notes.findIndex(n=>Math.abs(noteTime(n)-t)<.05); if(idx>=0){ if(!e.shiftKey) state.selected.clear(); state.selected.add(idx); } renderAll(); });
   $("noteList").onclick=e=>{ const row=e.target.closest(".noteRow"); if(!row)return; if(!e.shiftKey) state.selected.clear(); state.selected.add(Number(row.dataset.i)); renderAll(); };
   ["noteBeat","noteAngle","noteEndAngle","noteDirection","noteDuration"].forEach(id=>$(id).addEventListener("change",updateSelectedFromInputs));
-  $("audioFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; if(state.audioUrl) URL.revokeObjectURL(state.audioUrl); state.audioUrl=URL.createObjectURL(f); audio.src=state.audioUrl; $("fileInfo").textContent=`${f.name} · loading duration...`; audio.onloadedmetadata=()=>{ $("fileInfo").textContent=`${f.name} · ${(audio.duration||0).toFixed(3)}s · local object URL`; $("seek").max=audio.duration||0; renderAll(); }; };
-  $("jacketFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=()=>{state.jacketData=rd.result; autosave();}; rd.readAsDataURL(f); };
+  $("audioFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; state.audioFile=f; if(state.audioUrl) URL.revokeObjectURL(state.audioUrl); state.audioUrl=URL.createObjectURL(f); audio.src=state.audioUrl; $("fileInfo").textContent=`${f.name} · loading duration...`; audio.onloadedmetadata=()=>{ $("fileInfo").textContent=`${f.name} · ${(audio.duration||0).toFixed(3)}s · local object URL`; $("seek").max=audio.duration||0; renderAll(); }; };
+  $("jacketFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; state.jacketFile=f; const rd=new FileReader(); rd.onload=()=>{state.jacketData=rd.result; autosave();}; rd.readAsDataURL(f); };
   $("playBtn").onclick=()=> audio.paused ? audio.play() : audio.pause(); audio.onplay=()=>$("playBtn").textContent="Pause"; audio.onpause=()=>$("playBtn").textContent="Play"; $("seek").oninput=e=>audio.currentTime=Number(e.target.value); $("rate").onchange=e=>audio.playbackRate=Number(e.target.value); $("zoom").oninput=renderTimeline;
   $("exportBtn").onclick=()=>{ if(validate()) download(`${$("songId").value||"chart"}.json`, chartJson()); }; $("exportMetaBtn").onclick=()=>download(`${$("songId").value||"song"}.metadata.json`, songMetaJson()); $("validateBtn").onclick=validate;
   $("importFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=()=>{ try{ const data=JSON.parse(rd.result); pushHistory(); state.notes=Array.isArray(data)?data:(data.notes||[]); fields.forEach(id=>{ if(data[id]!==undefined) $(id).value=data[id]; }); renderAll(); autosave(); validate(); }catch(err){ $("validation").innerHTML=`<span class="err">IMPORT ERROR ${err.message}</span>`; } }; rd.readAsText(f); };
   $("copyBtn").onclick=()=>state.clipboard=[...state.selected].map(i=>({...state.notes[i]})); $("pasteBtn").onclick=()=>{ pushHistory(); const add=state.clipboard.map(n=>({...n,beat:(n.beat||0)+Number($("snap").value)})); state.notes.push(...add); renderAll(); autosave();}; $("deleteBtn").onclick=()=>{ pushHistory(); state.notes=state.notes.filter((_,i)=>!state.selected.has(i)); state.selected.clear(); renderAll(); autosave();}; $("undoBtn").onclick=()=>{ if(state.undo.length){ state.redo.push(JSON.stringify(state.notes)); restore(state.undo.pop()); }}; $("redoBtn").onclick=()=>{ if(state.redo.length){ state.undo.push(JSON.stringify(state.notes)); restore(state.redo.pop()); }};
-  $("saveProject").onclick=saveLocal; $("newProject").onclick=()=>{ pushHistory(); state.notes=[]; state.selected.clear(); renderAll();}; $("projects").onclick=e=>{ const row=e.target.closest(".projectRow"); if(!row||!state.db)return; const req=state.db.transaction("projects").objectStore("projects").get(row.dataset.id); req.onsuccess=()=>{ const p=req.result; if(!p)return; Object.entries(p.meta||{}).forEach(([k,v])=>$(k)&&($(k).value=v)); state.notes=p.notes||[]; renderAll(); }; };
+
+  async function addToLocalSongs(){
+    const m=meta(), status=$("localSongStatus"), tools=window.CircleMixChartTools, store=window.CircleMixLocalSongs;
+    const chart=chartJson(), problems=[];
+    if(!m.songId) problems.push("곡 ID가 필요합니다.");
+    if(!m.title) problems.push("곡명이 필요합니다.");
+    if(!m.artist) problems.push("아티스트가 필요합니다.");
+    if(!state.audioFile) problems.push("오디오 파일이 필요합니다.");
+    if(!(m.bpm>0)) problems.push("BPM은 0보다 커야 합니다.");
+    if(!Number.isFinite(m.offset)) problems.push("OFFSET이 올바르지 않습니다.");
+    const checked=tools.validateChart(chart);
+    if(!checked.ok) problems.push(...checked.errors);
+    if(problems.length){ status.innerHTML=problems.map(e=>`<div class="err">${e}</div>`).join(""); return; }
+    try{
+      if(await store.exists(m.songId) && !confirm(`LOCAL SONGS에 ${m.songId}가 이미 있습니다. 덮어쓸까요?`)) return;
+      const diffKey=(m.difficulty||"custom").toLowerCase().replace(/[^a-z0-9_-]+/g,"-") || "custom";
+      const record={ id:m.songId, source:"local", title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, updatedAt:new Date().toISOString(), audioBlob:state.audioFile, audioType:state.audioFile.type, jacketBlob:state.jacketFile||null, jacketData:state.jacketData, difficulties:{ [diffKey]:{ label:m.difficulty||"CUSTOM", chart:`local:${m.songId}:${diffKey}`, stars:tools.calculateStars(chart) } }, charts:{ [diffKey]:chart } };
+      await store.put(record);
+      status.innerHTML=`<div>No errors. LOCAL SONGS에 등록되었습니다. <a class="back" href="./index.html?tab=local&song=${encodeURIComponent(m.songId)}&difficulty=${encodeURIComponent(diffKey)}">SONG SELECT로 이동</a></div>`;
+    }catch(err){ status.innerHTML=`<div class="err">IndexedDB 저장 실패: ${err.message}</div>`; }
+  }
+
+  $("saveProject").onclick=saveLocal; $("addLocalSong").onclick=addToLocalSongs; $("newProject").onclick=()=>{ pushHistory(); state.notes=[]; state.selected.clear(); renderAll();}; $("projects").onclick=e=>{ const row=e.target.closest(".projectRow"); if(!row||!state.db)return; const req=state.db.transaction("projects").objectStore("projects").get(row.dataset.id); req.onsuccess=()=>{ const p=req.result; if(!p)return; Object.entries(p.meta||{}).forEach(([k,v])=>$(k)&&($(k).value=v)); state.notes=p.notes||[]; renderAll(); }; };
   $("autoPreviewBtn").onclick=()=>{ state.autoPreview=!state.autoPreview; $("autoPreviewBtn").classList.toggle("on",state.autoPreview); $("validation").innerHTML="AUTO preview uses the editor renderer only; official game judgment stays in src/game.js."; };
   document.addEventListener("keydown",e=>{ if(e.target.matches("input,textarea,select"))return; if(e.key===" "){ e.preventDefault(); $("playBtn").click(); } if(e.key==="Delete") $("deleteBtn").click(); if((e.ctrlKey||e.metaKey)&&e.key==="c") $("copyBtn").click(); if((e.ctrlKey||e.metaKey)&&e.key==="v") $("pasteBtn").click(); if((e.ctrlKey||e.metaKey)&&e.key==="z") $("undoBtn").click(); });
-  openDb().then(listProjects); renderAll(); tick();
+
+  async function loadLocalSongFromQuery(){
+    const id=new URLSearchParams(location.search).get("localSong");
+    if(!id || !window.CircleMixLocalSongs) return;
+    try{ const rec=await window.CircleMixLocalSongs.get(id); if(!rec) return;
+      $("songId").value=rec.id; $("title").value=rec.title||""; $("artist").value=rec.artist||""; $("bpm").value=rec.bpm||120; $("offset").value=rec.offset||0; $("previewStart").value=rec.previewStart||0;
+      const diff=Object.keys(rec.charts||{})[0]; if(diff){ $("difficulty").value=rec.difficulties?.[diff]?.label || diff; state.notes=rec.charts[diff].notes||[]; }
+      state.audioFile=rec.audioBlob; state.jacketFile=rec.jacketBlob; state.jacketData=rec.jacketData; if(state.audioUrl) URL.revokeObjectURL(state.audioUrl); state.audioUrl=URL.createObjectURL(rec.audioBlob); audio.src=state.audioUrl; $("fileInfo").textContent=`${rec.title} · IndexedDB audio Blob`; renderAll(); validate();
+    }catch(err){ $("validation").innerHTML=`<span class="err">LOCAL LOAD ERROR ${err.message}</span>`; }
+  }
+
+  openDb().then(()=>{ listProjects(); loadLocalSongFromQuery(); }); renderAll(); tick();
 })();

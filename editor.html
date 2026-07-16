@@ -27,7 +27,7 @@
       <label>Preview start <input id="previewStart" type="number" step="0.01" value="0" /></label>
       <label>Jacket <input id="jacketFile" type="file" accept="image/*" /></label>
     </div>
-    <div class="actions"><button id="saveProject" type="button">Save Local</button><button id="newProject" type="button">New</button><label class="check"><input id="autosave" type="checkbox" checked /> autosave</label></div>
+    <div class="actions"><button id="saveProject" type="button">Save Project</button><button id="addLocalSong" type="button">Add to LOCAL SONGS</button><button id="newProject" type="button">New</button><label class="check"><input id="autosave" type="checkbox" checked /> autosave</label></div><div class="validation" id="localSongStatus">LOCAL SONGS 등록 전입니다.</div>
     <p class="notice">IndexedDB 임시 저장은 브라우저 데이터를 지우면 사라질 수 있습니다. 음악은 서버에 업로드되지 않습니다.</p>
   </section>
   <section class="stage panel">
@@ -63,6 +63,7 @@
   </aside>
 </main>
 <audio id="audio" preload="metadata"></audio>
+<script src="./src/songs.js"></script>
 <script src="./src/editor.js"></script>
 </body>
 </html>
