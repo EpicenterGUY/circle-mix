@@ -147,6 +147,10 @@
     <button class="editBtn editWide" id="exportBtn">EXPORT</button><button class="editBtn editWide" id="importBtn">IMPORT</button>
     <button class="editBtn editFull" id="clearChartBtn">CLEAR CUSTOM CHART</button>
   </div>
+  <div class="editGrid">
+    <label class="editorHint editWide">ANGLE SNAP<select id="angleSnapSelect"><option value="4">4</option><option value="8" selected>8</option><option value="12">12</option><option value="16">16</option><option value="24">24</option><option value="FREE">FREE</option></select></label>
+    <label class="editorHint editWide">ANGLE <input id="editorAngleInput" type="number" step="0.1" value="0" />°</label>
+  </div>
   <div class="editorHint" id="editorStatus">custom notes: 0</div>
   <textarea class="editorText" id="chartText" placeholder="export/import JSON"></textarea>
 </div>
