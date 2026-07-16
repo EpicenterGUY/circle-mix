@@ -214,84 +214,99 @@
     for(let b=start;b<=end;b+=step) cut(n,b,lanes[i++%lanes.length]);
   }
 
+
+  function guidedCut(n,b,lane,fromLane=lane,lead=.9,dir="auto"){
+    trace(n,b-lead,fromLane,lane,Math.max(.55,lead*.85),dir);
+    cut(n,b,lane);
+  }
+
+  function guidedSwing(n,b,lane,fromLane=lane,dir="CW",lead=.9){
+    trace(n,b-lead,fromLane,lane,Math.max(.55,lead*.85),dir);
+    swing(n,b,lane,dir);
+  }
+
+  function slideCatch(n,b,lane,endLane,dir="CW",dur=3.0,catchDelay=1.0){
+    slide(n,b,lane,endLane,dir,dur);
+    trace(n,b+dur+.25,endLane,endLane,.7);
+    cut(n,b+dur+catchDelay,endLane);
+  }
+
   function generateAnimaNormalChart(){
     const n=[];
 
-    // NORMAL: 초견 학습용 구조형 채보.
-    // CUT으로 박자/레인 규칙을 먼저 익히고, 중반부터 짧은 HOLD/SLIDE를 추가한다.
+    // NORMAL: 조작법을 익히는 입문 채보.
+    // CUT 중심으로 손 위치를 익히고, TRACE가 다음 위치를 먼저 보여 주도록 구성한다.
 
-    // 0~32 Intro: 4박/2박 CUT 앵커로 기본 박자와 8방향 레인을 설명.
-    anchor(n,4,20,4,[0,4,2,6]);
-    trace(n,6,1,3,1.35,"CW");
-    trace(n,9,6,4,1.35,"CCW");
-    trace(n,18,6,0,1.4);
-    trace(n,22.5,0);
-    stair(n,24,[0,2,4,6],1.0);
-    stair(n,28,[1,3,5,7],1.0);
-    swing(n,32,7,"CW");
+    // 0~32 Intro: TRACE→CUT 기본 이동과 예측 가능한 마디 끝 SWING.
+    anchor(n,4,12,4,[0,4,2]);
+    guidedCut(n,16,6,2,1.2,"CW");
+    guidedCut(n,20,0,6,1.2,"CW");
+    stair(n,24,[0,1,2,3],1.0);
+    guidedSwing(n,31.5,4,3,"CW",1.0);
 
-    // 32~64 Verse: CUT 모티프 반복. 첫 SLIDE는 짧고 주변 조작을 비워 둔다.
-    motif(n,36,[0,2,4,6,7,5,3,1],1.0);
-    trace(n,46.5,1,5);
-    slide(n,48,1,5,"CW",3.5);
-    cut(n,53,5);
-    swing(n,56,5,"CCW");
+    // 32~64 Verse: 한 박 CUT 모티프, 짧은 SLIDE 끝점 회수만 소개.
+    motif(n,36,[4,2,0,6,7,5,3,1],1.0);
+    guidedCut(n,46,5,1,1.1,"CW");
+    slideCatch(n,48,5,1,"CCW",2.5,1.0);
+    guidedSwing(n,56,1,1,"CCW",.8);
     anchor(n,60,68,4,[0,4]);
 
-    // 72~112 Build: HOLD는 지속음 역할. HOLD 중에는 복잡한 조작 없이 진입/이탈만 배치.
-    hold(n,74,6,4.5);
-    trace(n,79,6);
-    cut(n,80,6);
-    motif(n,84,[6,4,2,0,1,3,5,7],.9);
-    slide(n,98,7,3,"CCW",3.5);
-    scratch(n,105,3,6,"CW");
-    stair(n,110,[6,7,0,1],.55);
+    // 72~112 Build: HOLD 중 복잡한 입력 금지. 종료 후 CUT으로 회수.
+    hold(n,74,6,4.0);
+    trace(n,78.7,6,6,.8);
+    cut(n,79.5,6);
+    motif(n,84,[6,4,2,0,1,3,5,7],.95);
+    guidedCut(n,94,3,7,1.0,"CCW");
+    slideCatch(n,98,3,7,"CW",2.75,1.05);
+    stair(n,108,[7,0,1,2],.65);
 
-    // 112~144 Highlight 1: 짧은 CUT 러시 + SWING 마무리 + 포인트 SCRATCH.
-    burst(n,116,[0,1,2,3,4,5,6,7],.42);
-    trace(n,120,7);
-    swing(n,121,7,"CW");
-    slide(n,126,4,0,"CCW",3.2);
-    cut(n,132,0);
-    burst(n,136,[0,2,4,6,1,3,5,7],.44);
-    scratch(n,143,7,3,"CCW");
+    // 112~144 Highlight 1: 짧은 CUT 러시 뒤 SWING. SCRATCH는 쉬운 한 지점만.
+    burst(n,116,[2,3,4,5,6,7,0,1],.44);
+    guidedSwing(n,121,1,1,"CW",.75);
+    slideCatch(n,126,4,0,"CCW",2.75,1.0);
+    guidedCut(n,134,2,0,1.0,"CW");
+    burst(n,136,[2,4,6,0,1,3,5,7],.46);
+    trace(n,142.1,7,7,.6);
+    scratch(n,143,7,7,"CCW",.45);
 
-    // 144~176 Break: 밀도 낮춤. 긴 공백은 앵커 CUT으로만 유지.
-    hold(n,150,3,4.5);
-    cut(n,156,3);
+    // 144~176 Break: 회복 구간. HOLD와 앵커 CUT만 두고 멀리 점프하지 않게 TRACE 제공.
+    hold(n,150,3,4.0);
+    trace(n,154.5,3,3,.8);
+    cut(n,155.5,3);
     anchor(n,160,174,4,[0,4,2,6]);
 
-    // 180~224 Build 2: 방향성 있는 CUT에 짧은 SLIDE/SCRATCH 연결을 한 번 소개.
-    motif(n,182,[1,3,5,7,0,2,4,6,6,4,2,0],.8);
-    slide(n,198,0,5,"CW",3.5);
-    scratch(n,205,5,1,"CCW");
-    stair(n,212,[1,2,3,4,5,6,7,0],.55);
-    swing(n,218,0,"CW");
+    // 180~224 Build 2: 방향성 CUT과 짧은 SLIDE. SCRATCH는 제외해 피로도를 낮춤.
+    motif(n,182,[1,3,5,7,0,2,4,6],.9);
+    guidedCut(n,194,0,6,1.0,"CW");
+    slideCatch(n,198,0,5,"CW",2.75,1.1);
+    stair(n,210,[5,6,7,0,1,2],.60);
+    guidedSwing(n,218,2,2,"CW",.8);
 
-    // 224~280 Climax: NORMAL 최고 밀도. 러시는 짧게 끊고 SLIDE 중 겹침을 피한다.
+    // 224~280 Climax: NORMAL 최고 밀도지만 복합 조작 없이 CUT/TRACE/SLIDE 순서로 분리.
     hold(n,224,4,3.5);
-    cut(n,229,4);
-    burst(n,232,[4,5,6,7,0,1,2,3,3,2,1,0],.40);
-    slide(n,244,0,5,"CW",3.5);
-    cut(n,250,5);
-    scratch(n,253,5,1,"CCW");
-    burst(n,260,[1,3,5,7,0,2,4,6],.42);
-    slide(n,270,1,6,"CW",3.5);
-    swing(n,276,6,"CCW");
+    trace(n,227.8,4,4,.7);
+    cut(n,228.8,4);
+    burst(n,232,[4,5,6,7,0,1,2,3],.42);
+    slideCatch(n,244,3,7,"CW",2.75,1.05);
+    guidedCut(n,254,1,7,1.0,"CW");
+    burst(n,260,[1,3,5,7,0,2,4,6],.44);
+    slide(n,270,6,2,"CCW",2.75);
+    guidedSwing(n,276,2,2,"CCW",.8);
 
-    // 280~320 Final drive: 후반 밀도 상승. 동시/복합 조작 대신 CUT 계단을 중심으로 마무리.
-    burst(n,284,[6,7,0,1,2,3,4,5],.40);
-    scratch(n,294,2,7,"CW");
-    stair(n,300,[7,5,3,1,6,4,2,0],.50);
-    slide(n,310,0,4,"CW",3.5);
-    swing(n,316,4,"CW");
-    burst(n,320,[4,6,0,2,5,7,1,3],.42);
+    // 280~320 Final drive: 짧은 계단과 예측 가능한 마디 끝 SWING.
+    burst(n,284,[2,3,4,5,6,7,0,1],.42);
+    guidedCut(n,294,5,1,1.0,"CW");
+    stair(n,300,[5,3,1,7,6,4,2,0],.55);
+    slideCatch(n,310,0,4,"CW",2.75,1.0);
+    guidedSwing(n,316,4,4,"CW",.8);
+    burst(n,320,[4,6,0,2,5,7,1,3],.45);
 
-    // 320~342 Ending: HOLD로 안정시키고 SCRATCH/SWING/CUT으로 명확하게 종료.
+    // 320~342 Ending: HOLD로 안정시키고 한 번의 쉬운 SCRATCH와 종료 CUT.
     hold(n,326,3,3.5);
     anchor(n,332,336,2,[0,4,2]);
-    scratch(n,337,6,2,"CCW");
-    swing(n,340,2,"CW");
+    trace(n,336.3,2,2,.55);
+    scratch(n,337,2,2,"CCW",.45);
+    guidedSwing(n,340,2,2,"CW",.7);
     cut(n,342,4);
 
     return n.sort((a,b)=>a.hitTime-b.hitTime);
@@ -300,86 +315,90 @@
   function generateAnimaTechChart(){
     const n=[];
 
-    // TECH: HARD~EXPERT 초입을 목표로 한 구조형 채보.
-    // CUT 계단/짧은 러시/SLIDE→SCRATCH/러시→SWING을 사용하지만, HOLD/SLIDE와 복잡 조작은 겹치지 않는다.
+    // TECH: 복잡해 보이지만 처리 순서를 알면 가능한 테크맵.
+    // TRACE→CUT/SWING, SLIDE 끝→CUT/SCRATCH, HOLD 끝→회수 입력을 분리해서 배치한다.
 
-    // 0~32 Intro: NORMAL보다 빠른 CUT 계단으로 판정감을 잡되 과밀하게 시작하지 않음.
-    anchor(n,4,16,3,[0,4,2,6,1]);
-    trace(n,6,1,3,1.35,"CW");
-    trace(n,9,6,4,1.35,"CCW");
-    trace(n,17.5,6,0,1.4);
-    trace(n,20.8,0,2);
-    stair(n,22,[0,2,4,6,1,3,5,7],.70);
-    stair(n,28,[7,5,3,1],.55);
-    swing(n,31.5,7,"CW");
+    // 0~32 Intro: TRACE로 이동을 먼저 보여 주고 계단→SWING으로 방향 전환.
+    anchor(n,4,14,2.5,[0,4,2,6,1]);
+    guidedCut(n,17,5,1,1.0,"CW");
+    guidedCut(n,20,0,5,1.0,"CW");
+    stair(n,22,[0,2,4,6,1,3,5,7],.62);
+    guidedSwing(n,31.5,7,7,"CW",.75);
 
-    // 32~64 First phrase: 반복 모티프 + 짧은 러시. SLIDE 뒤에만 가벼운 마무리를 둔다.
+    // 32~64 First phrase: TRACE→CUT 모티프와 SLIDE 끝점 회수.
     motif(n,36,[0,2,4,6,7,5,3,1,0,1,2,3],.62);
-    trace(n,45,3,7);
-    slide(n,46,3,7,"CW",3.2);
-    cut(n,51.5,7);
-    swing(n,53,7,"CCW");
-    burst(n,56,[7,6,5,4,3,2,1,0],.36);
+    guidedCut(n,44,7,3,.9,"CW");
+    slideCatch(n,46,7,3,"CCW",2.9,.95);
+    guidedSwing(n,53,3,3,"CCW",.7);
+    burst(n,56,[3,2,1,0,7,6,5,4],.34);
     anchor(n,62,70,3,[0,4,2]);
 
-    // 72~112 Build-up: HOLD 종료 직후 CUT 재진입, SLIDE→SCRATCH 전환을 명확하게 분리.
-    hold(n,74,6,4.5);
-    cut(n,80,6);
-    motif(n,83,[6,4,2,0,1,3,5,7,7,5,3,1],.60);
-    slide(n,96,1,5,"CW",3.5);
-    trace(n,102,5);
-    scratch(n,103,5,0,"CCW");
-    burst(n,108,[0,1,2,3,4,5,6,7],.34);
+    // 72~112 Build-up: HOLD 종료 후 CUT, SLIDE 끝 후 짧은 SCRATCH를 명확히 분리.
+    hold(n,74,6,4.25);
+    trace(n,78.7,6,6,.8);
+    cut(n,79.7,6);
+    motif(n,83,[6,4,2,0,1,3,5,7,7,5,3,1],.58);
+    slide(n,96,1,5,"CW",3.0);
+    trace(n,99.4,5,5,.65);
+    cut(n,100.3,5);
+    scratch(n,102.2,5,5,"CCW",.42);
+    burst(n,108,[0,1,2,3,4,5,6,7],.32);
 
-    // 112~144 Highlight 1: CUT 러시를 2마디 이하로 제한하고 SWING/SCRATCH로 악센트.
-    burst(n,116,[0,1,2,3,4,5,6,7,7,6,5,4],.31);
-    swing(n,121,4,"CW");
-    slide(n,126,0,4,"CW",3.4);
-    cut(n,131.5,4);
-    burst(n,134,[4,6,0,2,5,7,1,3,4,5,6,7],.32);
-    scratch(n,142.5,7,3,"CCW");
+    // 112~144 Highlight 1: CUT 계단/러시를 SWING으로 접고, SCRATCH는 전환점 한 번만.
+    burst(n,116,[0,1,2,3,4,5,6,7,7,6,5,4],.30);
+    guidedSwing(n,121,4,4,"CW",.65);
+    slideCatch(n,126,4,0,"CCW",3.0,.9);
+    burst(n,134,[0,2,4,6,1,3,5,7,4,5,6,7],.31);
+    trace(n,141.8,7,7,.55);
+    scratch(n,142.5,7,7,"CCW",.42);
 
-    // 144~176 Break: 의도적 저밀도. HOLD와 SLIDE 사이를 비워 체력 회복.
-    hold(n,148,3,5.0);
-    cut(n,155,3);
-    anchor(n,158,172,3.5,[0,4,2,6]);
-    slide(n,174,6,2,"CCW",3.5);
+    // 144~176 Break: 저밀도 테크 회복. HOLD/SLIDE 사이를 비운다.
+    hold(n,148,3,4.75);
+    trace(n,153.1,3,3,.75);
+    cut(n,154.2,3);
+    anchor(n,158,170,3,[0,4,2,6]);
+    slideCatch(n,174,6,2,"CCW",2.8,.95);
 
-    // 180~224 Build 2: 계단과 방향 전환. SCRATCH는 드랍 전 포인트로 1회.
-    motif(n,182,[2,4,6,0,1,3,5,7,7,5,3,1,0,2,4,6],.55);
-    scratch(n,196,6,1,"CW");
-    burst(n,202,[1,2,3,4,5,6,7,0,0,2,4,6],.31);
-    trace(n,210,6);
-    swing(n,211,6,"CCW");
-    burst(n,213,[6,4,2,0,1,3,5,7],.34);
-    slide(n,219,7,3,"CCW",3.5);
+    // 180~224 Build 2: TRACE→SWING, CUT 계단→SWING, 짧은 SCRATCH 포인트.
+    motif(n,182,[2,4,6,0,1,3,5,7,7,5,3,1,0,2,4,6],.54);
+    trace(n,195.2,6,6,.55);
+    scratch(n,196,6,6,"CW",.42);
+    burst(n,202,[1,2,3,4,5,6,7,0,0,2,4,6],.30);
+    guidedSwing(n,211,6,6,"CCW",.7);
+    burst(n,213,[6,4,2,0,1,3,5,7],.33);
+    slideCatch(n,219,7,3,"CCW",2.9,.9);
 
-    // 224~280 Climax: TECH 메인. HOLD 종료→CUT, SLIDE→SCRATCH, 러시→SWING 조합.
-    hold(n,224,3,3.5);
-    cut(n,229,3);
-    burst(n,231,[3,4,5,6,7,0,1,2,2,1,0,7,6,5,4,3],.29);
-    swing(n,236,3,"CW");
-    slide(n,242,3,0,"CW",3.5);
-    scratch(n,248,0,4,"CCW");
-    burst(n,256,[4,6,0,2,5,7,1,3,0,1,2,3,4,5,6,7],.28);
-    swing(n,262,7,"CCW");
-    slide(n,270,7,2,"CCW",3.5);
-    stair(n,276,[2,3,4,5,6,7,0,1],.40);
+    // 224~280 Climax: 메인 테크 패턴. 복합 겹침 대신 순차 처리로 난이도 상승.
+    hold(n,224,3,3.4);
+    trace(n,227.8,3,3,.65);
+    cut(n,228.7,3);
+    burst(n,231,[3,4,5,6,7,0,1,2,2,1,0,7,6,5,4,3],.285);
+    guidedSwing(n,236,3,3,"CW",.6);
+    slide(n,242,3,0,"CW",3.0);
+    trace(n,245.35,0,0,.55);
+    cut(n,246.1,0);
+    scratch(n,248,0,0,"CCW",.42);
+    burst(n,256,[4,6,0,2,5,7,1,3,0,1,2,3,4,5,6,7],.275);
+    guidedSwing(n,262,7,7,"CCW",.6);
+    slideCatch(n,270,7,2,"CCW",2.9,.9);
+    stair(n,276,[2,3,4,5,6,7,0,1],.38);
 
-    // 280~320 Final drive: 가장 높은 밀도지만 러시를 끊어 호흡을 준다.
-    burst(n,284,[0,1,2,3,4,5,6,7,7,6,5,4],.27);
-    swing(n,288,4,"CW");
-    scratch(n,294,0,5,"CW");
-    burst(n,300,[5,7,1,3,6,0,2,4,7,5,3,1],.28);
-    slide(n,312,0,6,"CW",3.5);
-    swing(n,318,6,"CW");
-    burst(n,320,[6,7,0,1,2,3,4,5,5,3,1,7],.30);
+    // 280~320 Final drive: 높은 밀도는 짧게 끊고, 마디 끝 플릭으로 방향을 정리.
+    burst(n,284,[0,1,2,3,4,5,6,7,7,6,5,4],.265);
+    guidedSwing(n,288,4,4,"CW",.55);
+    trace(n,293.2,0,0,.55);
+    scratch(n,294,0,0,"CW",.42);
+    burst(n,300,[5,7,1,3,6,0,2,4,7,5,3,1],.275);
+    slideCatch(n,312,0,6,"CW",2.9,.9);
+    guidedSwing(n,318,6,6,"CW",.6);
+    burst(n,320,[6,7,0,1,2,3,4,5,5,3,1,7],.29);
 
-    // 320~342 Ending: 과도한 난사 대신 읽히는 마무리 액션.
-    hold(n,326,5,3.5);
-    motif(n,332,[5,3,1,7,0,2,4,6],.55);
-    scratch(n,337,6,2,"CCW");
-    swing(n,340,2,"CW");
+    // 320~342 Ending: HOLD 끝 회수 후 TRACE가 보이는 마무리 SCRATCH/SWING/CUT.
+    hold(n,326,5,3.4);
+    motif(n,332,[5,3,1,7,0,2,4,6],.54);
+    trace(n,336.2,6,6,.55);
+    scratch(n,337,6,6,"CCW",.42);
+    guidedSwing(n,340,2,6,"CW",.7);
     cut(n,342,4);
 
     return n.sort((a,b)=>a.hitTime-b.hitTime);
