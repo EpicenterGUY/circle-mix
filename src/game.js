@@ -2,6 +2,7 @@
   const song = document.getElementById("song");
   const canvas = document.getElementById("game");
   const gameRoot = document.getElementById("gameRoot") || document.documentElement;
+  const fullscreenTarget = document.documentElement;
   const ctx = canvas.getContext("2d");
   const scoreBox = document.getElementById("scoreBox");
   const comboBox = document.getElementById("comboBox");
@@ -157,9 +158,20 @@
     return selectedSong;
   }
 
+  let resizeRetryPending=false;
   function resize(){
     const dpr = window.devicePixelRatio || 1;
-    W=window.innerWidth; H=window.innerHeight;
+    const rectSource = document.fullscreenElement ? (gameRoot || document.documentElement) : null;
+    const rect = rectSource ? rectSource.getBoundingClientRect() : null;
+    W=Math.floor(rect && rect.width ? rect.width : window.innerWidth);
+    H=Math.floor(rect && rect.height ? rect.height : window.innerHeight);
+    if(W<=0 || H<=0){
+      if(!resizeRetryPending){
+        resizeRetryPending=true;
+        requestAnimationFrame(()=>{ resizeRetryPending=false; resize(); });
+      }
+      return;
+    }
     canvas.width = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width = W + "px";
@@ -2334,20 +2346,43 @@
     try{ if(screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape"); }catch(e){}
   }
 
+  function activeSceneName(){
+    if(document.body.classList.contains("safeSongSelect")) return "songSelect";
+    if(document.body.classList.contains("safeSettings")) return "settings";
+    if(document.body.classList.contains("safeGame")) return paused ? "pause" : "game";
+    return "title";
+  }
+
+  function logFullscreenSnapshot(prefix=""){
+    const appRect=(gameRoot || document.documentElement).getBoundingClientRect();
+    const canvasRect=canvas.getBoundingClientRect();
+    if(prefix) console.log(prefix);
+    console.log(`[Fullscreen] active scene: ${activeSceneName()}`);
+    console.log(`[Fullscreen] app rect: ${Math.round(appRect.width)} x ${Math.round(appRect.height)}`);
+    console.log(`[Fullscreen] canvas rect: ${Math.round(canvasRect.width)} x ${Math.round(canvasRect.height)}`);
+  }
+
   async function requestFullscreenEnter(){
+    const target=fullscreenTarget || document.documentElement;
+    console.log(`[Fullscreen] target: ${target.id || target.tagName.toLowerCase()}`);
     if(document.fullscreenElement){
       await lockLandscapeSafe();
+      logFullscreenSnapshot();
       return true;
     }
-    if(!gameRoot.requestFullscreen) return false;
+    if(!target.requestFullscreen) return false;
+    console.log("[Fullscreen] request start");
     try{
-      await gameRoot.requestFullscreen({navigationUI:"hide"});
+      await target.requestFullscreen({navigationUI:"hide"});
       await lockLandscapeSafe();
       if(fullscreenRetryBtn) fullscreenRetryBtn.hidden=true;
       fullscreenInterrupted=false;
       setPauseMessage("");
+      resize();
+      console.log("[Fullscreen] request success");
       return true;
     }catch(e){
+      console.log("[Fullscreen] request failed", e);
       if(fullscreenRetryBtn && isMobileViewport()) fullscreenRetryBtn.hidden=false;
       return false;
     }
@@ -2796,12 +2831,11 @@
   // Mobile fullscreen lifecycle handling is intentionally kept in this document so song select, play, and pause are scene changes instead of navigations.
   document.addEventListener("fullscreenchange",()=>{
     const inFullscreen=!!document.fullscreenElement;
+    fullscreenInterrupted=false;
     if(fullscreenRetryBtn) fullscreenRetryBtn.hidden=inFullscreen || !isMobileViewport();
     if(!inFullscreen){ try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){} }
-    if(running && !paused && isMobileViewport() && !inFullscreen){
-      fullscreenInterrupted=true;
-      showPause("전체화면이 종료되었습니다. RESUME WINDOWED 또는 ENTER FULLSCREEN을 선택하세요.");
-    }
+    resize();
+    requestAnimationFrame(()=>logFullscreenSnapshot(`[Fullscreen] change: ${inFullscreen}`));
   });
   document.addEventListener("fullscreenerror",()=>{ if(fullscreenRetryBtn && isMobileViewport()) fullscreenRetryBtn.hidden=false; });
 
