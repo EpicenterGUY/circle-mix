@@ -58,12 +58,19 @@
   const resultRetry = document.getElementById("resultRetry");
   const resultBackTitle = document.getElementById("resultBackTitle");
   const rotateOverlay = document.getElementById("rotateOverlay");
+  const songSelect = document.getElementById("songSelect");
+  const songCarousel = document.getElementById("songCarousel");
+  const songDifficulty = document.getElementById("songDifficulty");
+  const songPlayBtn = document.getElementById("songPlayBtn");
+  const songSelectBack = document.getElementById("songSelectBack");
 
   const TAU = Math.PI * 2;
-  const BPM = 184.6;
-  const BEAT = 60 / BPM;
+  const songs = window.CircleMixSongRegistry || { all:()=>[], get:()=>null, hasDifficulty:()=>false };
+  let selectedSong = songs.get(new URLSearchParams(window.location.search).get("song") || "anima");
+  let BPM = selectedSong?.bpm || 184.6;
+  let BEAT = 60 / BPM;
   const CHART_STRETCH = 1.00;
-  let SONG_OFFSET = -0.04;
+  let SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04;
   // 사용자가 말한 마지막 음 기준: 약 1:51 지점에서 종료.
   const SONG_END_TIME = 111.450;
   const CHART_END_BEAT = 342.894; // 초 단위. 채보가 빠르면 +, 늦으면 - 로 조정
@@ -114,11 +121,22 @@
   let sfxVolume=1.80;
   let musicVolume=0.90;
   let editorMode=false, selectedLane=0, useCustomChart=false;
-  let selectedMenuMode="tech";
+  let selectedMenuMode=(new URLSearchParams(window.location.search).get("difficulty") || "tech").toLowerCase();
+  if(selectedMenuMode!=="normal" && selectedMenuMode!=="tech") selectedMenuMode="tech";
   let paused=false;
   let settingsVisible=false;
   let customChartData=[];
   const difficultyCache={normal:null,tech:null};
+
+  function resolveSelectedSong(songId){
+    selectedSong = songs.get(songId || selectedSong?.id || "anima");
+    if(!selectedSong) selectedSong = {id:"anima", title:"ANiMA", artist:"xi", bpm:184.6, offset:-0.04, difficulties:{normal:{label:"NORMAL"}, tech:{label:"TECH"}}};
+    BPM = selectedSong.bpm || 184.6;
+    BEAT = 60 / BPM;
+    difficultyCache.normal = null;
+    difficultyCache.tech = null;
+    return selectedSong;
+  }
 
   function resize(){
     const dpr = window.devicePixelRatio || 1;
@@ -558,10 +576,12 @@
   }
 
   function generateNormalChart(){
+    if(selectedSong?.id === "anima") return generateAnimaNormalChart();
     return generateAnimaNormalChart();
   }
 
   function generateTechChart(){
+    if(selectedSong?.id === "anima") return generateAnimaTechChart();
     return generateAnimaTechChart();
   }
 
@@ -1955,6 +1975,8 @@
     applyMusicVolume();
     autoBox.textContent=autoMode?"AUTO ON":"AUTO OFF";
     mapBox.textContent=(mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
+    const hudSongTitle = document.querySelector(".hudSong span");
+    if(hudSongTitle) hudSongTitle.textContent = selectedSong?.title ? `CIRCLE MIX ${selectedSong.title}` : "CIRCLE MIX";
     autoToggle.textContent=autoMode?"AUTO ON":"AUTO OFF";
     autoToggle.classList.toggle("on",autoMode);
     mapToggle.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
@@ -2301,7 +2323,7 @@
     else{el.addEventListener("touchend",h,{passive:false});el.addEventListener("click",h);}
   }
 
-  bindPress(startBtn,()=>start("play"));
+  bindPress(startBtn,()=>showSongSelect());
   bindPress(editorStartBtn,()=>start("editor"));
   bindPress(startFullBtn,requestFullscreenSafe);
   bindPress(modeNormalBtn,()=>{selectedMenuMode="normal";updateModeButtons();});
@@ -2457,6 +2479,56 @@
     return true;
   }
 
+  function renderSongSelect(){
+    if(!songCarousel || !songDifficulty) return;
+    const list = songs.all();
+    if(!selectedSong) resolveSelectedSong(list[0]?.id || "anima");
+    songCarousel.innerHTML = list.map(songData => {
+      const active = songData.id === selectedSong?.id;
+      return `<button class="songCard${active ? " active" : ""}" type="button" data-song-id="${songData.id}">
+        <div class="songJacket" aria-hidden="true"><span>${songData.title}</span></div>
+        <div class="songMeta"><span>${songData.artist || "UNKNOWN"}</span><strong>${songData.title}</strong><em>${songData.bpm || "--"} BPM</em></div>
+      </button>`;
+    }).join("");
+    for(const card of songCarousel.querySelectorAll(".songCard")){
+      bindPress(card,()=>{ resolveSelectedSong(card.dataset.songId); renderSongSelect(); });
+    }
+    songDifficulty.innerHTML = ["normal","tech"].filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff => {
+      const label = selectedSong.difficulties[diff].label || diff.toUpperCase();
+      return `<button class="songDiffBtn${selectedMenuMode===diff ? " on" : ""}" type="button" data-difficulty="${diff}">${label} <span>${formatDifficulty(diff)}</span></button>`;
+    }).join("");
+    for(const btn of songDifficulty.querySelectorAll(".songDiffBtn")){
+      bindPress(btn,()=>{ selectedMenuMode = btn.dataset.difficulty; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });
+    }
+  }
+
+  function showSongSelect(){
+    resolveSelectedSong(selectedSong?.id || "anima");
+    renderSongSelect();
+    safeSetState("songSelect");
+    document.body.classList.remove("safeClean");
+    if(songSelect) songSelect.hidden = false;
+    try{ song.pause(); }catch(e){}
+  }
+
+  function showTitleMenu(){
+    if(songSelect) songSelect.hidden = true;
+    safeSetState("title");
+    safeRefresh();
+  }
+
+  function startSelectedSong(){
+    if(!selectedSong) resolveSelectedSong("anima");
+    if(selectedMenuMode!=="normal" && selectedMenuMode!=="tech") selectedMenuMode="tech";
+    mapMode = selectedMenuMode;
+    if(songSelect) songSelect.hidden = true;
+    const url = new URL(window.location.href);
+    url.searchParams.set("song", selectedSong.id);
+    url.searchParams.set("difficulty", mapMode);
+    window.history.replaceState({}, "", url);
+    start("play");
+  }
+
   function safeInputEvent(e){
     if(!e)return;
     if(e.cancelable)e.preventDefault();
@@ -2483,7 +2555,9 @@
     document.body.classList.toggle("safeTitle", state==="title");
     document.body.classList.toggle("safeSettings", state==="settings");
     document.body.classList.toggle("safeGame", state==="game");
+    document.body.classList.toggle("safeSongSelect", state==="songSelect");
     if(safeMenu)safeMenu.style.display=state==="title"?"flex":"none";
+    if(songSelect)songSelect.hidden=state!=="songSelect";
     if(safeOverlay)safeOverlay.classList.toggle("show",state==="settings");
     canvas.style.pointerEvents=state==="game"?"auto":"none";
     settingsVisible=state==="settings";
@@ -2560,7 +2634,7 @@
     safeRefresh();
   };
 
-  safeBind(safeStart,()=>{safeStart.textContent="LOADING...";start("play");});
+  safeBind(safeStart,()=>showSongSelect());
   safeBind(safeEditor,()=>{if(debugMode)start("editor"); else toggleKeymap(true);});
   safeBind(safeTech,()=>{selectedMenuMode="tech";mapMode="tech";safeRefresh();updateButtons();});
   safeBind(safeNormal,()=>{selectedMenuMode="normal";mapMode="normal";safeRefresh();updateButtons();});
@@ -2580,6 +2654,8 @@
   safeBind(safeSetOffUp,()=>changeOffset(+0.03));
   safeBind(safeResume,()=>{safeSetOverlay(false);resumeGame();});
   safeBind(safeExit,exitToMenu);
+  bindPress(songSelectBack,()=>showTitleMenu());
+  bindPress(songPlayBtn,()=>startSelectedSong());
 
   window.addEventListener("resize", handlePlayOrientation);
   window.addEventListener("orientationchange", () => setTimeout(handlePlayOrientation, 80));

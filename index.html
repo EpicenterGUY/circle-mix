@@ -30,6 +30,24 @@
     <div class="safeMenuSub">Z/X CUT·HOLD·SLIDE · RMB SCRATCH · ESC/H SETTINGS</div>
   </div>
 </div>
+
+<div id="songSelect" class="songSelect" aria-label="Song select" hidden>
+  <div class="songSelectShell">
+    <header class="songSelectHeader">
+      <button class="songSelectBack" id="songSelectBack" type="button">BACK</button>
+      <div>
+        <span class="songSelectEyebrow">SONG SELECT</span>
+        <h2>SELECT TRACK</h2>
+      </div>
+    </header>
+    <main class="songCarousel" id="songCarousel" aria-live="polite"></main>
+    <footer class="songSelectFooter">
+      <div class="songDifficulty" id="songDifficulty"></div>
+      <button class="songPlayBtn" id="songPlayBtn" type="button">PLAY</button>
+    </footer>
+  </div>
+</div>
+
 <div id="rotateOverlay" class="rotateOverlay" aria-live="assertive">
   <div class="rotateCard">
     <strong>가로 화면으로 돌려주세요</strong>
@@ -222,6 +240,7 @@
   </div>
 </div>
 
+<script src="./src/songs.js"></script>
 <script src="./src/chart.js"></script>
 <script src="./src/audio.js"></script>
 <script src="./src/effects.js"></script>
