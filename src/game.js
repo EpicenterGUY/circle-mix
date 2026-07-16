@@ -133,8 +133,8 @@
   const DIAL_ARC_HALF = Math.PI * 0.075;
   const DIAL_ARC_VISUAL = Math.PI * 0.100;
   const TRACE_PROFILES = {
-    normal:{ angularToleranceDeg:10, radialTolerancePx:18, radialToleranceRatio:.055, startGrace:.24, endpointWindow:.18, perfectCoverage:.92, greatCoverage:.75, maxFrameDt:.05 },
-    tutorial:{ angularToleranceDeg:16, radialTolerancePx:24, radialToleranceRatio:.075, startGrace:.25, endpointWindow:.20, perfectCoverage:.92, greatCoverage:.75, maxFrameDt:.05 }
+    normal:{ innerAngularToleranceDeg:12, outerAngularToleranceDeg:20, innerRadialTolerancePx:22, outerRadialTolerancePx:34, innerRadialToleranceRatio:.06, outerRadialToleranceRatio:.09, startGrace:.25, endpointWindow:.25, endpointRequiredTime:.10, perfectQuality:.88, greatQuality:.65, maxFrameDt:.05, graceGap:.14 },
+    tutorial:{ innerAngularToleranceDeg:16, outerAngularToleranceDeg:24, innerRadialTolerancePx:28, outerRadialTolerancePx:42, innerRadialToleranceRatio:.075, outerRadialToleranceRatio:.115, startGrace:.25, endpointWindow:.25, endpointRequiredTime:.10, guidedQuality:.65, fadedQuality:.70, standardQuality:.74, perfectQuality:.88, greatQuality:.65, maxFrameDt:.05, graceGap:.14 }
   };
   const TRACE_SWING_LINK_MIN = .15;
   const TRACE_SWING_LINK_MAX = .25;
@@ -906,8 +906,26 @@
   function traceProfile(){
     return tutorialMode ? TRACE_PROFILES.tutorial : TRACE_PROFILES.normal;
   }
+  function getTraceJudgementRegion(n,t,profile=traceProfile()){
+    const targetAngle=traceTargetAngle(n,t);
+    const targetRadius=hitR;
+    const outerAngularTolerance=(profile.outerAngularToleranceDeg ?? profile.angularToleranceDeg)*Math.PI/180;
+    const innerAngularTolerance=(profile.innerAngularToleranceDeg ?? profile.angularToleranceDeg)*Math.PI/180;
+    const outerRadialTolerance=Math.max(profile.outerRadialTolerancePx ?? profile.radialTolerancePx, hitR*(profile.outerRadialToleranceRatio ?? profile.radialToleranceRatio));
+    const innerRadialTolerance=Math.max(profile.innerRadialTolerancePx ?? profile.radialTolerancePx, hitR*(profile.innerRadialToleranceRatio ?? profile.radialToleranceRatio));
+    const p=pointerPolar();
+    const angleError=Math.abs(norm(p.angle-targetAngle));
+    const radiusError=Math.abs(p.radius-targetRadius);
+    const inner=angleError<=innerAngularTolerance && radiusError<=innerRadialTolerance;
+    const outer=angleError<=outerAngularTolerance && radiusError<=outerRadialTolerance;
+    return {targetAngle,targetRadius,pointerAngle:p.angle,pointerRadius:p.radius,angleError,radiusError,
+      angularTolerance:outerAngularTolerance,radialTolerance:outerRadialTolerance,
+      innerAngularTolerance,innerRadialTolerance,outerAngularTolerance,outerRadialTolerance,
+      inner,outer,inside:outer,trackingWeight:inner?1:(outer?.55:0)};
+  }
   function traceTolerance(profile=traceProfile()){
-    return { angular:profile.angularToleranceDeg*Math.PI/180, radial:Math.max(profile.radialTolerancePx, hitR*profile.radialToleranceRatio) };
+    return { angular:(profile.outerAngularToleranceDeg ?? profile.angularToleranceDeg)*Math.PI/180,
+      radial:Math.max(profile.outerRadialTolerancePx ?? profile.radialTolerancePx, hitR*(profile.outerRadialToleranceRatio ?? profile.radialToleranceRatio)) };
   }
   function pointerPolar(){
     if(gameState.autoEnabled || keyA || keyD) return {angle:armAngle, radius:hitR};
@@ -915,8 +933,8 @@
     return {angle:Math.atan2(dy,dx), radius:Math.hypot(dx,dy)};
   }
   function insideTraceTarget(n,t){
-    const region=getJudgementRegion(n,t,traceProfile());
-    return {inside:region.inside, angleError:region.angleError, radiusError:region.radiusError, target:region.targetAngle, tol:{angular:region.angularTolerance, radial:region.radialTolerance}};
+    const region=getTraceJudgementRegion(n,t,traceProfile());
+    return {inside:region.inside, angleError:region.angleError, radiusError:region.radiusError, target:region.targetAngle, pointerAngle:region.pointerAngle, pointerRadius:region.pointerRadius, trackingWeight:region.trackingWeight, region, tol:{angular:region.angularTolerance, radial:region.radialTolerance}};
   }
 
   function baseJudgementTolerance(note, profile=traceProfile()){
@@ -941,12 +959,13 @@
 
   function getJudgementRegion(note, songTime, judgementProfile=traceProfile()){
     const family=noteFamily(note.type);
-    const tol=baseJudgementTolerance(note, judgementProfile);
     const end=note.hitTime+(note.duration||0);
-    const targetAngle = family==="trace" ? traceTargetAngle(note,songTime) : (family==="slide" ? slideAngle(note,songTime) : note.angle);
-    const targetRadius = hitR;
     const timingState=timingStateFor(note,songTime);
     const active = family==="trace" ? songTime>=note.hitTime && songTime<=end : (note.duration ? songTime>=note.hitTime && songTime<=end : Math.abs(songTime-note.hitTime)<=HIT_WINDOW);
+    if(family==="trace") return {...getTraceJudgementRegion(note,songTime,judgementProfile),timingState,active};
+    const tol=baseJudgementTolerance(note, judgementProfile);
+    const targetAngle = family==="slide" ? slideAngle(note,songTime) : note.angle;
+    const targetRadius = hitR;
     const p=pointerPolar();
     const angleError=Math.abs(norm(p.angle-targetAngle));
     const radiusError=Math.abs(p.radius-targetRadius);
@@ -1383,6 +1402,15 @@
     console.log(`[Auto] processing note type=${autoActionForNote(n)}`);
   }
 
+  function traceFailureFeedback(n,needed){
+    const r=n.lastTraceRegion;
+    if(!n.enteredTrace) return "MOVE CLOSER TO THE RING";
+    if(!n.endpointCaptured) return "REACH THE END POINT";
+    if(r && r.radiusError > r.radialTolerance) return "MOVE CLOSER TO THE RING";
+    if((n.traceQuality||0) < needed) return "STAY ON THE PATH LONGER";
+    return "FOLLOW THE CURRENT TARGET";
+  }
+
   function updateNotes(t,dt){
     for(const n of chart){
       if(n.done||n.missed)continue;
@@ -1396,27 +1424,57 @@
         const end=n.hitTime+n.duration;
         const profile=traceProfile();
         const a=traceTargetAngle(n,t);
-        if(n.validTrackedTime===undefined){ n.validTrackedTime=0; n.endpointCaptured=false; n.enteredTrace=false; n.lateTraceStart=false; }
+        if(n.traceQualityTime===undefined){
+          Object.assign(n,{validTrackedTime:0,traceQualityTime:0,activeTraceDuration:0,endpointInsideTime:0,endpointCaptured:false,enteredTrace:false,lateTraceStart:false,maxAngleError:0,angleErrorSum:0,errorSamples:0,maxRadiusError:0,lastTraceReason:"NOT_ENTERED"});
+        }
         if(t>=n.hitTime&&t<=end){
-          const hit=gameState.autoEnabled ? {inside:true,target:a} : insideTraceTarget(n,t);
+          const frameDt=Math.min(Math.max(dt,0), profile.maxFrameDt);
+          const hit=gameState.autoEnabled ? {inside:true,trackingWeight:1,angleError:0,radiusError:0,target:a,region:{pointerAngle:a,pointerRadius:hitR,angularTolerance:profile.outerAngularToleranceDeg*Math.PI/180,radialTolerance:Math.max(profile.outerRadialTolerancePx,hitR*profile.outerRadialToleranceRatio),inside:true}} : insideTraceTarget(n,t);
+          n.activeTraceDuration += frameDt;
+          n.maxAngleError=Math.max(n.maxAngleError||0,hit.angleError||0);
+          n.maxRadiusError=Math.max(n.maxRadiusError||0,hit.radiusError||0);
+          n.angleErrorSum=(n.angleErrorSum||0)+(hit.angleError||0); n.errorSamples=(n.errorSamples||0)+1;
           if(hit.inside){
             if(gameState.autoEnabled)logAutoProcessing(n);
             n.enteredTrace=true;
             if(t>n.hitTime+profile.startGrace && n.validTrackedTime<=0) n.lateTraceStart=true;
-            n.validTrackedTime += Math.min(Math.max(dt,0), profile.maxFrameDt);
-            n.hold=n.validTrackedTime;
-            if(end-t<=profile.endpointWindow) n.endpointCaptured=true;
+            n.validTrackedTime += frameDt;
+            n.lastInsideTraceTime=t;
             if(Math.random()<.45)addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.trace,1,.18);
+          }else if(!n.enteredTrace && t<=n.hitTime+profile.startGrace){
+            n.lastTraceReason="START_GRACE";
           }
+          n.traceQualityTime += frameDt*(hit.trackingWeight||0);
+          if(end-t<=profile.endpointWindow && hit.inside) n.endpointInsideTime += frameDt;
+          n.endpointCaptured=(n.endpointInsideTime||0) >= profile.endpointRequiredTime;
+          n.coverageRatio=(n.validTrackedTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
+          n.traceQuality=(n.traceQualityTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
+          n.lastTraceRegion=hit.region;
         }
         if(t>end){
-          const ratio=(n.validTrackedTime||0)/Math.max(n.duration,.001);
-          n.coverageRatio=ratio;
-          n.completed=ratio>=profile.greatCoverage && n.endpointCaptured===true;
-          if(n.completed){
-            const perfect=ratio>=profile.perfectCoverage && !n.lateTraceStart;
+          const quality=(n.traceQualityTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
+          const coverage=(n.validTrackedTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
+          n.coverageRatio=coverage; n.traceQuality=quality;
+          const st=tutorialMode?tutorialSteps[tutorialStepIndex]:null;
+          const tutorialNeeded=st?.phase==="guided"?profile.guidedQuality:(st?.phase==="faded"?profile.fadedQuality:(st?.phase==="standard"?profile.standardQuality:profile.greatQuality));
+          const needed=tutorialMode?tutorialNeeded:profile.greatQuality;
+          const almostNever=!n.enteredTrace;
+          const passed=tutorialMode ? (quality>=needed && n.endpointCaptured===true) : (quality>=needed && !almostNever);
+          n.completed=passed;
+          if(debugMode || tutorialMode){
+            n.failReason=traceFailureFeedback(n,needed);
+            console.log(`[Trace Result]
+coverage=${coverage.toFixed(2)}
+endpoint=${n.endpointCaptured===true}
+maxAngleError=${((n.maxAngleError||0)*180/Math.PI).toFixed(1)}
+avgAngleError=${(((n.angleErrorSum||0)/Math.max(n.errorSamples||0,1))*180/Math.PI).toFixed(1)}
+maxRadiusError=${(n.maxRadiusError||0).toFixed(1)}
+reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDPOINT_MISSED":"LOW_COVERAGE"))}`);
+          }
+          if(passed){
+            const perfect=!tutorialMode && quality>=profile.perfectQuality && n.endpointCaptured===true;
             addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace);
-          }else miss(n,"FOLLOW THE CURRENT TARGET");
+          }else miss(n,n.failReason||"STAY ON THE PATH LONGER");
         }
         continue;
       }
@@ -1829,7 +1887,7 @@
     const d=slideDelta(n);
     const dur=Math.max(n.duration,.001);
     const ratio=clamp(active?((t-n.hitTime)/dur):0,0,1);
-    const r=clamp((active?hitR:noteR(n,t))-10,hitR-14,outerR-18);
+    const r=active?hitR:clamp(noteR(n,t)-10,hitR-14,outerR-18);
     const curr=active?traceTargetAngle(n,t):n.angle;
     const endA=n.angle+d;
     const dir=d>=0?1:-1;
@@ -1838,17 +1896,19 @@
     const pastAlpha=clamp(.10*pathScale,.06,.18);
     const hotAlpha=focus?.98:.88;
     const fullDelta=Math.abs(d)>.03?d:dir*Math.PI*.26;
-    const tol=traceTolerance();
-    const activeHalf=tol.angular;
-    const activeWidth=Math.max(NOTE_WIDTHS.trace+8, tol.radial*2);
+    const region=getTraceJudgementRegion(n,t,traceProfile());
+    const activeHalf=region.outerAngularTolerance;
+    const innerHalf=region.innerAngularTolerance;
+    const activeWidth=Math.max(NOTE_WIDTHS.trace+8, region.outerRadialTolerance*2);
+    const innerWidth=Math.max(NOTE_WIDTHS.trace+6, region.innerRadialTolerance*2);
 
     if(active && Math.abs(fullDelta*ratio)>0.003) drawDirectedArcSegments(r,n.angle,fullDelta*ratio,`rgba(35,240,197,${pastAlpha})`,7,1,null,0);
     const farStart=active?curr:n.angle;
     const farDelta=active?(endA-farStart):fullDelta;
     if(Math.abs(farDelta)>0.003) drawDirectedArcSegments(r,farStart,farDelta,`rgba(35,240,197,${futureAlpha})`,7,1,null,0);
     if(active){
-      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.30})`,activeWidth+4,1,null,0);
-      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha})`,activeWidth,1,COLORS.trace,4*visualScale("effect"));
+      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.22})`,activeWidth,1,null,0);
+      drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,`rgba(255,255,255,${hotAlpha*.42})`,innerWidth,1,COLORS.trace,3*visualScale("effect"));
     }
 
     ctx.save();
@@ -2821,6 +2881,17 @@
     const mouseAngle=Math.atan2(dy,dx);
     const mouseDist=Math.hypot(dx,dy);
     pointerActive=(performance.now()-lastPointerMs)<1600 || mouseDownRight || !!keys.Space;
+    const traceNote=chart.find(n=>n.type?.startsWith("trace")&&!n.done&&!n.missed&&t>=n.hitTime&&t<=n.hitTime+(n.duration||0)) || chart.find(n=>n.type?.startsWith("trace")&&!n.done&&!n.missed);
+    const tr=traceNote?getTraceJudgementRegion(traceNote,t,traceProfile()):null;
+    const traceDebug=traceNote?`<div class="debugGrid"><b>TRACE DEBUG</b><b></b>
+        <span>targetAngle</span><strong>${formatAngle(tr.targetAngle)}</strong><span>pointerAngle</span><strong>${formatAngle(tr.pointerAngle)}</strong>
+        <span>angleError</span><strong>${(tr.angleError*180/Math.PI).toFixed(1)}°</strong><span>angularTolerance</span><strong>${(tr.angularTolerance*180/Math.PI).toFixed(1)}°</strong>
+        <span>pointerRadius</span><strong>${tr.pointerRadius.toFixed(1)}</strong><span>traceRadius</span><strong>${tr.targetRadius.toFixed(1)}</strong>
+        <span>radiusError</span><strong>${tr.radiusError.toFixed(1)}</strong><span>radialTolerance</span><strong>${tr.radialTolerance.toFixed(1)}</strong>
+        <span>insideTraceTarget</span><strong>${formatBool(tr.inside)}</strong><span>coverageRatio</span><strong>${formatNum(traceNote.coverageRatio,2)}</strong>
+        <span>validTrackedTime</span><strong>${formatNum(traceNote.validTrackedTime,2)}</strong><span>activeTraceDuration</span><strong>${formatNum(traceNote.activeTraceDuration,2)}</strong>
+        <span>endpointCaptured</span><strong>${formatBool(traceNote.endpointCaptured)}</strong><span>fail reason</span><strong>${traceNote.failReason||traceNote.lastTraceReason||"-"}</strong>
+      </div>`:"";
     el.innerHTML=`<div class="debugTitle">INPUT DEBUG <span>${gameState.autoEnabled?"AUTO":"MANUAL"}</span></div>
       <div class="debugGrid"><b>REAL INPUT</b><b></b>
         <span>Z</span><strong>${formatBool(keys.KeyZ)}</strong><span>X</span><strong>${formatBool(keys.KeyX)}</strong>
@@ -2844,6 +2915,7 @@
         <span>Scratch result</span><strong>${autoInputDebug.scratchResult}</strong>
         <span>Note target</span><strong>${autoInputDebug.noteId} ${autoInputDebug.noteType}</strong>
       </div>
+      ${traceDebug}
       <div class="debugGrid"><b>SCRATCH DEBUG</b><b></b>
         <span>RMB pressed</span><strong>${formatBool(mouseDownRight)}</strong><span>Candidate</span><strong>${formatBool(scratchCandidate)}</strong>
         <span>Movement amount</span><strong>${formatNum(scratchMoveAmount,3)}</strong><span>Speed</span><strong>${formatNum(scratchSpeed,2)}</strong>
