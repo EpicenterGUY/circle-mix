@@ -940,13 +940,50 @@
     const alpha=isFocus?.34:.17;
     const width=isFocus?8:5;
 
-    if(n.type.startsWith("slide") || n.type.startsWith("scratch")){
-      const isScratch=n.type.startsWith("scratch");
+    if(n.type.startsWith("scratch")){
+      const dir=n.type==="scratchCW"?1:-1;
+      const d=dir*Math.PI*.26;
+      const start=n.angle-d*.5;
+      const end=n.angle+d*.5;
+      const mainColor=noteColor(n);
+      drawDirectedArcSegments(hitR,start,d,`rgba(255,96,96,${isFocus?.26:.14})`,isFocus?7:5,1);
+
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.lineCap="butt";
+      ctx.shadowBlur=isFocus?14:7;
+      ctx.shadowColor=mainColor;
+      ctx.strokeStyle=mainColor;
+      ctx.lineWidth=isFocus?7:5;
+      ctx.beginPath(); ctx.arc(0,0,hitR,start,end,dir<0); ctx.stroke();
+      ctx.strokeStyle="rgba(255,245,230,.70)";
+      ctx.lineWidth=2;
+      ctx.setLineDash([4,5]);
+      ctx.beginPath(); ctx.arc(0,0,hitR+7,start,end,dir<0); ctx.stroke();
+      ctx.setLineDash([]);
+      for(let i=0;i<4;i++){
+        const a=start+(end-start)*(i+.5)/4;
+        ctx.save();
+        ctx.translate(Math.cos(a)*(hitR+5),Math.sin(a)*(hitR+5));
+        ctx.rotate(a+Math.PI/2);
+        ctx.fillStyle="rgba(255,245,230,.82)";
+        ctx.beginPath();ctx.moveTo(0,-5);ctx.lineTo(4,3);ctx.lineTo(-4,3);ctx.closePath();ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle="rgba(255,255,255,.78)";
+      ctx.font="900 10px system-ui";
+      ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.fillText("SHIFT",Math.cos(n.angle)*(hitR+24),Math.sin(n.angle)*(hitR+24));
+      ctx.restore();
+      return;
+    }
+
+    if(n.type.startsWith("slide")){
       const d=slideDelta(n);
       const endA=n.angle+d;
       const dir=d>=0?1:-1;
-      const mainColor=isScratch?noteColor(n):COLORS.slide;
-      const glowColor=isScratch?`rgba(255,96,96,${isFocus?.34:.18})`:`rgba(255,225,90,${isFocus?.34:.18})`;
+      const mainColor=COLORS.slide;
+      const glowColor=`rgba(255,225,90,${isFocus?.34:.18})`;
       drawDirectedArcSegments(hitR,n.angle,d,glowColor,isFocus?9:6,1);
 
       ctx.save();
@@ -959,7 +996,7 @@
       ctx.beginPath(); ctx.arc(Math.cos(n.angle)*hitR,Math.sin(n.angle)*hitR,isFocus?8:6,0,TAU); ctx.fill();
       ctx.strokeStyle=mainColor; ctx.lineWidth=3; ctx.stroke();
 
-      ctx.fillStyle=isScratch?`rgba(255,120,120,${isFocus?.95:.70})`:`rgba(255,225,90,${isFocus?.95:.65})`;
+      ctx.fillStyle=`rgba(255,225,90,${isFocus?.95:.65})`;
       ctx.beginPath(); ctx.arc(Math.cos(endA)*hitR,Math.sin(endA)*hitR,isFocus?9:7,0,TAU); ctx.fill();
       ctx.strokeStyle="#fff"; ctx.lineWidth=2; ctx.stroke();
 
@@ -975,13 +1012,6 @@
         ctx.moveTo(11,0);ctx.lineTo(-6,-7);ctx.lineTo(-4,0);ctx.lineTo(-6,7);
         ctx.closePath();ctx.fill();
         ctx.restore();
-      }
-      if(isScratch){
-        ctx.fillStyle="rgba(255,255,255,.78)";
-        ctx.font="900 10px system-ui";
-        ctx.textAlign="center";ctx.textBaseline="middle";
-        const mid=n.angle+d*.5;
-        ctx.fillText("SHIFT",Math.cos(mid)*(hitR+22),Math.sin(mid)*(hitR+22));
       }
       ctx.restore();
       return;
@@ -999,11 +1029,15 @@
       ctx.restore();
       return;
     }else if(n.type.startsWith("swing")){
-      ctx.strokeStyle=`rgba(255,255,255,${isFocus?.30:.13})`;
-      ctx.lineWidth=isFocus?8:5;
-      ctx.beginPath();ctx.arc(0,0,hitR,0,TAU);ctx.stroke();
-      ctx.strokeStyle=color;ctx.globalAlpha=isFocus?.38:.18;ctx.lineWidth=isFocus?5:3;
-      ctx.beginPath();ctx.arc(0,0,hitR,0,TAU);ctx.stroke();
+      const dir=n.type==="swingCW"?1:-1;
+      const span=Math.PI*.34;
+      const start=n.angle-dir*span*.55;
+      const end=n.angle+dir*span*.55;
+      ctx.strokeStyle=`rgba(255,255,255,${isFocus?.26:.12})`;
+      ctx.lineWidth=isFocus?7:5;
+      ctx.beginPath();ctx.arc(0,0,hitR,start,end,dir<0);ctx.stroke();
+      ctx.strokeStyle=color;ctx.globalAlpha=isFocus?.48:.24;ctx.lineWidth=isFocus?5:3;
+      ctx.beginPath();ctx.arc(0,0,hitR,start,end,dir<0);ctx.stroke();
       ctx.globalAlpha=1;
     }else{
       const half=Math.PI*.055;
@@ -1440,18 +1474,21 @@
       ctx.shadowColor=color;
 
       if(n.type.startsWith("swing")){
+        const dir=n.type==="swingCW"?1:-1;
+        const span=Math.PI*.42;
         ctx.strokeStyle=color;
-        ctx.globalAlpha=.50+.22*pulse;
-        ctx.lineWidth=8+4*pulse;
+        ctx.globalAlpha=.50+.20*pulse;
+        ctx.lineWidth=6+3*pulse;
         ctx.beginPath();
-        ctx.arc(0,0,hitR+10+8*pulse,0,TAU);
+        ctx.arc(0,0,hitR+6+4*pulse,n.angle-dir*span*.5,n.angle+dir*span*.5,dir<0);
         ctx.stroke();
 
-        ctx.fillStyle="rgba(255,255,255,.95)";
-        ctx.font=`900 ${Math.max(22,baseR*.14)}px system-ui`;
+        const labelA=n.angle+dir*span*.58;
+        ctx.fillStyle="rgba(255,255,255,.92)";
+        ctx.font="900 18px system-ui";
         ctx.textAlign="center";
         ctx.textBaseline="middle";
-        ctx.fillText(n.type==="swingCW"?"↻ NOW":"↺ NOW",0,-baseR*.32);
+        ctx.fillText(n.type==="swingCW"?"↻":"↺",Math.cos(labelA)*(hitR+28),Math.sin(labelA)*(hitR+28));
       }else{
         const a=focusAngleFor(n,t);
         const isScratch=n.type.startsWith("scratch");
