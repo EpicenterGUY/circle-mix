@@ -46,6 +46,8 @@
   const SCRATCH_FLICK_SPEED = 1.30;
   const DIAL_ARC_HALF = Math.PI * 0.075;
   const DIAL_ARC_VISUAL = Math.PI * 0.100;
+  const BASE_NOTE_WIDTH = 8;
+  const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, trace:4.5, hold:11.5 };
 
   const COLORS = {
     cut:"#5cfffb", swingCW:"#79ff7d", swingCCW:"#ff72d6", slide:"#ffe15a", fx:"#b77cff",
@@ -113,8 +115,8 @@
       hitTime,spawnTime:hitTime-APPROACH,
       duration:extra.duration||0,done:false,missed:false,hold:0
     };
-    if(type.startsWith("slide") || type==="trace"){
-      n.duration=extra.duration||BEAT*(type==="trace"?1.5:1.7);
+    if(type.startsWith("slide") || type.startsWith("trace")){
+      n.duration=extra.duration||BEAT*(type.startsWith("trace")?1.5:1.7);
       n.endAngle=extra.endAngle!==undefined?extra.endAngle:laneAngle(extra.endLane??lane);
 
       n.turns = extra.turns || 0;
@@ -435,7 +437,9 @@
     let d=n.endAngle-n.angle;
     if(n.type==="slideCW"){while(d<=0)d+=TAU;return d;}
     if(n.type==="slideCCW"){while(d>=0)d-=TAU;return d;}
-    if(n.type==="trace")return norm(d);
+    if(n.type==="traceCW"){while(d<=0)d+=TAU;return d;}
+    if(n.type==="traceCCW"){while(d>=0)d-=TAU;return d;}
+    if(n.type.startsWith("trace"))return norm(d);
     return d;
   }
   function slideAngle(n,t){
@@ -450,7 +454,7 @@
     if(n.type==="swingCW")return COLORS.swingCW;
     if(n.type==="swingCCW")return COLORS.swingCCW;
     if(n.type.startsWith("slide"))return COLORS.slide;
-    if(n.type==="trace")return COLORS.trace;
+    if(n.type.startsWith("trace"))return COLORS.trace;
     if(n.type==="fx")return COLORS.fx;
     if(n.type==="scratchCW")return COLORS.scratchCW;
     if(n.type==="scratchCCW")return COLORS.scratchCCW;
@@ -746,7 +750,7 @@
         continue;
       }
 
-      if(n.type==="trace"){
+      if(n.type.startsWith("trace")){
         const end=n.hitTime+n.duration;
         const a=slideAngle(n,t);
         if(t>=n.hitTime&&t<=end&&(autoMode||aligned(a,.040))){
@@ -756,7 +760,7 @@
         }
         if(t>end){
           const ratio=n.hold/Math.max(n.duration,.001);
-          if(ratio>=.45)judge(n,ratio>.72?"PERFECT":"GREAT",COLORS.trace);
+          if(ratio>=.45){ addWave(slideAngle(n,end),COLORS.trace); judge(n,ratio>.72?"PERFECT":"GREAT",COLORS.trace); }
           else miss(n);
         }
         if(t>n.hitTime+.45&&n.hold<.025&&!autoMode)miss(n);
@@ -1073,7 +1077,7 @@
     const k=progress(n,t);
     const half=lerp(Math.PI*.030, Math.PI*.060, k);
     const focus = n===focusNote;
-    drawArcNote(n.angle,r,half,color,focus?28:22,focus?1:.92);
+    drawArcNote(n.angle,r,half,color,focus?NOTE_WIDTHS.cut+3:NOTE_WIDTHS.cut,focus?1:.92);
     drawRingLabel("CUT",n.angle,r,focus?"#ffffff":color,focus?14:12);
   }
 
@@ -1095,23 +1099,24 @@
     if(Math.abs(d)>.03){
       const pathStart=active?curr:n.angle;
       const pathDelta=active?remaining:d;
-      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(223,252,255,${alpha})`,focus?6:4,1);
-      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(255,255,255,${focus?.38:.30})`,focus?2.5:1.8,1);
+      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(223,252,255,${alpha})`,focus?NOTE_WIDTHS.trace+1:NOTE_WIDTHS.trace,1);
+      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(255,255,255,${focus?.36:.28})`,focus?2.2:1.6,1);
     }else{
       ctx.strokeStyle=`rgba(223,252,255,${alpha})`;
-      ctx.lineWidth=focus?5:3.5;
+      ctx.lineWidth=focus?NOTE_WIDTHS.trace+1:NOTE_WIDTHS.trace;
       ctx.setLineDash([6,8]);
       ctx.beginPath();ctx.arc(0,0,r,n.angle-Math.PI*.13,n.angle+Math.PI*.13);ctx.stroke();
       ctx.setLineDash([]);
     }
     const targetAngle=active?curr:n.angle;
-    ctx.fillStyle=`rgba(255,255,255,${focus?.96:.82})`;
-    ctx.beginPath();ctx.arc(Math.cos(targetAngle)*r,Math.sin(targetAngle)*r,focus?8:6,0,TAU);ctx.fill();
-    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();
-    ctx.fillStyle=`rgba(223,252,255,${.55+.20*k})`;
-    ctx.font="900 10px system-ui";
-    ctx.textAlign="center";ctx.textBaseline="middle";
-    ctx.fillText("TRACE",Math.cos(targetAngle)*(r+22),Math.sin(targetAngle)*(r+22));
+    const startA=n.angle, endA=n.angle+d;
+    ctx.fillStyle=`rgba(223,252,255,${focus?.34:.24})`;
+    ctx.beginPath();ctx.arc(Math.cos(startA)*r,Math.sin(startA)*r,focus?4.5:3.5,0,TAU);ctx.fill();
+    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,focus?4.5:3.5,0,TAU);ctx.fill();
+    ctx.strokeStyle=`rgba(255,255,255,${focus?.42:.30})`;ctx.lineWidth=1.5;ctx.stroke();
+    ctx.fillStyle=`rgba(255,255,255,${focus?.94:.82})`;
+    ctx.beginPath();ctx.arc(Math.cos(targetAngle)*r,Math.sin(targetAngle)*r,focus?6:4.8,0,TAU);ctx.fill();
+    ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.stroke();
     ctx.restore();
   }
 
@@ -1129,14 +1134,14 @@
     ctx.shadowColor=color;
 
     ctx.strokeStyle=`rgba(255,255,255,${n===focusNote?.24:.12})`;
-    ctx.lineWidth=n===focusNote?14:9;
+    ctx.lineWidth=n===focusNote?NOTE_WIDTHS.swing+4:NOTE_WIDTHS.swing;
     ctx.beginPath();
     ctx.arc(0,0,r,center-span*.62,center+span*.62,dir<0);
     ctx.stroke();
 
     ctx.strokeStyle=color;
     ctx.globalAlpha=n===focusNote?.78:.58;
-    ctx.lineWidth=n===focusNote?9:6;
+    ctx.lineWidth=n===focusNote?NOTE_WIDTHS.swing+1:NOTE_WIDTHS.swing;
     ctx.beginPath();
     ctx.arc(0,0,r,center-span*.5,center+dir*span,dir<0);
     ctx.stroke();
@@ -1182,8 +1187,8 @@
     }
 
     if(!active){
-      drawDirectedArcSegments(r,start,d,"rgba(255,225,90,.42)",18,1);
-      drawDirectedArcSegments(r,start,d,"rgba(255,255,255,.18)",5,1);
+      drawDirectedArcSegments(r,start,d,"rgba(255,225,90,.42)",NOTE_WIDTHS.slide+4,1);
+      drawDirectedArcSegments(r,start,d,"rgba(255,255,255,.18)",3,1);
 
       const arrowCount=Math.max(3,Math.ceil(Math.abs(d)/(Math.PI*.55)));
       for(let i=1;i<=arrowCount;i++) drawArrowAt(start+d*(i/(arrowCount+1)),r,10,.72);
@@ -1227,8 +1232,8 @@
       drawDirectedArcSegments(hitR,start,curr-start,"rgba(255,255,255,.10)",4,1);
     }
     if(Math.abs(end-curr)>0.003){
-      drawDirectedArcSegments(hitR,curr,end-curr,"rgba(255,225,90,.96)",23,1);
-      drawDirectedArcSegments(hitR,curr,end-curr,"rgba(255,255,255,.38)",6,1);
+      drawDirectedArcSegments(hitR,curr,end-curr,"rgba(255,225,90,.96)",NOTE_WIDTHS.slide+6,1);
+      drawDirectedArcSegments(hitR,curr,end-curr,"rgba(255,255,255,.38)",3.5,1);
     }
 
     const arrowCount=Math.max(3,Math.ceil(Math.abs(end-curr)/(Math.PI*.55)));
@@ -1301,7 +1306,7 @@
 
     if(visibleLen>0.5){
       ctx.strokeStyle=active?"rgba(183,124,255,.92)":"rgba(183,124,255,.72)";
-      ctx.lineWidth=focus?30:24;
+      ctx.lineWidth=focus?NOTE_WIDTHS.hold+4:NOTE_WIDTHS.hold;
       ctx.beginPath();ctx.moveTo(headR,0);ctx.lineTo(tailR,0);ctx.stroke();
 
       ctx.strokeStyle="rgba(255,255,255,.62)";
@@ -1350,11 +1355,11 @@
     ctx.shadowColor=color;
 
     ctx.strokeStyle=`rgba(255,255,255,${focus?.26:.13})`;
-    ctx.lineWidth=focus?15:10;
+    ctx.lineWidth=focus?NOTE_WIDTHS.scratch+4:NOTE_WIDTHS.scratch;
     ctx.beginPath();ctx.arc(0,0,r,start,end);ctx.stroke();
 
     ctx.strokeStyle=color;
-    ctx.lineWidth=focus?8:6;
+    ctx.lineWidth=focus?NOTE_WIDTHS.scratch+1:NOTE_WIDTHS.scratch;
     ctx.beginPath();ctx.arc(0,0,r,start,end);ctx.stroke();
 
     ctx.strokeStyle="rgba(255,238,210,.75)";
@@ -1471,7 +1476,7 @@
     if(n.duration>0&&t>n.hitTime+n.duration+.45)return;
     if(n.duration===0&&t>n.hitTime+.36)return;
     if(n.type==="cut")drawCut(n,t);
-    else if(n.type==="trace")drawTrace(n,t);
+    else if(n.type.startsWith("trace"))drawTrace(n,t);
     else if(n.type.startsWith("swing"))drawSwing(n,t);
     else if(n.type.startsWith("scratch"))drawScratch(n,t);
     else if(n.type==="fx")drawFx(n,t);
@@ -1704,8 +1709,8 @@
     chart.forEach(n=>drawLandingGhost(n,t));
     chart.forEach(n=>drawApproachRail(n,t));
 
-    chart.forEach(n=>{if(n.type==="trace")drawNote(n,t);});
-    chart.forEach(n=>{if(n.type!=="trace")drawNote(n,t);});
+    chart.forEach(n=>{if(n.type.startsWith("trace"))drawNote(n,t);});
+    chart.forEach(n=>{if(!n.type.startsWith("trace"))drawNote(n,t);});
     drawFocusHalo(focusNote,t);
     drawArm();
     drawEffects(dt);
