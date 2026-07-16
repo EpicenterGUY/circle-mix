@@ -57,6 +57,7 @@
   const resultMapLevel = document.getElementById("resultMapLevel");
   const resultRetry = document.getElementById("resultRetry");
   const resultBackTitle = document.getElementById("resultBackTitle");
+  const rotateOverlay = document.getElementById("rotateOverlay");
 
   const TAU = Math.PI * 2;
   const BPM = 184.6;
@@ -127,8 +128,13 @@
     canvas.style.height = window.innerHeight + "px";
     ctx.setTransform(dpr,0,0,dpr,0,0);
     W=window.innerWidth; H=window.innerHeight;
-    cx=W*.5; cy=H*.53;
-    baseR=Math.min(W,H)*.287;
+    cx=W*.5;
+    const isMobileLandscape = window.matchMedia && window.matchMedia("(max-width: 932px) and (orientation: landscape)").matches;
+    const hudReserve = isMobileLandscape ? 58 : 0;
+    const safeBottom = isMobileLandscape ? 10 : 0;
+    const usableH = Math.max(180, H - hudReserve - safeBottom);
+    cy = isMobileLandscape ? hudReserve + usableH * .5 : H*.53;
+    baseR = isMobileLandscape ? Math.min(W * .30, usableH * .39, 176) : Math.min(W,H)*.287;
     hitR=baseR;
     outerR=baseR*1.86;
   }
@@ -2421,6 +2427,47 @@
   const safeSetOffUp=document.getElementById("safeSetOffUp");
   const safeResume=document.getElementById("safeResume");
   const safeExit=document.getElementById("safeExit");
+  let pendingMobileStartMode = null;
+  let orientationPaused = false;
+
+  function isMobileViewport(){
+    return !!(window.matchMedia && window.matchMedia("(max-width: 768px), (pointer: coarse)").matches);
+  }
+
+  function isMobilePortraitPlayBlocked(){
+    return isMobileViewport() && window.innerHeight > window.innerWidth;
+  }
+
+  function setRotateOverlay(show){
+    if(rotateOverlay) rotateOverlay.classList.toggle("show", !!show);
+    document.body.classList.toggle("needsLandscape", !!show);
+  }
+
+  function handlePlayOrientation(){
+    resize();
+    if(isMobilePortraitPlayBlocked()){
+      if(running && !paused){
+        orientationPaused = true;
+        paused = true;
+        try{ song.pause(); }catch(e){}
+        if(raf){ cancelAnimationFrame(raf); raf = 0; }
+      }
+      if(running || pendingMobileStartMode) setRotateOverlay(true);
+      return false;
+    }
+    setRotateOverlay(false);
+    if(pendingMobileStartMode){
+      const mode = pendingMobileStartMode;
+      pendingMobileStartMode = null;
+      start(mode);
+      return true;
+    }
+    if(running && paused && orientationPaused){
+      orientationPaused = false;
+      resumeGame();
+    }
+    return true;
+  }
 
   function safeInputEvent(e){
     if(!e)return;
@@ -2480,6 +2527,16 @@
 
   const originalStart=start;
   start=function(mode="play"){
+    if(isMobilePortraitPlayBlocked()){
+      pendingMobileStartMode = mode;
+      safeSetState("game");
+      document.body.classList.add("safeClean");
+      setRotateOverlay(true);
+      try{ song.pause(); }catch(e){}
+      return;
+    }
+    pendingMobileStartMode = null;
+    setRotateOverlay(false);
     safeSetState("game");
     document.body.classList.add("safeClean");
     return originalStart(mode);
@@ -2499,9 +2556,17 @@
     safeRefresh();
   };
 
+  const originalToggleKeymap = toggleKeymap;
+  toggleKeymap=function(force){
+    const show = force!==undefined ? force : !keymapOverlay.classList.contains("show");
+    if(show && isMobileViewport()) toggleSettings(false);
+    originalToggleKeymap(show);
+  };
+
   const originalToggleSettings=toggleSettings;
   toggleSettings=function(force){
     settingsVisible = force!==undefined ? force : !settingsVisible;
+    if(settingsVisible && isMobileViewport()) originalToggleKeymap(false);
     safeSetOverlay(settingsVisible);
     originalToggleSettings(settingsVisible);
     safeRefresh();
@@ -2527,6 +2592,9 @@
   safeBind(safeSetOffUp,()=>changeOffset(+0.03));
   safeBind(safeResume,()=>{safeSetOverlay(false);resumeGame();});
   safeBind(safeExit,exitToMenu);
+
+  window.addEventListener("resize", handlePlayOrientation);
+  window.addEventListener("orientationchange", () => setTimeout(handlePlayOrientation, 80));
 
   safeSetState("title");
   safeRefresh();
