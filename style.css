@@ -145,6 +145,7 @@ html,body{
     background:rgba(0,0,0,.25);
   }
 
+  body.playingClean .mobileControls,
   body.playingClean .tuner,
   body.playingClean .editorPanel,
   body.playingClean .keymapOverlay{
@@ -156,12 +157,20 @@ html,body{
   body.playingClean.showSettings .editorPanel.show{
     display:block !important;
   }
+  body.debugMode.playingClean .mobileControls{
+    display:flex !important;
+  }
+  body.playingClean.showSettings .keymapOverlay.show,
+  body.debugMode.playingClean .keymapOverlay.show{
+    display:flex !important;
+  }
 
   .quickMenu{
     position:fixed;right:16px;top:16px;z-index:8;
     display:none;gap:8px;align-items:center;
   }
-  body.playingClean .quickMenu{display:flex}
+  body.playingClean .quickMenu{display:none}
+  body.debugMode.playingClean .quickMenu{display:flex}
   .quickBtn{
     padding:8px 10px;border-radius:999px;background:rgba(8,15,30,.58);
     border:1px solid rgba(255,255,255,.15);color:#eaf3ff;font-size:11px;font-weight:900;
@@ -246,10 +255,14 @@ html,body{
   body.safeClean .editorPanel,
   body.safeClean .quickMenu,
   body.safeClean .miniHint,
-  body.safeClean .keymapOverlay{
+  body.safeClean .keymapOverlay,
+  body.safeClean .settingsTitleOnly,
+  body.safeSettings .settingsTitleOnly{
     display:none !important;
   }
   body.safeClean canvas{cursor:none}
+  body.safeClean.safeSettings .keymapOverlay.show{display:flex !important}
+  body.debugMode.safeTitle #safeEditor::before{content:"DEV ";}
   #startLayer{display:none !important;pointer-events:none !important}
   @media(max-width:760px){
     .safeMenuCard{padding:18px;border-radius:22px}
