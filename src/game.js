@@ -2003,9 +2003,19 @@
   function formatMusic(){ return "MUSIC " + Math.round(clamp(musicVolume,0,1)*100) + "%"; }
   function refreshSettingsUI(){ updateButtons(); }
 
+  function setAutoMode(enabled){
+    autoMode=!!enabled;
+    updateButtons();
+    updateDebugOverlay(now());
+  }
+
+  function toggleAuto(){
+    setAutoMode(!autoMode);
+  }
+
   function updateButtons(){
     applyMusicVolume();
-    autoBox.textContent=autoMode?"AUTO ON":"AUTO OFF";
+    autoBox.textContent=autoMode?"AUTO":"";
     const hudModeLabel = (mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
     mapBox.textContent=((selectedSong?.title || "") + " · " + hudModeLabel).trim();
     const hudSongTitle = document.querySelector(".hudSong span");
@@ -2160,6 +2170,7 @@
     paused=false;
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     hideResult();
+    setAutoMode(false);
     if(selectedMenuMode==="normal") mapMode="normal";
     if(selectedMenuMode==="tech") mapMode="tech";
     if(selectedMenuMode==="custom") useCustomChart=customChartData.length>0;
@@ -2368,7 +2379,7 @@
   bindPress(modeNormalBtn,()=>{selectedMenuMode="normal";updateModeButtons();});
   bindPress(modeTechBtn,()=>{selectedMenuMode="tech";updateModeButtons();});
   bindPress(modeCustomBtn,()=>{selectedMenuMode="custom";updateModeButtons();});
-  bindPress(autoToggle,()=>{autoMode=!autoMode;updateButtons();});
+  bindPress(autoToggle,toggleAuto);
   bindPress(mapToggle,()=>{if(running && !debugMode)return; mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();});
   bindPress(debugToggle,()=>toggleDebugOverlay());
   bindPress(keymapToggle,()=>toggleKeymap());
@@ -2415,7 +2426,7 @@
     if(e.code==="KeyD")keyD=true;
     if(e.code==="Space"||e.code==="KeyZ"||e.code==="KeyX"){e.preventDefault(); if(!e.repeat)onCut();}
     if((e.code==="KeyD"||e.code==="F3")&&!e.repeat){e.preventDefault();toggleDebugOverlay();}
-    if(e.code==="KeyO"&&!e.repeat&&(!running||debugMode)){autoMode=!autoMode;updateButtons();updateDebugOverlay(now());}
+    if(e.code==="KeyO"&&!e.repeat&&(!running||debugMode)){toggleAuto();}
     if(e.code==="KeyP"&&!e.repeat){ ensureAudioCtx(); applyMusicVolume(); if(song.paused) song.play().catch(()=>{}); else song.pause(); }
     if(e.code==="KeyS"&&!e.repeat){ sfxEnabled=!sfxEnabled; updateButtons(); }
     if(e.code==="Minus"&&!e.repeat){ changeSfx(-0.20); }
@@ -2544,10 +2555,12 @@
     songDifficulty.innerHTML = diffKeys.filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff => {
       const label = selectedSong.difficulties[diff].label || diff.toUpperCase();
       return `<button class="songDiffBtn${selectedMenuMode===diff ? " on" : ""}" type="button" data-difficulty="${diff}">${label} <span>${formatDifficulty(diff)}</span></button>`;
-    }).join("");
-    for(const btn of songDifficulty.querySelectorAll(".songDiffBtn")){
+    }).join("") + `<button class="songDiffBtn songAutoBtn${autoMode ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${autoMode ? "ON" : "OFF"}</span></button>`;
+    for(const btn of songDifficulty.querySelectorAll(".songDiffBtn[data-difficulty]")){
       bindPress(btn,()=>{ selectedMenuMode = btn.dataset.difficulty; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });
     }
+    const songAutoBtn=songDifficulty.querySelector("[data-auto-play]");
+    bindPress(songAutoBtn,()=>{ toggleAuto(); renderSongSelect(); });
   }
 
   async function showSongSelect(){
@@ -2626,7 +2639,7 @@
     if(safeTech){safeTech.classList.toggle("on",selectedMenuMode==="tech");safeTech.textContent="TECH " + formatDifficulty("tech");}
     if(safeNormal){safeNormal.classList.toggle("on",selectedMenuMode==="normal");safeNormal.textContent="NORMAL " + formatDifficulty("normal");}
     if(safeAuto){safeAuto.textContent=autoMode?"AUTO ON":"AUTO OFF";safeAuto.classList.toggle("on",autoMode);}
-    if(safeSetAuto){safeSetAuto.textContent=autoMode?"AUTO ON":"AUTO OFF";safeSetAuto.classList.toggle("on",autoMode);}
+    if(safeSetAuto){safeSetAuto.textContent=autoMode?"AUTO PLAY ON":"AUTO PLAY OFF";safeSetAuto.classList.toggle("on",autoMode);safeSetAuto.setAttribute("aria-pressed",autoMode?"true":"false");}
     if(safeSetMap){safeSetMap.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";safeSetMap.classList.toggle("on",mapMode==="tech");}
     if(safeSettingsBtn)safeSettingsBtn.textContent="SETTINGS";
     if(safeSetSfx){safeSetSfx.textContent=formatSfx();safeSetSfx.classList.toggle("on",sfxEnabled);}
@@ -2688,11 +2701,11 @@
   safeBind(safeEditor,()=>{ window.location.href="./editor.html"; });
   safeBind(safeTech,()=>{selectedMenuMode="tech";mapMode="tech";safeRefresh();updateButtons();});
   safeBind(safeNormal,()=>{selectedMenuMode="normal";mapMode="normal";safeRefresh();updateButtons();});
-  safeBind(safeAuto,()=>{autoMode=!autoMode;safeRefresh();updateButtons();});
+  safeBind(safeAuto,toggleAuto);
   safeBind(safeFull,requestFullscreenSafe);
   safeBind(safeSettingsBtn,()=>toggleSettings(true));
 
-  safeBind(safeSetAuto,()=>{autoMode=!autoMode;safeRefresh();updateButtons();});
+  safeBind(safeSetAuto,toggleAuto);
   safeBind(safeSetMap,()=>{if(running && !debugMode)return; mapMode=mapMode==="tech"?"normal":"tech";selectedMenuMode=mapMode;safeRefresh();restartIfRunning();});
   safeBind(safeSetKeymap,()=>toggleKeymap(true));
   safeBind(safeSetFull,requestFullscreenSafe);
