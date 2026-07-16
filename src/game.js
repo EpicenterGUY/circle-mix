@@ -899,7 +899,7 @@
     return best;
   }
 
-  function drawDirectedArcSegments(r, start, amount, color, width, alpha=1){
+  function drawDirectedArcSegments(r, start, amount, color, width, alpha=1, shadowColor=null, shadowBlur=0){
     // Canvas arc는 2π 경계/긴 호에서 헷갈릴 수 있으므로
     // 긴 슬라이드는 작은 조각으로 직접 그림. 모든 호출은 화면 좌표 기준으로
     // 새 path를 만들고 원형 플레이 영역 안에서만 stroke한다.
@@ -915,6 +915,10 @@
     ctx.strokeStyle=color;
     ctx.globalAlpha=alpha;
     ctx.lineWidth=width;
+    if(shadowColor && shadowBlur>0){
+      ctx.shadowColor=shadowColor;
+      ctx.shadowBlur=shadowBlur;
+    }
     ctx.beginPath();
     for(let i=0;i<=steps;i++){
       const a=start + amount * (i/steps);
@@ -1102,21 +1106,23 @@
     const d=slideDelta(n);
     const curr=slideAngle(n,t);
     const remaining=d*clamp(1-(active?((t-n.hitTime)/Math.max(n.duration,.001)):0),0,1);
-    const alpha=focus?.75:.62;
+    const alpha=focus?.88:.78;
+    const traceWidth=focus?Math.min(5,NOTE_WIDTHS.trace+.5):NOTE_WIDTHS.trace;
+    const traceGlow=focus?16:11;
 
     if(Math.abs(d)>.03){
       const pathStart=active?curr:n.angle;
       const pathDelta=active?remaining:d;
-      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(223,252,255,${alpha})`,focus?NOTE_WIDTHS.trace+1:NOTE_WIDTHS.trace,1);
-      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(255,255,255,${focus?.36:.28})`,focus?2.2:1.6,1);
+      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(223,252,255,${alpha})`,traceWidth,1,color,traceGlow);
+      drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(255,255,255,${focus?.44:.34})`,focus?2.2:1.6,1,color,focus?10:7);
     }else{
       ctx.save();
       ctx.translate(cx,cy);
       ctx.lineCap="round";
-      ctx.shadowBlur=focus?18:10;
+      ctx.shadowBlur=traceGlow;
       ctx.shadowColor=color;
       ctx.strokeStyle=`rgba(223,252,255,${alpha})`;
-      ctx.lineWidth=focus?NOTE_WIDTHS.trace+1:NOTE_WIDTHS.trace;
+      ctx.lineWidth=traceWidth;
       ctx.setLineDash([6,8]);
       ctx.beginPath();ctx.arc(0,0,r,n.angle-Math.PI*.13,n.angle+Math.PI*.13);ctx.stroke();
       ctx.setLineDash([]);
@@ -1125,15 +1131,15 @@
     ctx.save();
     ctx.translate(cx,cy);
     ctx.lineCap="round";
-    ctx.shadowBlur=focus?18:10;
+    ctx.shadowBlur=focus?16:10;
     ctx.shadowColor=color;
     const targetAngle=active?curr:n.angle;
     const startA=n.angle, endA=n.angle+d;
-    ctx.fillStyle=`rgba(223,252,255,${focus?.34:.24})`;
-    ctx.beginPath();ctx.arc(Math.cos(startA)*r,Math.sin(startA)*r,focus?4.5:3.5,0,TAU);ctx.fill();
-    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,focus?4.5:3.5,0,TAU);ctx.fill();
-    ctx.strokeStyle=`rgba(255,255,255,${focus?.42:.30})`;ctx.lineWidth=1.5;ctx.stroke();
-    ctx.fillStyle=`rgba(255,255,255,${focus?.94:.82})`;
+    ctx.fillStyle=`rgba(223,252,255,${focus?.28:.20})`;
+    ctx.beginPath();ctx.arc(Math.cos(startA)*r,Math.sin(startA)*r,focus?4.2:3.3,0,TAU);ctx.fill();
+    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,focus?4.2:3.3,0,TAU);ctx.fill();
+    ctx.strokeStyle=`rgba(255,255,255,${focus?.34:.24})`;ctx.lineWidth=1.2;ctx.stroke();
+    ctx.fillStyle=`rgba(255,255,255,${focus?.98:.90})`;
     ctx.beginPath();ctx.arc(Math.cos(targetAngle)*r,Math.sin(targetAngle)*r,focus?6:4.8,0,TAU);ctx.fill();
     ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.stroke();
     ctx.restore();
