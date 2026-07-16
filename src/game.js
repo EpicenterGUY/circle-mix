@@ -66,6 +66,7 @@
   const pauseSetNoteContrast = document.getElementById("pauseSetNoteContrast");
   const pauseSetPathBrightness = document.getElementById("pauseSetPathBrightness");
   const pauseSetEffectIntensity = document.getElementById("pauseSetEffectIntensity");
+  const pauseSetJudgeGuide = document.getElementById("pauseSetJudgeGuide");
   const resultOverlay = document.getElementById("resultOverlay");
   const resultScore = document.getElementById("resultScore");
   const resultPower = document.getElementById("resultPower");
@@ -140,7 +141,7 @@
   const BASE_NOTE_WIDTH = 8;
   const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, trace:3.0, hold:11.5 };
   const VISUAL_SETTINGS_KEY = "circleMixVisualSettings.v1";
-  const VISUAL_CHOICES = { noteContrast:["NORMAL","HIGH"], pathBrightness:["LOW","NORMAL","HIGH"], effectIntensity:["LOW","NORMAL","HIGH"] };
+  const VISUAL_CHOICES = { noteContrast:["NORMAL","HIGH"], pathBrightness:["LOW","NORMAL","HIGH"], effectIntensity:["LOW","NORMAL","HIGH"], judgeGuide:["OFF","BEGINNER","ALWAYS"] };
   const visualSettings = loadVisualSettings();
 
   const COLORS = {
@@ -155,9 +156,10 @@
       return {
         noteContrast:VISUAL_CHOICES.noteContrast.includes(saved.noteContrast)?saved.noteContrast:"HIGH",
         pathBrightness:VISUAL_CHOICES.pathBrightness.includes(saved.pathBrightness)?saved.pathBrightness:"NORMAL",
-        effectIntensity:VISUAL_CHOICES.effectIntensity.includes(saved.effectIntensity)?saved.effectIntensity:"NORMAL"
+        effectIntensity:VISUAL_CHOICES.effectIntensity.includes(saved.effectIntensity)?saved.effectIntensity:"NORMAL",
+        judgeGuide:VISUAL_CHOICES.judgeGuide.includes(saved.judgeGuide)?saved.judgeGuide:"BEGINNER"
       };
-    }catch(e){ return {noteContrast:"HIGH",pathBrightness:"NORMAL",effectIntensity:"NORMAL"}; }
+    }catch(e){ return {noteContrast:"HIGH",pathBrightness:"NORMAL",effectIntensity:"NORMAL",judgeGuide:"BEGINNER"}; }
   }
   function saveVisualSettings(){ try{ localStorage.setItem(VISUAL_SETTINGS_KEY, JSON.stringify(visualSettings)); }catch(e){} }
   function visualScale(kind){
@@ -913,13 +915,107 @@
     return {angle:Math.atan2(dy,dx), radius:Math.hypot(dx,dy)};
   }
   function insideTraceTarget(n,t){
-    const tol=traceTolerance();
-    const p=pointerPolar();
-    const target=traceTargetAngle(n,t);
-    const angleError=Math.abs(norm(p.angle-target));
-    const radiusError=Math.abs(p.radius-hitR);
-    return {inside:angleError<=tol.angular && radiusError<=tol.radial, angleError, radiusError, target, tol};
+    const region=getJudgementRegion(n,t,traceProfile());
+    return {inside:region.inside, angleError:region.angleError, radiusError:region.radiusError, target:region.targetAngle, tol:{angular:region.angularTolerance, radial:region.radialTolerance}};
   }
+
+  function baseJudgementTolerance(note, profile=traceProfile()){
+    const family=noteFamily(note.type);
+    if(family === "trace") return traceTolerance(profile);
+    if(family === "swing") return {angular:DIAL_ARC_HALF + Math.PI*.12, radial:Math.max(18, hitR*.05), directionCone:Math.PI*.42, minSpeed:SWING_FLICK_SPEED};
+    if(family === "scratch") return {angular:DIAL_ARC_HALF + Math.PI*.026, radial:Math.max(18, hitR*.05), directionCone:Math.PI*.34, minSpeed:SCRATCH_FLICK_SPEED};
+    const extra = family === "slide" ? .010 : (family === "hold" ? .020 : .015);
+    return {angular:DIAL_ARC_HALF + Math.PI*extra, radial:Math.max(16, hitR*.045)};
+  }
+
+  function timingStateFor(note, songTime){
+    const start=note.hitTime, end=start+(note.duration||0);
+    const dt=songTime-start;
+    const abs=Math.abs(dt);
+    if(noteFamily(note.type)==="trace" || (note.duration && songTime>=start && songTime<=end)) return "PERFECT";
+    if(abs<=.065 || (note.type!=="cut" && abs<=.075)) return "PERFECT";
+    if(abs<=HIT_WINDOW || (note.type!=="cut" && songTime>=start-.16 && songTime<=start+.20)) return "GREAT";
+    if(songTime<start) return "EARLY";
+    return "LATE";
+  }
+
+  function getJudgementRegion(note, songTime, judgementProfile=traceProfile()){
+    const family=noteFamily(note.type);
+    const tol=baseJudgementTolerance(note, judgementProfile);
+    const end=note.hitTime+(note.duration||0);
+    const targetAngle = family==="trace" ? traceTargetAngle(note,songTime) : (family==="slide" ? slideAngle(note,songTime) : note.angle);
+    const targetRadius = hitR;
+    const timingState=timingStateFor(note,songTime);
+    const active = family==="trace" ? songTime>=note.hitTime && songTime<=end : (note.duration ? songTime>=note.hitTime && songTime<=end : Math.abs(songTime-note.hitTime)<=HIT_WINDOW);
+    const p=pointerPolar();
+    const angleError=Math.abs(norm(p.angle-targetAngle));
+    const radiusError=Math.abs(p.radius-targetRadius);
+    return {targetAngle,targetRadius,angularTolerance:tol.angular,radialTolerance:tol.radial,timingState,active,angleError,radiusError,inside:angleError<=tol.angular && radiusError<=tol.radial,directionCone:tol.directionCone,minSpeed:tol.minSpeed};
+  }
+
+  function shouldShowJudgeGuide(note,t){
+    if(visualSettings.judgeGuide==="OFF") return tutorialMode && note?.tutorialGuideForce;
+    if(visualSettings.judgeGuide==="ALWAYS") return true;
+    if(tutorialMode) return true;
+    const plays=Number(localStorage.getItem("circleMixPlayCount.v1")||0);
+    return plays<3 && note===focusNote && t>=note.spawnTime && t<=note.hitTime+(note.duration||0)+.18;
+  }
+
+  function drawJudgementBand(region,color,alpha=1){
+    const width=Math.max(8,region.radialTolerance*2);
+    drawDirectedArcSegments(region.targetRadius,region.targetAngle-region.angularTolerance,region.angularTolerance*2,color,width,alpha,null,0);
+  }
+
+  function drawJudgeGuideForNote(n,t,rank=0){
+    if(!shouldShowJudgeGuide(n,t))return;
+    const region=getJudgementRegion(n,t,traceProfile());
+    const family=noteFamily(n.type);
+    const focus=n===focusNote || rank===0;
+    const dim=focus?1:.42;
+    let a=.10*dim;
+    if(region.timingState==="GREAT") a=.20*dim;
+    if(region.timingState==="PERFECT") a=.34*dim;
+    if(t>n.hitTime+(n.duration||0)) a*=clamp(1-(t-(n.hitTime+(n.duration||0)))/.22,0,1);
+    if(tutorialMode){
+      const st=tutorialSteps[tutorialStepIndex];
+      if(st?.phase==="faded") a*=.42;
+      if(st?.phase==="standard" || st?.name==="MIX TEST") return;
+      if(st?.repeatMisses>=2) a*=1.45;
+    }
+    const inside=region.inside;
+    const edge=inside && (region.angleError>region.angularTolerance*.72 || region.radiusError>region.radialTolerance*.72);
+    const guideColor=edge?`rgba(255,225,90,${a+.12})`:(inside?`rgba(128,255,219,${a+.10})`:`rgba(53,240,197,${a})`);
+    if(family==="trace"){
+      const d=slideDelta(n), curr=region.targetAngle, end=n.angle+d;
+      if(t>=n.hitTime) drawDirectedArcSegments(hitR,n.angle,curr-n.angle,`rgba(20,80,78,${.18*dim})`,Math.max(4,NOTE_WIDTHS.trace+2),1);
+      drawDirectedArcSegments(hitR,curr,end-curr,`rgba(53,240,197,${.10*dim})`,Math.max(4,NOTE_WIDTHS.trace+2),1);
+      drawJudgementBand(region,guideColor,1);
+      ctx.save();ctx.translate(cx,cy);ctx.fillStyle=`rgba(255,255,255,${.72*dim})`;ctx.beginPath();ctx.arc(Math.cos(curr)*hitR,Math.sin(curr)*hitR,5,0,TAU);ctx.fill();ctx.strokeStyle=inside?"rgba(128,255,219,.95)":"rgba(53,240,197,.55)";ctx.lineWidth=2;ctx.beginPath();ctx.arc(Math.cos(curr)*hitR,Math.sin(curr)*hitR,13+(edge?Math.sin(t*24)*2:0),0,TAU);ctx.stroke();ctx.restore();
+    }else if(family==="slide"){
+      const d=slideDelta(n), curr=region.targetAngle, end=n.angle+d;
+      drawDirectedArcSegments(hitR,curr,end-curr,`rgba(255,225,90,${.18*dim})`,NOTE_WIDTHS.slide+4,1);
+      drawJudgementBand(region,guideColor,1);
+      ctx.save();ctx.translate(cx,cy);ctx.fillStyle=filterHeld?`rgba(255,225,90,${.42*dim})`:`rgba(255,225,90,${.10*dim})`;ctx.beginPath();ctx.arc(Math.cos(curr)*hitR,Math.sin(curr)*hitR,region.radialTolerance*.55,0,TAU);ctx.fill();ctx.restore();
+    }else if(family==="swing"){
+      drawJudgementBand(region,`rgba(121,255,125,${a})`,1);
+      const dir=n.type==="swingCW"?1:-1; drawDirectedArcSegments(hitR+22,n.angle-dir*region.directionCone*.5,dir*region.directionCone,`rgba(255,255,255,${.22*dim})`,5,1);
+    }else if(family==="scratch"){
+      drawJudgementBand(region,`rgba(255,90,168,${a})`,1);
+      const dir=n.type==="scratchCW"?1:-1; drawDirectedArcSegments(hitR+18,n.angle-dir*.34,dir*.68,`rgba(255,245,230,${.24*dim})`,4,1);
+    }else{
+      drawJudgementBand(region,guideColor,1);
+      if(family==="hold"){
+        ctx.save();ctx.translate(cx,cy);ctx.fillStyle=filterHeld?`rgba(183,124,255,${.30*dim})`:`rgba(183,124,255,${.08*dim})`;ctx.beginPath();ctx.arc(Math.cos(region.targetAngle)*hitR,Math.sin(region.targetAngle)*hitR,region.radialTolerance*.55,0,TAU);ctx.fill();ctx.restore();
+      }
+    }
+    if(debugMode && focus){ ctx.save();ctx.fillStyle="rgba(255,255,255,.7)";ctx.font="800 10px system-ui";ctx.textAlign="center";ctx.fillText(`${Math.round(region.angularTolerance*180/Math.PI)}° / ${Math.round(region.radialTolerance)}px / ${region.timingState}`,cx,cy-baseR*.52);ctx.restore(); }
+  }
+
+  function drawJudgeGuides(t){
+    const candidates=chart.filter(n=>!n.done&&!n.missed&&t>=n.spawnTime-.05&&t<=n.hitTime+(n.duration||0)+.25).sort((a,b)=>a.hitTime-b.hitTime).slice(0,2);
+    candidates.forEach((n,i)=>drawJudgeGuideForNote(n,t,i));
+  }
+
   function progress(n,t){return clamp((t-n.spawnTime)/(n.hitTime-n.spawnTime),0,1);}
   function noteR(n,t){return lerp(outerR,hitR,progress(n,t));}
   function notePos(n,t){const r=noteR(n,t); return {x:cx+Math.cos(n.angle)*r,y:cy+Math.sin(n.angle)*r,r};}
@@ -1119,14 +1215,26 @@
       addFeedback(n.type==="swingCW"?"↻":"↺",cx,cy-baseR*.18,color);
     }
   }
-  function miss(n){
+  function inferMissReason(n,t){
+    const family=noteFamily(n.type);
+    if(family==="hold") return filterHeld ? "MOVE CLOSER TO THE PATH" : "HOLD THE BUTTON";
+    if(family==="slide") return filterHeld ? "FOLLOW THE CURRENT TARGET" : "HOLD THE BUTTON";
+    if(family==="trace") return n.enteredTrace ? "FOLLOW THE CURRENT TARGET" : "MOVE CLOSER TO THE PATH";
+    if(family==="swing") return Math.abs(armVel)<SWING_FLICK_SPEED ? "WRONG DIRECTION" : "WRONG DIRECTION";
+    if(family==="scratch") return scratchHeld ? "WRONG DIRECTION" : "HOLD THE BUTTON";
+    if(t<n.hitTime-HIT_WINDOW) return "TOO EARLY";
+    if(t>n.hitTime+HIT_WINDOW) return "TOO LATE";
+    return "MOVE CLOSER TO THE PATH";
+  }
+
+  function miss(n,reason){
     if(n.done||n.missed)return;
-    n.missed=true; combo=0; judgedCount++; missCount++;
+    n.missed=true; n.failReason=reason || inferMissReason(n, now()); combo=0; judgedCount++; missCount++;
     let a=n.angle;
     if(n.type.startsWith("slide") || n.type.startsWith("scratch"))a=slideAngle(n,now());
     const isScratch=n.type&&n.type.startsWith("scratch");
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
-    addFeedback("MISS",p.x,p.y-18,COLORS.miss);
+    addFeedback(tutorialMode ? n.failReason : "MISS",p.x,p.y-18,COLORS.miss);
     addParticles(p.x,p.y,COLORS.miss,isScratch?14:8,.65);
     addWave(a,COLORS.miss);
   }
@@ -1280,7 +1388,7 @@
       if(n.done||n.missed)continue;
 
       if(n.type==="cut"){
-        if(t>n.hitTime+.22)miss(n);
+        if(t>n.hitTime+.22)miss(n,"TOO LATE");
         continue;
       }
 
@@ -1308,7 +1416,7 @@
           if(n.completed){
             const perfect=ratio>=profile.perfectCoverage && !n.lateTraceStart;
             addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace);
-          }else miss(n);
+          }else miss(n,"FOLLOW THE CURRENT TARGET");
         }
         continue;
       }
@@ -1316,12 +1424,12 @@
       if(n.type.startsWith("swing")){
         const link=linkedTraceForSwing(n);
         const needsTrace=chart.some(p=>p.type?.startsWith("trace") && p.hitTime+p.duration<=n.hitTime && n.hitTime-(p.hitTime+p.duration)>=TRACE_SWING_LINK_MIN && n.hitTime-(p.hitTime+p.duration)<=TRACE_SWING_LINK_MAX && distAng(traceTargetAngle(p,p.hitTime+p.duration),n.angle)<Math.PI*.12);
-        if(needsTrace && !link){ if(t>n.hitTime+.26) miss(n); continue; }
+        if(needsTrace && !link){ if(t>n.hitTime+.26) miss(n,"WRONG DIRECTION"); continue; }
         if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(gameState.autoEnabled||checkSwing(n))){
           if(gameState.autoEnabled)logAutoProcessing(n);
           judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n));
         }else if(t>n.hitTime+.26){
-          miss(n);
+          miss(n,"WRONG DIRECTION");
         }
         continue;
       }
@@ -1338,9 +1446,9 @@
         if(t>end){
           const ratio=n.hold/n.duration;
           if(ratio>=.55)judge(n,ratio>.85?"PERFECT":"GREAT",COLORS.fx);
-          else miss(n);
+          else miss(n,filterHeld?"MOVE CLOSER TO THE PATH":"HOLD THE BUTTON");
         }
-        if(t>n.hitTime+.38&&n.hold<.035&&!gameState.autoEnabled)miss(n);
+        if(t>n.hitTime+.38&&n.hold<.035&&!gameState.autoEnabled)miss(n,filterHeld?"MOVE CLOSER TO THE PATH":"HOLD THE BUTTON");
         continue;
       }
 
@@ -1360,9 +1468,9 @@
         if(t>end){
           const ratio=n.hold/n.duration;
           if(ratio>=.58)judge(n,ratio>.88?"PERFECT":"GREAT",color);
-          else miss(n);
+          else miss(n,filterHeld?"FOLLOW THE CURRENT TARGET":"HOLD THE BUTTON");
         }
-        if(t>n.hitTime+.40&&n.hold<.03&&!gameState.autoEnabled)miss(n);
+        if(t>n.hitTime+.40&&n.hold<.03&&!gameState.autoEnabled)miss(n,filterHeld?"FOLLOW THE CURRENT TARGET":"HOLD THE BUTTON");
         continue;
       }
 
@@ -1371,7 +1479,7 @@
           if(gameState.autoEnabled)logAutoProcessing(n);
           judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n));
         }else if(t>n.hitTime+.26){
-          miss(n);
+          miss(n,scratchHeld?"WRONG DIRECTION":"HOLD THE BUTTON");
         }
         continue;
       }
@@ -2300,6 +2408,7 @@
   function formatNoteContrast(){ return "NOTE CONTRAST " + visualSettings.noteContrast; }
   function formatPathBrightness(){ return "PATH BRIGHTNESS " + visualSettings.pathBrightness; }
   function formatEffectIntensity(){ return "EFFECT INTENSITY " + visualSettings.effectIntensity; }
+  function formatJudgeGuide(){ return "JUDGE GUIDE " + visualSettings.judgeGuide; }
   function cycleVisualSetting(key){ const list=VISUAL_CHOICES[key]; const idx=list.indexOf(visualSettings[key]); visualSettings[key]=list[(idx+1)%list.length]; saveVisualSettings(); updateButtons(); }
   function refreshSettingsUI(){ updateButtons(); }
 
@@ -2353,6 +2462,7 @@
     if(pauseSetNoteContrast) pauseSetNoteContrast.textContent = formatNoteContrast();
     if(pauseSetPathBrightness) pauseSetPathBrightness.textContent = formatPathBrightness();
     if(pauseSetEffectIntensity) pauseSetEffectIntensity.textContent = formatEffectIntensity();
+    if(pauseSetJudgeGuide) pauseSetJudgeGuide.textContent = formatJudgeGuide();
     if(typeof safeRefresh === "function") safeRefresh();
   }
 
@@ -2436,15 +2546,24 @@
     return ({aim:"MOUSE / A-D AIM",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / LMB`,hold:`HOLD ${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / RMB`,slide:`HOLD ${keyLabel("KeyZ")} / ${keyLabel("KeyX")} AND FOLLOW`,trace:"DO NOT PRESS — FOLLOW THE PATH",swing:"FLICK POINTER CW / CCW",scratch:"RMB + SHORT SCRATCH GESTURE",mix:"Z / X / LMB / RMB + AIM"})[kind] || "INPUT";
   }
   const tutorialSteps=[
-    {name:"AIM",kind:"aim",desc:"Move the pointer to each glowing target.",targets:[0,2,5],notes:[]},
-    {name:"CUT",kind:"cut",desc:"Aim at the note and press on time.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5.5,lane:2},{type:"cut",beat:7,lane:5},{type:"cut",beat:8.5,lane:7}]},
-    {name:"HOLD",kind:"hold",desc:"Press and keep holding until the end.",notes:[{type:"fx",beat:4,lane:1,durationBeat:3}]},
-    {name:"SLIDE",kind:"slide",desc:"Hold and follow START to END.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4}]},
-    {name:"TRACE",kind:"trace",desc:"버튼을 누르지 말고 목표점을 따라가세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:2,durationBeat:2},{type:"traceCCW",beat:7,lane:3,endLane:0,durationBeat:2}]},
-    {name:"SWING",kind:"swing",desc:"Move shortly and quickly in the shown direction.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
-    {name:"360 TRACE → SWING",kind:"trace",desc:"고급 연습: 한 바퀴 TRACE를 끝점까지 완료한 뒤 SWING하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:6.75,lane:0},{type:"traceCCW",beat:9,lane:4,endLane:4,durationBeat:2.5,signedSweepAngle:-360},{type:"swingCW",beat:11.75,lane:4}]},
-    {name:"SCRATCH",kind:"scratch",desc:"Use the scratch gesture in the shown direction.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
-    {name:"MIX TEST",kind:"mix",desc:"A short practice mix with every note type.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7},{type:"slideCCW",beat:22,lane:1,endLane:6,durationBeat:3},{type:"traceCW",beat:26,lane:6,endLane:1,durationBeat:2},{type:"swingCCW",beat:29,lane:4},{type:"scratchCW",beat:31,lane:0,endLane:1,durationBeat:.55},{type:"cut",beat:33,lane:2}]}
+    {name:"AIM · EXPLORE",kind:"aim",phase:"explore",desc:"표시가 판정 영역과 겹칠 때 입력하세요. Move into the mint target zone.",targets:[0,2,5],notes:[]},
+    {name:"CUT · EXPLORE",kind:"cut",phase:"explore",desc:"정지한 CUT의 실제 각도/반지름 판정 영역을 확인하세요.",notes:[{type:"cut",beat:999,lane:0}],targets:[0]},
+    {name:"CUT · GUIDED",kind:"cut",phase:"guided",desc:"Slow CUT with the full real judge guide. Succeed twice.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:6,lane:2}]},
+    {name:"CUT · FADED",kind:"cut",phase:"faded",desc:"Guide is faded; use the normal note shape.",notes:[{type:"cut",beat:4,lane:5},{type:"cut",beat:5.5,lane:7}]},
+    {name:"CUT · STANDARD",kind:"cut",phase:"standard",desc:"No detailed guide. Clear two normal CUTs.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5.5,lane:2}]},
+    {name:"HOLD · GUIDED",kind:"hold",phase:"guided",desc:"Outer arc means position; filled core means button held.",notes:[{type:"fx",beat:4,lane:1,durationBeat:3},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
+    {name:"HOLD · STANDARD",kind:"hold",phase:"standard",desc:"Hold in normal display twice.",notes:[{type:"fx",beat:4,lane:1,durationBeat:2.5},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
+    {name:"SLIDE · GUIDED",kind:"slide",phase:"guided",desc:"Button hold and current target position are shown separately.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4},{type:"slideCCW",beat:10,lane:2,endLane:6,durationBeat:4}]},
+    {name:"SLIDE · FADED",kind:"slide",phase:"faded",desc:"Follow the target with a dim guide.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:3.2},{type:"slideCCW",beat:9,lane:2,endLane:6,durationBeat:3.2}]},
+    {name:"TRACE · STILL TARGET",kind:"trace",phase:"explore",desc:"현재 목표점 주변의 짧은 호만 실제 TRACE 판정 범위입니다.",targets:[7],notes:[{type:"traceCW",beat:999,lane:7,endLane:7,durationBeat:2}]},
+    {name:"TRACE · 90° GUIDED",kind:"trace",phase:"guided",desc:"Slow 90 degree TRACE with full active judge band.",notes:[{type:"traceCW",beat:4,lane:7,endLane:1,durationBeat:3}]},
+    {name:"TRACE · 180° GUIDED",kind:"trace",phase:"guided",desc:"Current target is bright; future path is dim.",notes:[{type:"traceCCW",beat:4,lane:3,endLane:7,durationBeat:3.4}]},
+    {name:"TRACE · 180° FADED",kind:"trace",phase:"faded",desc:"Only the target and short active arc remain.",notes:[{type:"traceCW",beat:4,lane:6,endLane:2,durationBeat:2.8}]},
+    {name:"TRACE · STANDARD",kind:"trace",phase:"standard",desc:"Normal TRACE display without the detailed band.",notes:[{type:"traceCCW",beat:4,lane:2,endLane:6,durationBeat:2.5}]},
+    {name:"SWING · GUIDED",kind:"swing",phase:"guided",desc:"Tangent arrows and the direction cone show the allowed motion.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
+    {name:"SCRATCH · GUIDED",kind:"scratch",phase:"guided",desc:"RMB/two-finger hold plus a short direction-change gesture.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
+    {name:"360 TRACE · ADVANCED",kind:"trace",phase:"faded",desc:"Optional advanced practice after basic TRACE: one full circle then SWING.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:6.75,lane:0}]},
+    {name:"MIX TEST",kind:"mix",phase:"standard",desc:"Final mix test uses normal note designs without detailed judge bands.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
   ];
   function buildTutorialChart(step){ return (step.notes||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT; n.spawnTime=n.hitTime-APPROACH; return n; }).sort((a,b)=>a.hitTime-b.hitTime); }
   function showTutorialPrompt(){ if(localStorage.getItem(TUTORIAL_COMPLETED_KEY)==="true"||localStorage.getItem(TUTORIAL_PROMPT_KEY)==="true")return; if(tutorialPrompt)tutorialPrompt.hidden=false; }
@@ -2490,6 +2609,7 @@
     if(!result){ alert("결과를 계산할 수 없습니다. 채보가 비어 있거나 잘못되었습니다."); exitToMenu(); return; }
     const recordInfo=saveBestRecord(result);
     showResult(result, recordInfo);
+    try{ localStorage.setItem("circleMixPlayCount.v1", String(Number(localStorage.getItem("circleMixPlayCount.v1")||0)+1)); }catch(e){}
     updateButtons();
   }
 
@@ -2580,6 +2700,7 @@
     // 실제 노트보다 옅게 보여서 채보 방향을 먼저 읽을 수 있음.
     chart.forEach(n=>drawLandingGhost(n,t));
     chart.forEach(n=>drawApproachRail(n,t));
+    drawJudgeGuides(t);
 
     chart.forEach(n=>{if(n.type.startsWith("trace"))drawNote(n,t);});
     chart.forEach(n=>{if(!n.type.startsWith("trace"))drawNote(n,t);});
@@ -2762,6 +2883,7 @@
     if(pauseSetNoteContrast) pauseSetNoteContrast.textContent = formatNoteContrast();
     if(pauseSetPathBrightness) pauseSetPathBrightness.textContent = formatPathBrightness();
     if(pauseSetEffectIntensity) pauseSetEffectIntensity.textContent = formatEffectIntensity();
+    if(pauseSetJudgeGuide) pauseSetJudgeGuide.textContent = formatJudgeGuide();
     if(pauseSetAuto){
       pauseSetAuto.textContent = gameState.autoEnabled ? "AUTO PLAY ON" : "AUTO PLAY OFF";
       pauseSetAuto.classList.toggle("on", gameState.autoEnabled);
@@ -2953,6 +3075,7 @@
   bindPress(pauseSetNoteContrast,()=>{cycleVisualSetting("noteContrast");syncPauseSettingsUI();});
   bindPress(pauseSetPathBrightness,()=>{cycleVisualSetting("pathBrightness");syncPauseSettingsUI();});
   bindPress(pauseSetEffectIntensity,()=>{cycleVisualSetting("effectIntensity");syncPauseSettingsUI();});
+  bindPress(pauseSetJudgeGuide,()=>{cycleVisualSetting("judgeGuide");syncPauseSettingsUI();});
   bindPress(addCutBtn,()=>addEditorNote("cut"));bindPress(addSwingCWBtn,()=>addEditorNote("swingCW"));bindPress(addSwingCCWBtn,()=>addEditorNote("swingCCW"));bindPress(addFxBtn,()=>addEditorNote("fx"));bindPress(addSlideCWBtn,()=>addEditorNote("slideCW"));bindPress(addSlideCCWBtn,()=>addEditorNote("slideCCW"));bindPress(addScratchCWBtn,()=>addEditorNote("scratchCW"));bindPress(addScratchCCWBtn,()=>addEditorNote("scratchCCW"));
   bindPress(seekBackBtn,()=>{song.currentTime=Math.max(0,song.currentTime-1);updateEditorStatus();});
   bindPress(seekFwdBtn,()=>{song.currentTime=Math.min(song.duration||999,song.currentTime+1);updateEditorStatus();});
@@ -3045,6 +3168,7 @@
   const safeSetNoteContrast=document.getElementById("safeSetNoteContrast");
   const safeSetPathBrightness=document.getElementById("safeSetPathBrightness");
   const safeSetEffectIntensity=document.getElementById("safeSetEffectIntensity");
+  const safeSetJudgeGuide=document.getElementById("safeSetJudgeGuide");
   const safeResume=document.getElementById("safeResume");
   const safeExit=document.getElementById("safeExit");
   let pendingMobileStartMode = null;
@@ -3215,6 +3339,7 @@
     if(safeSetNoteContrast)safeSetNoteContrast.textContent=formatNoteContrast();
     if(safeSetPathBrightness)safeSetPathBrightness.textContent=formatPathBrightness();
     if(safeSetEffectIntensity)safeSetEffectIntensity.textContent=formatEffectIntensity();
+    if(safeSetJudgeGuide)safeSetJudgeGuide.textContent=formatJudgeGuide();
   }
 
   const originalStart=start;
@@ -3302,6 +3427,7 @@
   safeBind(safeSetNoteContrast,()=>cycleVisualSetting("noteContrast"));
   safeBind(safeSetPathBrightness,()=>cycleVisualSetting("pathBrightness"));
   safeBind(safeSetEffectIntensity,()=>cycleVisualSetting("effectIntensity"));
+  safeBind(safeSetJudgeGuide,()=>cycleVisualSetting("judgeGuide"));
   safeBind(safeResume,()=>{safeSetOverlay(false);resumeGame();});
   safeBind(safeExit,exitToMenu);
   bindPress(tutorialPromptStart,startTutorial);
