@@ -353,3 +353,27 @@ body.playingClean .rhythmHud{min-width:0;padding:0;background:transparent}.guide
 .safeMenuLogo span{color:var(--neon-cyan);font-weight:800;text-shadow:0 0 20px rgba(92,255,251,.88)}
 .safeMenuSub{color:#c2d8f0;letter-spacing:.11em}.safeModePanel{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0;padding:14px;border-radius:20px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.10)}.safePanelLabel{grid-column:1/-1;color:#8dfaff;font-size:11px;font-weight:900;letter-spacing:.18em}.safeMenuGrid{grid-template-columns:repeat(3,1fr)}.safeMenuBtn{background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.035));border-color:rgba(92,255,251,.24);box-shadow:inset 0 0 18px rgba(92,255,251,.035);letter-spacing:.08em}.safeMenuBtn:hover,.safeMenuBtn.on{background:linear-gradient(135deg,rgba(92,255,251,.92),rgba(141,107,255,.82));color:#020814;box-shadow:0 0 28px rgba(92,255,251,.28)}.safeMenuBtn.big{grid-column:span 3;animation:pressStart 1.4s ease-in-out infinite}@keyframes pressStart{50%{filter:brightness(1.28);transform:translateY(-1px)}}.safeOverlayTitle{margin:0;color:#fff;font-weight:300;letter-spacing:.18em}.safeSettingsHint{margin:6px 0 16px;color:#8dfaff;font-size:11px;font-weight:900;letter-spacing:.14em}.safeOverlayGrid{padding:12px;border-radius:18px;background:rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.09)}
 @media(max-width:820px){.rhythmHud{inset:10px;grid-template-columns:1fr 1fr;gap:6px}.hudSong{grid-column:1/-1;grid-row:1}.hudScore{grid-column:1;grid-row:2}.hudStatus{grid-column:2;grid-row:2}.hudCombo{grid-column:1/-1;grid-row:3}.rhythmHud strong{font-size:17px}.hudCombo strong{font-size:28px}.safeModePanel,.safeMenuGrid{grid-template-columns:1fr 1fr}.safeMenuBtn.big{grid-column:span 2}}
+
+.resultOverlay{
+  position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.56);backdrop-filter:blur(8px);pointer-events:auto;
+}
+.resultOverlay.show{display:flex}
+.resultCard{
+  width:min(760px,calc(100vw - 30px));max-height:calc(100vh - 30px);overflow:auto;
+  padding:26px;border-radius:28px;background:linear-gradient(180deg,rgba(6,14,32,.94),rgba(4,8,20,.86));
+  border:1px solid rgba(92,255,251,.36);box-shadow:0 30px 100px rgba(0,0,0,.70),0 0 78px rgba(92,255,251,.16),inset 0 0 42px rgba(141,107,255,.08);
+  color:#eaf7ff;text-transform:uppercase;
+}
+.resultHeader{display:flex;align-items:center;justify-content:space-between;gap:18px;border-bottom:1px solid rgba(255,255,255,.12);padding-bottom:16px;margin-bottom:16px}
+.resultEyebrow,.resultScoreBlock span,.resultGrid span,.resultRankBox span{display:block;color:#80f7ff;font-size:11px;font-weight:900;letter-spacing:.20em}
+.resultHeader h2{margin:4px 0 0;font-size:clamp(28px,5vw,48px);font-weight:250;letter-spacing:.14em;text-shadow:0 0 24px rgba(92,255,251,.45)}
+.resultRankBox{text-align:center;min-width:150px;padding:14px;border-radius:18px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.12)}
+.resultRankBox strong{display:block;font-size:clamp(48px,9vw,86px);line-height:.9;color:#fff36a;text-shadow:0 0 28px rgba(255,243,106,.50)}
+.resultScoreBlock{padding:14px 18px;margin:12px 0 16px;border-radius:20px;background:rgba(92,255,251,.08);border:1px solid rgba(92,255,251,.22);text-align:center}
+.resultScoreBlock strong{font-size:clamp(46px,10vw,92px);line-height:1;font-weight:200;letter-spacing:.08em;color:#fff;text-shadow:0 0 26px rgba(92,255,251,.38)}
+.resultGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.resultGrid>div{padding:13px 14px;border-radius:16px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.10)}
+.resultGrid strong{display:block;margin-top:5px;font-size:24px;font-weight:850;letter-spacing:.04em;color:#fff}.resultWide{grid-column:span 3}.resultWide strong{color:#fff36a}
+.resultButtons{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:20px}
+@media(max-width:720px){.resultHeader{align-items:stretch;flex-direction:column}.resultRankBox{text-align:left}.resultGrid{grid-template-columns:1fr 1fr}.resultWide{grid-column:span 2}.resultCard{padding:20px}.resultScoreBlock strong{font-size:42px}}

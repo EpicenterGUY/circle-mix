@@ -43,6 +43,18 @@
   const pauseResume = document.getElementById("pauseResume");
   const pauseRetry = document.getElementById("pauseRetry");
   const pauseMenu = document.getElementById("pauseMenu");
+  const resultOverlay = document.getElementById("resultOverlay");
+  const resultScore = document.getElementById("resultScore");
+  const resultRank = document.getElementById("resultRank");
+  const resultAccuracy = document.getElementById("resultAccuracy");
+  const resultPerfect = document.getElementById("resultPerfect");
+  const resultGreat = document.getElementById("resultGreat");
+  const resultMiss = document.getElementById("resultMiss");
+  const resultMaxCombo = document.getElementById("resultMaxCombo");
+  const resultTotalNotes = document.getElementById("resultTotalNotes");
+  const resultMapLevel = document.getElementById("resultMapLevel");
+  const resultRetry = document.getElementById("resultRetry");
+  const resultBackTitle = document.getElementById("resultBackTitle");
 
   const TAU = Math.PI * 2;
   const BPM = 184.6;
@@ -72,6 +84,7 @@
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
+  let actualHitValue=0, maxHitValue=0;
   let chart=[], feedback=[], particles=[], waves=[], ringBursts=[], scratchBursts=[];
   let autoMode=false, mapMode="tech";
   let mouseX=0, mouseY=0;
@@ -185,6 +198,37 @@
     if(type.startsWith("swing")) return "swing";
     if(type.startsWith("scratch")) return "scratch";
     return "cut";
+  }
+
+
+  function noteWeight(note){
+    const weights={cut:1.0, trace:0.5, hold:1.2, slide:1.3, swing:1.4, scratch:1.4};
+    return weights[noteFamily(note.type)] || 1.0;
+  }
+
+  function judgeValue(label){
+    if(label === "PERFECT") return 1.0;
+    if(label === "GREAT") return 0.65;
+    return 0.0;
+  }
+
+  function calculateScoreStats(){
+    const totalNotes = chart.length;
+    const accuracy = maxHitValue > 0 ? clamp(actualHitValue / maxHitValue, 0, 1) : 1;
+    const comboRatio = totalNotes > 0 ? clamp(maxCombo / totalNotes, 0, 1) : 0;
+    const totalScore = Math.round(accuracy * 900000 + comboRatio * 100000);
+    return {accuracy, comboRatio, score:totalScore, totalNotes};
+  }
+
+  function calculateRank(accuracy){
+    if(accuracy >= 0.995 && missCount === 0) return "SSS";
+    if(accuracy >= 0.98) return "SS";
+    if(accuracy >= 0.95) return "S";
+    if(accuracy >= 0.92) return "A+";
+    if(accuracy >= 0.88) return "A";
+    if(accuracy >= 0.80) return "B";
+    if(accuracy >= 0.70) return "C";
+    return "D";
   }
 
   function inputGroup(type){
@@ -748,7 +792,7 @@
     if(n.done||n.missed)return;
     n.done=true;
     playHitSound(n.type,label);
-    score+=label==="PERFECT"?1200:800;
+    actualHitValue += noteWeight(n) * judgeValue(label);
     judgedCount++;
     if(label==="PERFECT") perfectCount++; else greatCount++;
     combo++; maxCombo=Math.max(maxCombo,combo);
@@ -950,7 +994,6 @@
         const a=slideAngle(n,t);
         if(t>=n.hitTime&&t<=end&&(autoMode||aligned(a,.040))){
           n.hold+=dt;
-          score+=2;
           if(Math.random()<.45)addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.trace,1,.18);
         }
         if(t>end){
@@ -975,7 +1018,7 @@
         const end=n.hitTime+n.duration;
         if(t>=n.hitTime&&t<=end){
           if(autoMode||(filterHeld&&aligned(n.angle,.020))){
-            n.hold+=dt; score+=3;
+            n.hold+=dt;
             if(Math.random()<.45)addParticles(cx+Math.cos(n.angle)*hitR,cy+Math.sin(n.angle)*hitR,COLORS.fx,1,.25);
           }
         }
@@ -996,7 +1039,7 @@
         const isScratch=false;
         if(t>=n.hitTime&&t<=end){
           if(held){
-            n.hold+=dt; score+=3;
+            n.hold+=dt;
             if(Math.random()<(isScratch?.72:.60))addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,color,1,isScratch?.30:.22);
           }
         }
@@ -1928,6 +1971,34 @@
     if(typeof safeRefresh === "function") safeRefresh();
   }
 
+
+  function hideResult(){
+    if(resultOverlay) resultOverlay.classList.remove("show");
+  }
+
+  function finalizeRemainingMisses(){
+    for(const note of chart){
+      if(!note.done && !note.missed) miss(note);
+    }
+  }
+
+  function showResult(){
+    finalizeRemainingMisses();
+    const stats=calculateScoreStats();
+    const rank=calculateRank(stats.accuracy);
+    score=stats.score;
+    if(resultScore) resultScore.textContent=String(stats.score).padStart(7,"0");
+    if(resultRank) resultRank.textContent=rank;
+    if(resultAccuracy) resultAccuracy.textContent=(stats.accuracy*100).toFixed(2)+"%";
+    if(resultPerfect) resultPerfect.textContent=perfectCount;
+    if(resultGreat) resultGreat.textContent=greatCount;
+    if(resultMiss) resultMiss.textContent=missCount;
+    if(resultMaxCombo) resultMaxCombo.textContent=maxCombo;
+    if(resultTotalNotes) resultTotalNotes.textContent=stats.totalNotes;
+    if(resultMapLevel) resultMapLevel.textContent=(mapMode==="tech"?"TECH ":"NORMAL ")+formatDifficulty(mapMode);
+    if(resultOverlay) resultOverlay.classList.add("show");
+  }
+
   function endGame(stopAudio=true){
     running=false;
     setCleanGameplay(false);
@@ -1938,7 +2009,12 @@
     if(stopAudio){
       try{ song.pause(); }catch(e){}
     }
-    startLayer.style.display="flex";
+    if(!stopAudio && judgedCount > 0){
+      showResult();
+    }else{
+      hideResult();
+      startLayer.style.display="flex";
+    }
     updateButtons();
   }
 
@@ -1963,12 +2039,14 @@
 
   function retryGame(){
     if(pauseOverlay) pauseOverlay.classList.remove("show");
+    hideResult();
     paused=false;
     start(editorMode?"editor":"play");
   }
 
   function exitToMenu(){
     if(pauseOverlay) pauseOverlay.classList.remove("show");
+    hideResult();
     paused=false;
     endGame(true);
   }
@@ -2006,11 +2084,12 @@
     drawEffects(dt);
     updateDebugOverlay(t);
 
+    const liveStats = calculateScoreStats();
+    score = liveStats.score;
     scoreBox.textContent=Math.floor(score);
     comboBox.textContent=combo;
     if(accuracyBox){
-      const acc = judgedCount ? ((perfectCount + greatCount*.72) / judgedCount * 100) : 100;
-      accuracyBox.textContent = acc.toFixed(1) + "%";
+      accuracyBox.textContent = (liveStats.accuracy * 100).toFixed(2) + "%";
     }
     updateButtons();
     if(editorMode) updateEditorStatus();
@@ -2023,13 +2102,14 @@
     requestFullscreenSafe();
     paused=false;
     if(pauseOverlay) pauseOverlay.classList.remove("show");
+    hideResult();
     if(selectedMenuMode==="normal") mapMode="normal";
     if(selectedMenuMode==="tech") mapMode="tech";
     if(selectedMenuMode==="custom") useCustomChart=customChartData.length>0;
     editorMode=mode==="editor";
     if(editorPanel)editorPanel.classList.toggle("show",editorMode);
     useCustomChart=(selectedMenuMode==="custom" && customChartData.length>0);
-    chart=generateChart(); score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0;
+    chart=generateChart(); score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0; actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0);
     feedback=[]; particles=[]; waves=[];
     running=true;
     setCleanGameplay(true);
@@ -2243,6 +2323,8 @@
   bindPress(resumeBtn,resumeGame);
   bindPress(retryBtn,retryGame);
   bindPress(exitBtn,exitToMenu);
+  bindPress(resultRetry,retryGame);
+  bindPress(resultBackTitle,exitToMenu);
   bindPress(closeKeymap,()=>toggleKeymap(false));
   bindPress(speedDown,()=>changeSpeed(+0.04));
   bindPress(speedUp,()=>changeSpeed(-0.04));
@@ -2403,9 +2485,13 @@
   endGame=function(stopAudio=true){
     originalEndGame(stopAudio);
     document.body.classList.remove("safeClean");
-    safeSetOverlay(false);
-    safeSetMenuVisible(true);
-    if(safeStart)safeStart.textContent="START";
+    if(resultOverlay && resultOverlay.classList.contains("show")){
+      safeSetState("game");
+    }else{
+      safeSetOverlay(false);
+      safeSetMenuVisible(true);
+      if(safeStart)safeStart.textContent="START";
+    }
     safeRefresh();
   };
 
