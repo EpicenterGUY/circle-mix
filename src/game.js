@@ -110,7 +110,8 @@
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
   let actualHitValue=0, maxHitValue=0;
   let chart=[], feedback=[], particles=[], waves=[], ringBursts=[], scratchBursts=[];
-  let autoMode=false, mapMode="tech";
+  const gameState={autoEnabled:false};
+  let mapMode="tech";
   let mouseX=0, mouseY=0;
   let armAngle=-Math.PI/2, targetAngle=-Math.PI/2, prevArmAngle=-Math.PI/2, armVel=0;
   let keyA=false, keyD=false, filterHeld=false, scratchHeld=false, mouseDownRight=false;
@@ -984,21 +985,21 @@
   }
 
   function updateAutoDebug(t){
-    const n=autoMode?nextNote(t):null;
+    const n=gameState.autoEnabled?nextNote(t):null;
     const action=autoActionForNote(n);
     const isScratch=!!(n&&n.type.startsWith("scratch"));
     const isHold=action==="HOLD"||action==="SLIDE";
     const isCut=action==="CUT";
     autoInputDebug={
-      z:autoMode&&(isCut||isHold),
-      x:autoMode&&isHold,
-      space:autoMode&&isCut,
-      lmb:autoMode&&isCut,
-      rmb:autoMode&&isScratch,
+      z:gameState.autoEnabled&&(isCut||isHold),
+      x:gameState.autoEnabled&&isHold,
+      space:gameState.autoEnabled&&isCut,
+      lmb:gameState.autoEnabled&&isCut,
+      rmb:gameState.autoEnabled&&isScratch,
       shiftFallback:false,
       action,
       targetAngle:n?((n.type.startsWith("slide")||n.type.startsWith("trace")||n.type.startsWith("scratch"))?slideAngle(n,t):n.angle):null,
-      targetDistance:autoMode&&n?hitR:null,
+      targetDistance:gameState.autoEnabled&&n?hitR:null,
       scratchDirection:isScratch?(n.type==="scratchCW"?"CW":"CCW"):"NONE",
       scratchMoveAmount:isScratch?Math.abs(n.slideAmount||0):0,
       scratchSpeed:isScratch?SCRATCH_FLICK_SPEED*1.5:0,
@@ -1010,7 +1011,7 @@
 
   function updateAuto(t){
     updateAutoDebug(t);
-    if(!autoMode)return;
+    if(!gameState.autoEnabled)return;
 
     const activePath=chart.find(n=>!n.done&&!n.missed&&n.type.startsWith("slide")&&t>=n.hitTime&&t<=n.hitTime+n.duration);
     if(activePath){
@@ -1031,6 +1032,7 @@
         armVel = dir*SCRATCH_FLICK_SPEED*1.5;
       }
       if((n.type==="cut"||n.type.startsWith("swing"))&&Math.abs(t-n.hitTime)<.030){
+        if(gameState.autoEnabled)logAutoProcessing(n);
         judge(n,"PERFECT",noteColor(n));
       }
     }
@@ -1038,13 +1040,13 @@
 
   function updateArm(dt){
     const tNow = now();
-    if(autoMode && chart.some(n=>!n.done&&!n.missed&&n.type.startsWith("slide")&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
+    if(gameState.autoEnabled && chart.some(n=>!n.done&&!n.missed&&n.type.startsWith("slide")&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
       return;
     }
 
     prevArmAngle=armAngle;
 
-    if(autoMode){
+    if(gameState.autoEnabled){
       const diff=norm(targetAngle-armAngle);
       armAngle+=diff*clamp(1-Math.pow(.0001,dt),0,1);
     }else if(keyA||keyD){
@@ -1060,6 +1062,12 @@
     armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001);
   }
 
+  function logAutoProcessing(n){
+    if(!debugMode || !gameState.autoEnabled || n.autoProcessingLogged)return;
+    n.autoProcessingLogged=true;
+    console.log(`[Auto] processing note type=${autoActionForNote(n)}`);
+  }
+
   function updateNotes(t,dt){
     for(const n of chart){
       if(n.done||n.missed)continue;
@@ -1072,7 +1080,8 @@
       if(n.type.startsWith("trace")){
         const end=n.hitTime+n.duration;
         const a=slideAngle(n,t);
-        if(t>=n.hitTime&&t<=end&&(autoMode||aligned(a,.040))){
+        if(t>=n.hitTime&&t<=end&&(gameState.autoEnabled||aligned(a,.040))){
+          if(gameState.autoEnabled)logAutoProcessing(n);
           n.hold+=dt;
           if(Math.random()<.45)addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.trace,1,.18);
         }
@@ -1081,12 +1090,13 @@
           if(ratio>=.45){ addWave(slideAngle(n,end),COLORS.trace); judge(n,ratio>.72?"PERFECT":"GREAT",COLORS.trace); }
           else miss(n);
         }
-        if(t>n.hitTime+.45&&n.hold<.025&&!autoMode)miss(n);
+        if(t>n.hitTime+.45&&n.hold<.025&&!gameState.autoEnabled)miss(n);
         continue;
       }
 
       if(n.type.startsWith("swing")){
-        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(autoMode||checkSwing(n))){
+        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(gameState.autoEnabled||checkSwing(n))){
+          if(gameState.autoEnabled)logAutoProcessing(n);
           judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n));
         }else if(t>n.hitTime+.26){
           miss(n);
@@ -1097,7 +1107,8 @@
       if(n.type==="fx"){
         const end=n.hitTime+n.duration;
         if(t>=n.hitTime&&t<=end){
-          if(autoMode||(filterHeld&&aligned(n.angle,.020))){
+          if(gameState.autoEnabled||(filterHeld&&aligned(n.angle,.020))){
+            if(gameState.autoEnabled)logAutoProcessing(n);
             n.hold+=dt;
             if(Math.random()<.45)addParticles(cx+Math.cos(n.angle)*hitR,cy+Math.sin(n.angle)*hitR,COLORS.fx,1,.25);
           }
@@ -1107,18 +1118,19 @@
           if(ratio>=.55)judge(n,ratio>.85?"PERFECT":"GREAT",COLORS.fx);
           else miss(n);
         }
-        if(t>n.hitTime+.38&&n.hold<.035&&!autoMode)miss(n);
+        if(t>n.hitTime+.38&&n.hold<.035&&!gameState.autoEnabled)miss(n);
         continue;
       }
 
       if(n.type.startsWith("slide")){
         const end=n.hitTime+n.duration;
         const a=slideAngle(n,t);
-        const held=autoMode || (filterHeld&&aligned(a,.010));
+        const held=gameState.autoEnabled || (filterHeld&&aligned(a,.010));
         const color=noteColor(n);
         const isScratch=false;
         if(t>=n.hitTime&&t<=end){
           if(held){
+            if(gameState.autoEnabled)logAutoProcessing(n);
             n.hold+=dt;
             if(Math.random()<(isScratch?.72:.60))addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,color,1,isScratch?.30:.22);
           }
@@ -1128,12 +1140,13 @@
           if(ratio>=.58)judge(n,ratio>.88?"PERFECT":"GREAT",color);
           else miss(n);
         }
-        if(t>n.hitTime+.40&&n.hold<.03&&!autoMode)miss(n);
+        if(t>n.hitTime+.40&&n.hold<.03&&!gameState.autoEnabled)miss(n);
         continue;
       }
 
       if(n.type.startsWith("scratch")){
-        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(autoMode||checkScratch(n,t))){
+        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(gameState.autoEnabled||checkScratch(n,t))){
+          if(gameState.autoEnabled)logAutoProcessing(n);
           judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n));
         }else if(t>n.hitTime+.26){
           miss(n);
@@ -1511,6 +1524,32 @@
     ctx.beginPath();ctx.arc(Math.cos(targetAngle)*r,Math.sin(targetAngle)*r,focus?5.6:4.4,0,TAU);ctx.fill();
     ctx.strokeStyle=`rgba(120,226,255,${focus?.86:.70})`;ctx.lineWidth=1.4;ctx.stroke();
     ctx.restore();
+
+    const arrowOuterPadding=focus?12:10;
+    const arrowRadius=Math.max(0,r-arrowOuterPadding);
+    const arrowProgress=clamp(active?((t-n.hitTime)/Math.max(n.duration,.001)):0,0,1);
+    const arrowAngle=n.angle+d*arrowProgress;
+    const arrowDir=d>=0?1:-1;
+    const arrowRotation=arrowAngle + (arrowDir>0 ? Math.PI/2 : -Math.PI/2);
+    const arrowX=cx + Math.cos(arrowAngle)*arrowRadius;
+    const arrowY=cy + Math.sin(arrowAngle)*arrowRadius;
+    if(Number.isFinite(arrowX)&&Number.isFinite(arrowY)&&Number.isFinite(arrowRotation)){
+      ctx.save();
+      ctx.translate(arrowX,arrowY);
+      ctx.rotate(arrowRotation);
+      ctx.fillStyle=`rgba(255,255,255,${focus?.94:.84})`;
+      ctx.shadowBlur=focus?10:6;
+      ctx.shadowColor=color;
+      const size=focus?10:8;
+      ctx.beginPath();
+      ctx.moveTo(size,0);
+      ctx.lineTo(-size*.55,-size*.65);
+      ctx.lineTo(-size*.28,0);
+      ctx.lineTo(-size*.55,size*.65);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   function drawSwing(n,t){
@@ -2023,25 +2062,39 @@
   function formatMusic(){ return "MUSIC " + Math.round(clamp(musicVolume,0,1)*100) + "%"; }
   function refreshSettingsUI(){ updateButtons(); }
 
-  function setAutoMode(enabled){
-    autoMode=!!enabled;
+  function setAutoMode(enabled, source="unknown"){
+    const next=!!enabled;
+    if(gameState.autoEnabled===next){
+      updateButtons();
+      safeRefresh();
+      updateDebugOverlay(now());
+      return;
+    }
+    gameState.autoEnabled=next;
+    console.log(`[Auto] source=${source} enabled=${gameState.autoEnabled}`);
     updateButtons();
+    safeRefresh();
     updateDebugOverlay(now());
   }
 
-  function toggleAuto(){
-    setAutoMode(!autoMode);
+  function toggleAuto(source="unknown"){
+    setAutoMode(!gameState.autoEnabled, source);
   }
 
   function updateButtons(){
     applyMusicVolume();
-    autoBox.textContent=autoMode?"AUTO":"";
+    autoBox.textContent=gameState.autoEnabled?"AUTO ON":"AUTO OFF";
+    const songAutoBtn=document.querySelector("[data-auto-play]");
+    if(songAutoBtn){
+      songAutoBtn.classList.toggle("on",gameState.autoEnabled);
+      songAutoBtn.innerHTML=`AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span>`;
+    }
     const hudModeLabel = (mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
     mapBox.textContent=((selectedSong?.title || "") + " · " + hudModeLabel).trim();
     const hudSongTitle = document.querySelector(".hudSong span");
     if(hudSongTitle) hudSongTitle.textContent = "";
-    autoToggle.textContent=autoMode?"AUTO ON":"AUTO OFF";
-    autoToggle.classList.toggle("on",autoMode);
+    autoToggle.textContent=gameState.autoEnabled?"AUTO ON":"AUTO OFF";
+    autoToggle.classList.toggle("on",gameState.autoEnabled);
     mapToggle.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
     mapToggle.classList.toggle("on",mapMode==="tech");
     if(speedValue) speedValue.textContent = formatSpeed();
@@ -2156,7 +2209,7 @@
     if(t >= songEndTime()){ endGame(false); return; }
 
     // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
-    filterHeld = autoMode || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
+    filterHeld = gameState.autoEnabled || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
     scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
     scratchMoveAmount=Math.abs(norm(armAngle-prevArmAngle));
     scratchSpeed=Math.abs(armVel);
@@ -2203,7 +2256,6 @@
     paused=false;
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     hideResult();
-    setAutoMode(false);
     if(selectedMenuMode==="normal") mapMode="normal";
     if(selectedMenuMode==="tech") mapMode="tech";
     if(selectedMenuMode==="custom") useCustomChart=customChartData.length>0;
@@ -2293,7 +2345,7 @@
     const mouseAngle=Math.atan2(dy,dx);
     const mouseDist=Math.hypot(dx,dy);
     pointerActive=(performance.now()-lastPointerMs)<1600 || mouseDownRight || !!keys.Space;
-    el.innerHTML=`<div class="debugTitle">INPUT DEBUG <span>${autoMode?"AUTO":"MANUAL"}</span></div>
+    el.innerHTML=`<div class="debugTitle">INPUT DEBUG <span>${gameState.autoEnabled?"AUTO":"MANUAL"}</span></div>
       <div class="debugGrid"><b>REAL INPUT</b><b></b>
         <span>Z</span><strong>${formatBool(keys.KeyZ)}</strong><span>X</span><strong>${formatBool(keys.KeyX)}</strong>
         <span>Space</span><strong>${formatBool(keys.Space)}</strong><span>LMB</span><strong>${formatBool(!!keys.MouseLeft)}</strong>
@@ -2471,7 +2523,7 @@
   bindPress(modeNormalBtn,()=>{selectedMenuMode="normal";updateModeButtons();});
   bindPress(modeTechBtn,()=>{selectedMenuMode="tech";updateModeButtons();});
   bindPress(modeCustomBtn,()=>{selectedMenuMode="custom";updateModeButtons();});
-  bindPress(autoToggle,toggleAuto);
+  bindPress(autoToggle,()=>toggleAuto("mobile"));
   bindPress(mapToggle,()=>{if(running && !debugMode)return; mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();});
   bindPress(debugToggle,()=>toggleDebugOverlay());
   bindPress(keymapToggle,()=>toggleKeymap());
@@ -2522,7 +2574,7 @@
     if(e.code==="KeyD")keyD=true;
     if(e.code==="Space"||e.code==="KeyZ"||e.code==="KeyX"){e.preventDefault(); if(!e.repeat)onCut();}
     if((e.code==="KeyD"||e.code==="F3")&&!e.repeat){e.preventDefault();toggleDebugOverlay();}
-    if(e.code==="KeyO"&&!e.repeat&&(!running||debugMode)){toggleAuto();}
+    if(e.code==="KeyO"&&!e.repeat){toggleAuto("keyboard");}
     if(e.code==="KeyP"&&!e.repeat){ ensureAudioCtx(); applyMusicVolume(); if(song.paused) song.play().catch(()=>{}); else song.pause(); }
     if(e.code==="KeyS"&&!e.repeat){ sfxEnabled=!sfxEnabled; updateButtons(); }
     if(e.code==="Minus"&&!e.repeat){ changeSfx(-0.20); }
@@ -2651,12 +2703,12 @@
     songDifficulty.innerHTML = diffKeys.filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff => {
       const label = selectedSong.difficulties[diff].label || diff.toUpperCase();
       return `<button class="songDiffBtn${selectedMenuMode===diff ? " on" : ""}" type="button" data-difficulty="${diff}">${label} <span>${formatDifficulty(diff)}</span></button>`;
-    }).join("") + `<button class="songDiffBtn songAutoBtn${autoMode ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${autoMode ? "ON" : "OFF"}</span></button>`;
+    }).join("") + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>`;
     for(const btn of songDifficulty.querySelectorAll(".songDiffBtn[data-difficulty]")){
       bindPress(btn,()=>{ selectedMenuMode = btn.dataset.difficulty; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });
     }
     const songAutoBtn=songDifficulty.querySelector("[data-auto-play]");
-    bindPress(songAutoBtn,()=>{ toggleAuto(); renderSongSelect(); });
+    bindPress(songAutoBtn,()=>{ toggleAuto("song-select"); renderSongSelect(); });
   }
 
   async function showSongSelect(){
@@ -2735,8 +2787,8 @@
     applyMusicVolume();
     if(safeTech){safeTech.classList.toggle("on",selectedMenuMode==="tech");safeTech.textContent="TECH " + formatDifficulty("tech");}
     if(safeNormal){safeNormal.classList.toggle("on",selectedMenuMode==="normal");safeNormal.textContent="NORMAL " + formatDifficulty("normal");}
-    if(safeAuto){safeAuto.textContent=autoMode?"AUTO ON":"AUTO OFF";safeAuto.classList.toggle("on",autoMode);}
-    if(safeSetAuto){safeSetAuto.textContent=autoMode?"AUTO PLAY ON":"AUTO PLAY OFF";safeSetAuto.classList.toggle("on",autoMode);safeSetAuto.setAttribute("aria-pressed",autoMode?"true":"false");}
+    if(safeAuto){safeAuto.textContent=gameState.autoEnabled?"AUTO ON":"AUTO OFF";safeAuto.classList.toggle("on",gameState.autoEnabled);}
+    if(safeSetAuto){safeSetAuto.textContent=gameState.autoEnabled?"AUTO PLAY ON":"AUTO PLAY OFF";safeSetAuto.classList.toggle("on",gameState.autoEnabled);safeSetAuto.setAttribute("aria-pressed",gameState.autoEnabled?"true":"false");}
     if(safeSetMap){safeSetMap.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";safeSetMap.classList.toggle("on",mapMode==="tech");}
     if(safeSettingsBtn)safeSettingsBtn.textContent="SETTINGS";
     if(safeSetSfx){safeSetSfx.textContent=formatSfx();safeSetSfx.classList.toggle("on",sfxEnabled);}
@@ -2805,11 +2857,11 @@
   safeBind(safeEditor,()=>{ window.location.href="./editor.html"; });
   safeBind(safeTech,()=>{selectedMenuMode="tech";mapMode="tech";safeRefresh();updateButtons();});
   safeBind(safeNormal,()=>{selectedMenuMode="normal";mapMode="normal";safeRefresh();updateButtons();});
-  safeBind(safeAuto,toggleAuto);
+  safeBind(safeAuto,()=>toggleAuto("song-select"));
   safeBind(safeFull,requestFullscreenSafe);
   safeBind(safeSettingsBtn,()=>toggleSettings(true));
 
-  safeBind(safeSetAuto,toggleAuto);
+  safeBind(safeSetAuto,()=>toggleAuto("settings"));
   safeBind(safeSetMap,()=>{if(running && !debugMode)return; mapMode=mapMode==="tech"?"normal":"tech";selectedMenuMode=mapMode;safeRefresh();restartIfRunning();});
   safeBind(safeSetKeymap,()=>toggleKeymap(true));
   safeBind(safeSetFull,requestFullscreenSafe);
