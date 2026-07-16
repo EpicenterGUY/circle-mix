@@ -74,6 +74,10 @@
   const resultMapLevel = document.getElementById("resultMapLevel");
   const resultRetry = document.getElementById("resultRetry");
   const resultBackTitle = document.getElementById("resultBackTitle");
+  const resultSongTitle = document.getElementById("resultSongTitle");
+  const resultAuto = document.getElementById("resultAuto");
+  const resultNewRecord = document.getElementById("resultNewRecord");
+  const resultBest = document.getElementById("resultBest");
   const rotateOverlay = document.getElementById("rotateOverlay");
   const songSelect = document.getElementById("songSelect");
   const songCarousel = document.getElementById("songCarousel");
@@ -152,6 +156,7 @@
   let activeLocalBlobUrl=null;
   if(!initialDifficultyParam && selectedMenuMode!=="normal" && selectedMenuMode!=="tech") selectedMenuMode="tech";
   let paused=false;
+  let completionPending=false, completionTimer=0, resultShown=false, abortingRun=false;
   let settingsVisible=false;
   let fullscreenInterrupted=false;
   let pauseSettingsOpen=false;
@@ -294,11 +299,36 @@
 
   function calculateScoreStats(){
     const totalNotes = chart.length;
-    const accuracy = maxHitValue > 0 ? clamp(actualHitValue / maxHitValue, 0, 1) : 1;
-    const comboRatio = totalNotes > 0 ? clamp(maxCombo / totalNotes, 0, 1) : 0;
-    const totalScore = Math.round(accuracy * 900000 + comboRatio * 100000);
-    return {accuracy, comboRatio, score:totalScore, totalNotes};
+    if(totalNotes <= 0 || maxHitValue <= 0){
+      return {ok:false, error:"EMPTY_CHART", accuracy:0, comboRatio:0, score:0, totalNotes:0};
+    }
+    const accuracy = clamp(actualHitValue / maxHitValue, 0, 1);
+    const comboRatio = clamp(maxCombo / totalNotes, 0, 1);
+    const totalScore = clamp(Math.round(accuracy * 900000 + comboRatio * 100000), 0, 1000000);
+    return {ok:true, accuracy, comboRatio, score:totalScore, totalNotes};
   }
+
+  const RECORD_STORAGE_KEY = "circleMix.bestRecords.v1";
+  function songRecordId(songData=selectedSong){ const source=songData?.source==="local" ? "local" : "built-in"; return `${source}:${songData?.id || "unknown"}`; }
+  function recordKey(diff=mapMode, songData=selectedSong){ return `${songRecordId(songData)}:${diff}`; }
+  function readRecords(){ try{ return JSON.parse(localStorage.getItem(RECORD_STORAGE_KEY) || "{}"); }catch(e){ return {}; } }
+  function writeRecords(records){ try{ localStorage.setItem(RECORD_STORAGE_KEY, JSON.stringify(records)); }catch(e){ console.warn("record save failed", e); } }
+  function isBetterRecord(next, prev){
+    if(!prev) return true;
+    if(next.bestScore !== prev.bestScore) return next.bestScore > prev.bestScore;
+    if(next.bestAccuracy !== prev.bestAccuracy) return next.bestAccuracy > prev.bestAccuracy;
+    return next.missCount < prev.missCount;
+  }
+  function saveBestRecord(result){
+    if(result.autoPlay) return {saved:false, newRecord:false, previous:null};
+    const records=readRecords();
+    const key=recordKey(result.difficulty);
+    const previous=records[key] || null;
+    const entry={bestScore:result.finalScore, bestAccuracy:result.accuracyRatio, bestRank:result.rank, maxCombo:result.maxCombo, missCount:result.missCount, playedAt:new Date().toISOString()};
+    if(isBetterRecord(entry, previous)){ records[key]=entry; writeRecords(records); return {saved:true, newRecord:true, previous}; }
+    return {saved:false, newRecord:false, previous};
+  }
+  function getBestRecord(diff=selectedMenuMode, songData=selectedSong){ return readRecords()[recordKey(diff, songData)] || null; }
 
   function calculateRank(accuracy){
     if(accuracy >= 0.995 && missCount === 0) return "SSS";
@@ -2117,7 +2147,7 @@
 
 
   function hideResult(){
-    if(resultOverlay) resultOverlay.classList.remove("show");
+    if(resultOverlay) resultOverlay.classList.remove("show","newRecord");
   }
 
   function finalizeRemainingMisses(){
@@ -2126,40 +2156,94 @@
     }
   }
 
-  function showResult(){
+  function buildResultData(){
     finalizeRemainingMisses();
     const stats=calculateScoreStats();
+    if(!stats.ok) return null;
     const rank=calculateRank(stats.accuracy);
-    score=stats.score;
-    if(resultScore) resultScore.textContent=String(stats.score).padStart(7,"0");
-    if(resultRank) resultRank.textContent=rank;
-    if(resultAccuracy) resultAccuracy.textContent=(stats.accuracy*100).toFixed(2)+"%";
-    if(resultPerfect) resultPerfect.textContent=perfectCount;
-    if(resultGreat) resultGreat.textContent=greatCount;
-    if(resultMiss) resultMiss.textContent=missCount;
-    if(resultMaxCombo) resultMaxCombo.textContent=maxCombo;
-    if(resultTotalNotes) resultTotalNotes.textContent=stats.totalNotes;
-    if(resultMapLevel) resultMapLevel.textContent=(mapMode==="tech"?"TECH ":"NORMAL ")+formatDifficulty(mapMode);
-    if(resultOverlay) resultOverlay.classList.add("show");
+    return {
+      songTitle:selectedSong?.title || "UNKNOWN",
+      difficulty:mapMode,
+      starLevel:formatDifficulty(mapMode),
+      finalScore:stats.score,
+      accuracyRatio:stats.accuracy,
+      perfectCount, greatCount, missCount, maxCombo,
+      totalNotes:stats.totalNotes,
+      rank,
+      autoPlay:!!gameState.autoEnabled
+    };
+  }
+
+  function animateResultScore(finalScore){
+    if(!resultScore) return;
+    const start=performance.now();
+    const duration=650;
+    function tick(ms){
+      if(!resultOverlay?.classList.contains("show")) return;
+      const p=clamp((ms-start)/duration,0,1);
+      const eased=1-Math.pow(1-p,3);
+      resultScore.textContent=String(Math.round(finalScore*eased)).padStart(7,"0");
+      if(p<1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function showResult(result, recordInfo){
+    score=result.finalScore;
+    if(resultSongTitle) resultSongTitle.textContent=`${result.songTitle} / ${result.difficulty.toUpperCase()} / ${result.starLevel}`;
+    if(resultRank){ resultRank.textContent=""; setTimeout(()=>{ if(resultOverlay?.classList.contains("show")) resultRank.textContent=result.rank; }, 280); }
+    if(resultAccuracy) resultAccuracy.textContent=(result.accuracyRatio*100).toFixed(2)+"%";
+    if(resultPerfect) resultPerfect.textContent=result.perfectCount;
+    if(resultGreat) resultGreat.textContent=result.greatCount;
+    if(resultMiss) resultMiss.textContent=result.missCount;
+    if(resultMaxCombo) resultMaxCombo.textContent=result.maxCombo;
+    if(resultTotalNotes) resultTotalNotes.textContent=result.totalNotes;
+    if(resultMapLevel) resultMapLevel.textContent=(result.difficulty==="tech"?"TECH ":"NORMAL ")+result.starLevel;
+    if(resultAuto) resultAuto.textContent=result.autoPlay ? "AUTO PLAY RESULT" : "PLAYER RESULT";
+    if(resultNewRecord) resultNewRecord.textContent=recordInfo?.newRecord ? "NEW RECORD" : "";
+    if(resultBest){
+      const best=recordInfo?.newRecord ? {bestScore:result.finalScore,bestRank:result.rank,bestAccuracy:result.accuracyRatio} : recordInfo?.previous;
+      resultBest.textContent=best ? `BEST ${String(best.bestScore).padStart(7,"0")} / ${best.bestRank} / ${(best.bestAccuracy*100).toFixed(2)}%` : (result.autoPlay ? "AUTO PLAY is not saved" : "NO RECORD");
+    }
+    if(resultOverlay){ resultOverlay.classList.toggle("newRecord", !!recordInfo?.newRecord); resultOverlay.classList.add("show"); }
+    animateResultScore(result.finalScore);
+  }
+
+  function completeRun(){
+    if(resultShown || abortingRun) return;
+    resultShown=true;
+    completionPending=false;
+    if(completionTimer){ clearTimeout(completionTimer); completionTimer=0; }
+    running=false;
+    setCleanGameplay(false);
+    if(raf){ cancelAnimationFrame(raf); raf=0; }
+    try{ song.pause(); }catch(e){}
+    const result=buildResultData();
+    if(!result){ alert("결과를 계산할 수 없습니다. 채보가 비어 있거나 잘못되었습니다."); exitToMenu(); return; }
+    const recordInfo=saveBestRecord(result);
+    showResult(result, recordInfo);
+    updateButtons();
+  }
+
+  function scheduleCompletion(){
+    if(resultShown || completionPending || abortingRun) return;
+    completionPending=true;
+    completionTimer=setTimeout(completeRun, 1000);
   }
 
   function endGame(stopAudio=true){
+    abortingRun=true;
+    completionPending=false;
+    if(completionTimer){ clearTimeout(completionTimer); completionTimer=0; }
     running=false;
     setCleanGameplay(false);
-    if(raf){
-      cancelAnimationFrame(raf);
-      raf=0;
-    }
+    if(raf){ cancelAnimationFrame(raf); raf=0; }
     if(stopAudio){
       try{ song.pause(); }catch(e){}
       if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
     }
-    if(!stopAudio && judgedCount > 0){
-      showResult();
-    }else{
-      hideResult();
-      startLayer.style.display="flex";
-    }
+    hideResult();
+    startLayer.style.display="flex";
     updateButtons();
   }
 
@@ -2216,7 +2300,9 @@
     if(!running)return;
     const dt=Math.min(.033,(ms-lastMs)/1000||.016);
     lastMs=ms; const t=now();
-    if(t >= songEndTime()){ endGame(false); return; }
+    const lastHitTime = chart.length ? Math.max(...chart.map(n=>n.hitTime + (n.duration || 0))) : 0;
+    const notesSettled = judgedCount >= chart.length || song.ended || t >= lastHitTime + HIT_WINDOW + 0.25;
+    if((song.ended || t >= songEndTime()) && notesSettled){ scheduleCompletion(); }
 
     // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
     filterHeld = gameState.autoEnabled || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
@@ -2264,6 +2350,7 @@
     ensureAudioCtx();
     try{ await prepareSelectedAudio(); }catch(err){ alert(err.message); return false; }
     paused=false;
+    abortingRun=false; completionPending=false; resultShown=false; if(completionTimer){ clearTimeout(completionTimer); completionTimer=0; }
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     closePauseSettings();
     hideResult();
@@ -2273,7 +2360,9 @@
     editorMode=mode==="editor";
     if(editorPanel)editorPanel.classList.toggle("show",editorMode);
     useCustomChart=(selectedMenuMode==="custom" && customChartData.length>0);
-    chart=generateChart(); score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0; actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0);
+    chart=generateChart();
+    if(!chart.length){ alert("채보가 비어 있어 플레이를 시작할 수 없습니다."); endGame(true); return false; }
+    score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0; actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0);
     feedback=[]; particles=[]; waves=[];
     running=true;
     setCleanGameplay(true);
@@ -2662,7 +2751,7 @@
     if(e.code==="ShiftLeft"||e.code==="ShiftRight")scratchHeld=!!(mouseDownRight||keys.ShiftLeft||keys.ShiftRight);
   });
 
-  song.addEventListener("ended", ()=>endGame(false));
+  song.addEventListener("ended", ()=>scheduleCompletion());
 
   // SAFE MENU PATCH: simple menu on top of stable Polish Final.
   const safeMenu=document.getElementById("safeMenu");
@@ -2753,7 +2842,9 @@
     const diffKeys=Object.keys(selectedSong?.difficulties||{});
     songDifficulty.innerHTML = diffKeys.filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff => {
       const label = selectedSong.difficulties[diff].label || diff.toUpperCase();
-      return `<button class="songDiffBtn${selectedMenuMode===diff ? " on" : ""}" type="button" data-difficulty="${diff}">${label} <span>${formatDifficulty(diff)}</span></button>`;
+      const best = getBestRecord(diff, selectedSong);
+      const bestHtml = best ? `<small>BEST ${String(best.bestScore).padStart(7,"0")} · ${best.bestRank} · ${(best.bestAccuracy*100).toFixed(2)}%</small>` : `<small>NO RECORD</small>`;
+      return `<button class="songDiffBtn${selectedMenuMode===diff ? " on" : ""}" type="button" data-difficulty="${diff}">${label} <span>${formatDifficulty(diff)}</span>${bestHtml}</button>`;
     }).join("") + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>`;
     for(const btn of songDifficulty.querySelectorAll(".songDiffBtn[data-difficulty]")){
       bindPress(btn,()=>{ selectedMenuMode = btn.dataset.difficulty; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });

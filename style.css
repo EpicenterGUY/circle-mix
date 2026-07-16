@@ -634,3 +634,22 @@ body.pauseSettingsOpen .pauseCard *{pointer-events:none;}
 body.safeSettings .tuner,body.playingClean.showSettings .tuner{display:none!important;}
 body.debugMode.safeSettings .tuner,body.debugMode.playingClean.showSettings .tuner{display:grid!important;}
 @media (pointer:coarse),(max-width:768px){.pauseSettingsGrid{grid-template-columns:1fr}.pauseSettingsGrid .safeMenuBtn{min-height:48px}}
+
+.resultSongTitle{margin:6px 0 0;color:#dffcff;font-size:13px;font-weight:900;letter-spacing:.10em}
+.resultBadges{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
+.resultBadges span{min-height:18px;padding:4px 8px;border-radius:999px;border:1px solid rgba(92,255,251,.28);background:rgba(92,255,251,.10);color:#80f7ff;font-size:10px;font-weight:1000;letter-spacing:.12em}
+.resultBadges span:empty{display:none}
+.resultOverlay.newRecord .resultCard{box-shadow:0 0 48px rgba(255,243,106,.24),0 18px 80px rgba(0,0,0,.55)}
+.resultOverlay.newRecord #resultNewRecord{color:#10121a;background:#fff36a;border-color:#fff36a;animation:newRecordPulse .9s ease-in-out infinite alternate}
+@keyframes newRecordPulse{from{transform:scale(1);filter:brightness(1)}to{transform:scale(1.04);filter:brightness(1.2)}}
+.songDiffBtn small{display:block;margin-top:4px;color:#9fb0c7;font-size:10px;font-style:normal;font-weight:900;letter-spacing:.08em}
+@media(max-height:520px) and (orientation:landscape){
+  .resultCard{padding:14px;max-width:min(920px,96vw)}
+  .resultHeader{padding-bottom:8px;margin-bottom:8px}
+  .resultGrid{gap:7px}
+  .resultGrid>div{padding:8px 10px}
+  .resultScoreBlock{margin:8px 0;padding:8px 12px}
+  .resultScoreBlock strong{font-size:36px}
+  .resultRankBox strong{font-size:46px}
+  .resultButtons{margin-top:10px}
+}
