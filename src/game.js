@@ -1996,7 +1996,7 @@
     autoBox.textContent=autoMode?"AUTO ON":"AUTO OFF";
     mapBox.textContent=(mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
     const hudSongTitle = document.querySelector(".hudSong span");
-    if(hudSongTitle) hudSongTitle.textContent = selectedSong?.title ? `CIRCLE MIX ${selectedSong.title}` : "CIRCLE MIX";
+    if(hudSongTitle) hudSongTitle.textContent = selectedSong?.title || "";
     autoToggle.textContent=autoMode?"AUTO ON":"AUTO OFF";
     autoToggle.classList.toggle("on",autoMode);
     mapToggle.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
@@ -2615,7 +2615,7 @@
     if(safeAuto){safeAuto.textContent=autoMode?"AUTO ON":"AUTO OFF";safeAuto.classList.toggle("on",autoMode);}
     if(safeSetAuto){safeSetAuto.textContent=autoMode?"AUTO ON":"AUTO OFF";safeSetAuto.classList.toggle("on",autoMode);}
     if(safeSetMap){safeSetMap.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";safeSetMap.classList.toggle("on",mapMode==="tech");}
-    if(safeSettingsBtn)safeSettingsBtn.textContent="SETTINGS · " + formatSpeed() + " · " + formatMusic() + " · " + formatSfx() + " · " + formatOffset();
+    if(safeSettingsBtn)safeSettingsBtn.textContent="SETTINGS";
     if(safeSetSfx){safeSetSfx.textContent=formatSfx();safeSetSfx.classList.toggle("on",sfxEnabled);}
     if(safeSetMusic)safeSetMusic.textContent=formatMusic();
     if(safeSetSpdDown)safeSetSpdDown.textContent=formatSpeed() + " −";
