@@ -255,3 +255,21 @@ html,body{
     .safeMenuGrid{grid-template-columns:1fr 1fr}
     .safeMenuBtn.big{grid-column:span 2}
   }
+
+#inputDebugOverlay{
+  position:fixed;left:16px;top:86px;z-index:60;display:none;
+  width:min(360px,calc(100vw - 32px));max-height:calc(100vh - 110px);overflow:auto;
+  padding:10px 12px;border-radius:14px;background:rgba(3,8,18,.78);
+  border:1px solid rgba(92,255,251,.28);box-shadow:0 14px 44px rgba(0,0,0,.38);
+  color:#eaf3ff;font:11px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  pointer-events:none;backdrop-filter:blur(8px);white-space:normal;
+}
+#inputDebugOverlay.show{display:block}
+#inputDebugOverlay .debugTitle{font-weight:1000;color:#5cfffb;margin-bottom:8px;letter-spacing:.08em}
+#inputDebugOverlay .debugTitle span{float:right;color:#fff;letter-spacing:0}
+#inputDebugOverlay .debugGrid{display:grid;grid-template-columns:1fr auto;gap:3px 10px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14)}
+#inputDebugOverlay .debugGrid b{color:#fff;font-size:12px}
+#inputDebugOverlay .debugGrid span{color:#9fb0c7}
+#inputDebugOverlay .debugGrid strong{color:#fff;text-align:right;font-weight:900}
+body.playingClean #inputDebugOverlay.show{display:block !important}
+@media(max-width:820px){#inputDebugOverlay{left:12px;right:12px;top:74px;width:auto;max-height:calc(100vh - 95px)}}
