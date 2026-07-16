@@ -64,6 +64,7 @@
   const pauseSetFull = document.getElementById("pauseSetFull");
   const resultOverlay = document.getElementById("resultOverlay");
   const resultScore = document.getElementById("resultScore");
+  const resultPower = document.getElementById("resultPower");
   const resultRank = document.getElementById("resultRank");
   const resultAccuracy = document.getElementById("resultAccuracy");
   const resultPerfect = document.getElementById("resultPerfect");
@@ -319,16 +320,55 @@
     if(next.bestAccuracy !== prev.bestAccuracy) return next.bestAccuracy > prev.bestAccuracy;
     return next.missCount < prev.missCount;
   }
+  function isBetterPowerRecord(next, prev){
+    if(!Number.isFinite(next.bestPower)) return false;
+    if(!prev || !Number.isFinite(prev.bestPower)) return true;
+    if(next.bestPower !== prev.bestPower) return next.bestPower > prev.bestPower;
+    if(next.bestPowerAccuracy !== prev.bestPowerAccuracy) return next.bestPowerAccuracy > prev.bestPowerAccuracy;
+    if(next.bestPowerMissCount !== prev.bestPowerMissCount) return next.bestPowerMissCount < prev.bestPowerMissCount;
+    return next.bestPowerScore > prev.bestPowerScore;
+  }
+  function calculatePower({stars, accuracyRatio, comboRatio, missCount, totalNotes}){
+    const starValue=Number(stars);
+    const noteCount=Number(totalNotes);
+    if(!Number.isFinite(starValue) || starValue <= 0 || !Number.isFinite(noteCount) || noteCount <= 0) return null;
+    const accuracy=clamp(Number.isFinite(accuracyRatio) ? accuracyRatio : 0, 0, 1);
+    const combo=clamp(Number.isFinite(comboRatio) ? comboRatio : 0, 0, 1);
+    const misses=Math.max(0, Number.isFinite(missCount) ? Math.trunc(missCount) : 0);
+    const missPenalty=Math.pow(0.97, misses);
+    const power=Math.pow(starValue, 2.15) * 18 * Math.pow(accuracy, 2.4) * (0.75 + 0.25 * combo) * missPenalty;
+    if(!Number.isFinite(power)) return null;
+    return Math.max(0, Math.round(power));
+  }
+  function migrateBestRecord(record){
+    if(!record) return null;
+    return {
+      ...record,
+      bestPower:Number.isFinite(record.bestPower) ? record.bestPower : undefined,
+      bestPowerAccuracy:Number.isFinite(record.bestPowerAccuracy) ? record.bestPowerAccuracy : undefined,
+      bestPowerScore:Number.isFinite(record.bestPowerScore) ? record.bestPowerScore : undefined,
+      bestPowerMissCount:Number.isFinite(record.bestPowerMissCount) ? record.bestPowerMissCount : undefined,
+      bestPowerAchievedAt:record.bestPowerAchievedAt || undefined
+    };
+  }
   function saveBestRecord(result){
-    if(result.autoPlay) return {saved:false, newRecord:false, previous:null};
+    if(result.autoPlay) return {saved:false, newRecord:false, newPowerRecord:false, previous:null};
     const records=readRecords();
     const key=recordKey(result.difficulty);
-    const previous=records[key] || null;
-    const entry={bestScore:result.finalScore, bestAccuracy:result.accuracyRatio, bestRank:result.rank, maxCombo:result.maxCombo, missCount:result.missCount, playedAt:new Date().toISOString()};
-    if(isBetterRecord(entry, previous)){ records[key]=entry; writeRecords(records); return {saved:true, newRecord:true, previous}; }
-    return {saved:false, newRecord:false, previous};
+    const previous=migrateBestRecord(records[key] || null);
+    const nowIso=new Date().toISOString();
+    const scoreEntry={bestScore:result.finalScore, bestAccuracy:result.accuracyRatio, bestRank:result.rank, maxCombo:result.maxCombo, missCount:result.missCount, playedAt:nowIso};
+    const powerEntry={bestPower:result.power, bestPowerAccuracy:result.accuracyRatio, bestPowerScore:result.finalScore, bestPowerMissCount:result.missCount, bestPowerAchievedAt:nowIso};
+    const newRecord=isBetterRecord(scoreEntry, previous);
+    const newPowerRecord=result.power !== null && isBetterPowerRecord(powerEntry, previous);
+    if(newRecord || newPowerRecord){
+      records[key]={...(previous || {}), ...(newRecord ? scoreEntry : {}), ...(newPowerRecord ? powerEntry : {})};
+      writeRecords(records);
+      return {saved:true, newRecord, newPowerRecord, previous};
+    }
+    return {saved:false, newRecord:false, newPowerRecord:false, previous};
   }
-  function getBestRecord(diff=selectedMenuMode, songData=selectedSong){ return readRecords()[recordKey(diff, songData)] || null; }
+  function getBestRecord(diff=selectedMenuMode, songData=selectedSong){ return migrateBestRecord(readRecords()[recordKey(diff, songData)] || null); }
 
   function calculateRank(accuracy){
     if(accuracy >= 0.995 && missCount === 0) return "SSS";
@@ -2150,6 +2190,27 @@
     if(resultOverlay) resultOverlay.classList.remove("show","newRecord");
   }
 
+  function cleanupPlaySession({stopAudio=true, hideResultOverlay=true, abort=true}={}){
+    if(abort) abortingRun=true;
+    completionPending=false;
+    if(completionTimer){ clearTimeout(completionTimer); completionTimer=0; }
+    running=false;
+    paused=false;
+    pauseSettingsOpen=false;
+    fullscreenInterrupted=false;
+    Object.keys(keys).forEach(k=>{ keys[k]=false; });
+    keyA=false; keyD=false; filterHeld=false; scratchHeld=false; mouseDownRight=false;
+    if(raf){ cancelAnimationFrame(raf); raf=0; }
+    if(pauseOverlay) pauseOverlay.classList.remove("show");
+    if(pauseSettingsOverlay) pauseSettingsOverlay.classList.remove("show");
+    document.body.classList.remove("pausedInputBlocked", "pauseSettingsOpen", "showSettings");
+    settingsVisible=false;
+    setPauseMessage("");
+    if(stopAudio){ try{ song.pause(); }catch(e){} }
+    if(hideResultOverlay) hideResult();
+    setCleanGameplay(false);
+  }
+
   function finalizeRemainingMisses(){
     for(const note of chart){
       if(!note.done && !note.missed) miss(note);
@@ -2161,11 +2222,15 @@
     const stats=calculateScoreStats();
     if(!stats.ok) return null;
     const rank=calculateRank(stats.accuracy);
+    const difficulty=getDifficulty(mapMode);
+    const power=calculatePower({stars:difficulty?.stars, accuracyRatio:stats.accuracy, comboRatio:stats.comboRatio, missCount, totalNotes:stats.totalNotes});
     return {
       songTitle:selectedSong?.title || "UNKNOWN",
       difficulty:mapMode,
       starLevel:formatDifficulty(mapMode),
+      stars:difficulty?.stars,
       finalScore:stats.score,
+      power,
       accuracyRatio:stats.accuracy,
       perfectCount, greatCount, missCount, maxCombo,
       totalNotes:stats.totalNotes,
@@ -2199,25 +2264,21 @@
     if(resultMaxCombo) resultMaxCombo.textContent=result.maxCombo;
     if(resultTotalNotes) resultTotalNotes.textContent=result.totalNotes;
     if(resultMapLevel) resultMapLevel.textContent=(result.difficulty==="tech"?"TECH ":"NORMAL ")+result.starLevel;
+    if(resultPower) resultPower.textContent=result.autoPlay ? "AUTO — NO POWER" : (result.power !== null ? `POWER ${result.power}` : "POWER ---");
     if(resultAuto) resultAuto.textContent=result.autoPlay ? "AUTO PLAY RESULT" : "PLAYER RESULT";
-    if(resultNewRecord) resultNewRecord.textContent=recordInfo?.newRecord ? "NEW RECORD" : "";
+    if(resultNewRecord) resultNewRecord.textContent=recordInfo?.newPowerRecord ? "NEW POWER RECORD" : (recordInfo?.newRecord ? "NEW RECORD" : "");
     if(resultBest){
-      const best=recordInfo?.newRecord ? {bestScore:result.finalScore,bestRank:result.rank,bestAccuracy:result.accuracyRatio} : recordInfo?.previous;
-      resultBest.textContent=best ? `BEST ${String(best.bestScore).padStart(7,"0")} / ${best.bestRank} / ${(best.bestAccuracy*100).toFixed(2)}%` : (result.autoPlay ? "AUTO PLAY is not saved" : "NO RECORD");
+      const best=recordInfo?.newRecord ? {bestScore:result.finalScore,bestRank:result.rank,bestAccuracy:result.accuracyRatio,bestPower:recordInfo?.newPowerRecord ? result.power : recordInfo?.previous?.bestPower} : (recordInfo?.newPowerRecord ? {...(recordInfo?.previous||{}), bestPower:result.power} : recordInfo?.previous);
+      resultBest.textContent=best ? `BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")} / POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"} / ${best.bestRank || "---"} / ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}` : (result.autoPlay ? "AUTO PLAY is not saved" : "NO RECORD");
     }
-    if(resultOverlay){ resultOverlay.classList.toggle("newRecord", !!recordInfo?.newRecord); resultOverlay.classList.add("show"); }
+    if(resultOverlay){ resultOverlay.classList.toggle("newRecord", !!(recordInfo?.newRecord || recordInfo?.newPowerRecord)); resultOverlay.classList.add("show"); }
     animateResultScore(result.finalScore);
   }
 
   function completeRun(){
     if(resultShown || abortingRun) return;
     resultShown=true;
-    completionPending=false;
-    if(completionTimer){ clearTimeout(completionTimer); completionTimer=0; }
-    running=false;
-    setCleanGameplay(false);
-    if(raf){ cancelAnimationFrame(raf); raf=0; }
-    try{ song.pause(); }catch(e){}
+    cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:false});
     const result=buildResultData();
     if(!result){ alert("결과를 계산할 수 없습니다. 채보가 비어 있거나 잘못되었습니다."); exitToMenu(); return; }
     const recordInfo=saveBestRecord(result);
@@ -2232,17 +2293,8 @@
   }
 
   function endGame(stopAudio=true){
-    abortingRun=true;
-    completionPending=false;
-    if(completionTimer){ clearTimeout(completionTimer); completionTimer=0; }
-    running=false;
-    setCleanGameplay(false);
-    if(raf){ cancelAnimationFrame(raf); raf=0; }
-    if(stopAudio){
-      try{ song.pause(); }catch(e){}
-      if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
-    }
-    hideResult();
+    cleanupPlaySession({stopAudio, hideResultOverlay:true, abort:true});
+    if(stopAudio && activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
     startLayer.style.display="flex";
     updateButtons();
   }
@@ -2275,21 +2327,12 @@
   }
 
   function retryGame(){
-    if(pauseOverlay) pauseOverlay.classList.remove("show");
-    document.body.classList.remove("pausedInputBlocked");
-    hideResult();
-    closePauseSettings();
-    paused=false;
+    cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     start(editorMode?"editor":"play");
   }
 
   function exitToMenu(){
-    if(pauseOverlay) pauseOverlay.classList.remove("show");
-    document.body.classList.remove("pausedInputBlocked");
-    hideResult();
-    closePauseSettings();
-    fullscreenInterrupted=false;
-    paused=false;
+    cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     endGame(true);
     showSongSelect();
   }
@@ -2349,11 +2392,9 @@
     if(raf)cancelAnimationFrame(raf);
     ensureAudioCtx();
     try{ await prepareSelectedAudio(); }catch(err){ alert(err.message); return false; }
+    cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     paused=false;
-    abortingRun=false; completionPending=false; resultShown=false; if(completionTimer){ clearTimeout(completionTimer); completionTimer=0; }
-    if(pauseOverlay) pauseOverlay.classList.remove("show");
-    closePauseSettings();
-    hideResult();
+    abortingRun=false; completionPending=false; resultShown=false;
     if(selectedMenuMode==="normal") mapMode="normal";
     if(selectedMenuMode==="tech") mapMode="tech";
     if(selectedMenuMode==="custom") useCustomChart=customChartData.length>0;
@@ -2738,7 +2779,7 @@
     }
     if(e.code==="KeyM"&&!e.repeat&&(!running||debugMode)){mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();}
     if(e.code==="KeyK"&&!e.repeat)toggleKeymap();
-    if(e.code==="Escape"&&!e.repeat){ if(keymapOverlay&&keymapOverlay.classList.contains("show")) toggleKeymap(false); else if(pauseSettingsOpen) closePauseSettings(); else if(paused) resumeGame(); else showPause(); }
+    if(e.code==="Escape"&&!e.repeat){ if(keymapOverlay&&keymapOverlay.classList.contains("show")) toggleKeymap(false); else if(resultOverlay&&resultOverlay.classList.contains("show")) return; else if(pauseSettingsOpen) closePauseSettings(); else if(paused) resumeGame(); else showPause(); }
     if(e.code==="KeyF"&&!e.repeat)requestFullscreenSafe();
     if(e.code==="KeyH"&&!e.repeat)toggleSettings();
     if(e.code==="KeyE"&&!e.repeat){toggleSettings(true); toggleEditor();}
@@ -2843,7 +2884,7 @@
     songDifficulty.innerHTML = diffKeys.filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff => {
       const label = selectedSong.difficulties[diff].label || diff.toUpperCase();
       const best = getBestRecord(diff, selectedSong);
-      const bestHtml = best ? `<small>BEST ${String(best.bestScore).padStart(7,"0")} · ${best.bestRank} · ${(best.bestAccuracy*100).toFixed(2)}%</small>` : `<small>NO RECORD</small>`;
+      const bestHtml = best ? `<small>BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")}<br>BEST POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"}<br>BEST RANK ${best.bestRank || "---"}<br>BEST ACCURACY ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}</small>` : `<small>BEST SCORE ---<br>BEST POWER ---<br>BEST RANK ---<br>BEST ACCURACY ---</small>`;
       return `<button class="songDiffBtn${selectedMenuMode===diff ? " on" : ""}" type="button" data-difficulty="${diff}">${label} <span>${formatDifficulty(diff)}</span>${bestHtml}</button>`;
     }).join("") + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>`;
     for(const btn of songDifficulty.querySelectorAll(".songDiffBtn[data-difficulty]")){
@@ -2864,6 +2905,7 @@
   }
 
   function showTitleMenu(){
+    cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     if(songSelect) songSelect.hidden = true;
     safeSetState("title");
     safeRefresh();

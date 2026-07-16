@@ -385,6 +385,7 @@ body.playingClean .rhythmHud{min-width:0;padding:0;background:transparent}.guide
 .resultRankBox strong{display:block;font-size:clamp(48px,9vw,86px);line-height:.9;color:#fff36a;text-shadow:0 0 28px rgba(255,243,106,.50)}
 .resultScoreBlock{padding:14px 18px;margin:12px 0 16px;border-radius:20px;background:rgba(92,255,251,.08);border:1px solid rgba(92,255,251,.22);text-align:center}
 .resultScoreBlock strong{font-size:clamp(46px,10vw,92px);line-height:1;font-weight:200;letter-spacing:.08em;color:#fff;text-shadow:0 0 26px rgba(92,255,251,.38)}
+.resultPower{display:block;margin-top:10px;color:#fff36a;font-size:clamp(18px,4vw,30px);font-style:normal;font-weight:1000;letter-spacing:.12em;text-shadow:0 0 18px rgba(255,243,106,.34)}
 .resultGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .resultGrid>div{padding:13px 14px;border-radius:16px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.10)}
 .resultGrid strong{display:block;margin-top:5px;font-size:24px;font-weight:850;letter-spacing:.04em;color:#fff}.resultWide{grid-column:span 3}.resultWide strong{color:#fff36a}
@@ -650,6 +651,7 @@ body.debugMode.safeSettings .tuner,body.debugMode.playingClean.showSettings .tun
   .resultGrid>div{padding:8px 10px}
   .resultScoreBlock{margin:8px 0;padding:8px 12px}
   .resultScoreBlock strong{font-size:36px}
+  .resultPower{font-size:18px;margin-top:5px}
   .resultRankBox strong{font-size:46px}
   .resultButtons{margin-top:10px}
 }
