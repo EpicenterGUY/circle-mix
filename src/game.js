@@ -481,7 +481,7 @@
     ringBursts.push({color, power, life:.52, label});
   }
   function addScratchBurst(angle,color,dir=1){
-    scratchBursts.push({angle,color,dir,life:.48});
+    scratchBursts.push({angle,color,dir,life:.32});
   }
 
   function ensureAudioCtx(){
@@ -624,16 +624,16 @@
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
 
     addFeedback(label,p.x,p.y-18,color);
-    addParticles(p.x,p.y,color,isScratch?28:(isSwing?22:14),isScratch?1.45:(isSwing?1.35:1));
+    addParticles(p.x,p.y,color,isScratch?16:(isSwing?22:14),isScratch?.85:(isSwing?1.35:1));
     addWave((isScratch||isSwing)?a:a,color);
 
     if(isScratch){
       const d=slideDelta(n);
       addScratchBurst(a,color,d>=0?1:-1);
-      for(let i=0;i<16;i++){
-        const ang=a + (Math.random()-.5)*.9;
-        const rr=hitR + (Math.random()-.5)*28;
-        addParticles(cx+Math.cos(ang)*rr, cy+Math.sin(ang)*rr, color, 1, .95);
+      for(let i=0;i<8;i++){
+        const ang=a + (Math.random()-.5)*.7;
+        const rr=hitR + (Math.random()-.5)*20;
+        addParticles(cx+Math.cos(ang)*rr, cy+Math.sin(ang)*rr, color, 1, .62);
       }
       addFeedback("SCRATCH",p.x,p.y+18,color);
     }
@@ -669,7 +669,8 @@
   }
 
   function checkScratch(n, t){
-    // SCRATCH = Shift를 누른 채 짧게 좌/우로 긁는 액션. SLIDE처럼 긴 경로를 추적하지 않는다.
+    // SCRATCH = 우클릭을 누른 채 짧게 좌/우 또는 시계/반시계로 긁는 마찰 액션.
+    // Shift는 보조 입력/fallback으로만 허용하며, SLIDE처럼 긴 경로를 추적하지 않는다.
     if(!scratchHeld)return false;
     if(!aligned(n.angle,.026))return false;
     const dir=n.type==="scratchCW"?1:-1;
@@ -973,7 +974,7 @@
       ctx.fillStyle="rgba(255,255,255,.78)";
       ctx.font="900 10px system-ui";
       ctx.textAlign="center";ctx.textBaseline="middle";
-      ctx.fillText("SHIFT",Math.cos(n.angle)*(hitR+24),Math.sin(n.angle)*(hitR+24));
+      ctx.fillText("RMB",Math.cos(n.angle)*(hitR+24),Math.sin(n.angle)*(hitR+24));
       ctx.restore();
       return;
     }
@@ -1449,7 +1450,7 @@
     ctx.fillStyle="rgba(255,245,235,.86)";
     ctx.font="900 10px system-ui";
     ctx.textAlign="center";ctx.textBaseline="middle";
-    ctx.fillText("SHIFT",Math.cos(n.angle)*(r+32),Math.sin(n.angle)*(r+32));
+    ctx.fillText("RMB",Math.cos(n.angle)*(r+32),Math.sin(n.angle)*(r+32));
     ctx.restore();
   }
 
@@ -1521,7 +1522,7 @@
         ctx.font="900 10px system-ui";
         ctx.textAlign="center";
         ctx.textBaseline="middle";
-        ctx.fillText(isScratch?"SHIFT":(isSlide||n.type==="fx"?"HOLD":"NOW"),Math.cos(a)*(hitR+36),Math.sin(a)*(hitR+36));
+        ctx.fillText(isScratch?"RMB":(isSlide||n.type==="fx"?"HOLD":"NOW"),Math.cos(a)*(hitR+36),Math.sin(a)*(hitR+36));
       }
 
       ctx.restore();
@@ -1755,9 +1756,9 @@
     lastMs=ms; const t=now();
     if(t >= SONG_END_TIME){ endGame(false); return; }
 
-    // Z/X/Space/우클릭을 기본 액션 홀드로 사용. Shift는 SCRATCH 전용.
+    // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
     filterHeld = autoMode || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
-    scratchHeld = keys.ShiftLeft || keys.ShiftRight;
+    scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
     updateAuto(t);
     updateArm(dt);
     updateNotes(t,dt);
@@ -1965,7 +1966,7 @@
   window.addEventListener("mousemove",e=>{mouseX=e.clientX;mouseY=e.clientY;},{passive:true});
   window.addEventListener("pointermove",e=>{mouseX=e.clientX;mouseY=e.clientY;},{passive:true});
   window.addEventListener("touchmove",e=>{if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;}},{passive:true});
-  window.addEventListener("contextmenu",e=>e.preventDefault());
+  canvas.addEventListener("contextmenu",e=>e.preventDefault());
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.keymapOverlay,.pauseOverlay,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
   window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; if(e.button===0 && running)onCut(); if(e.button===2 && running){mouseDownRight=true;filterHeld=true;}});
   window.addEventListener("mouseup",e=>{if(e.button===2){mouseDownRight=false;filterHeld=false;}});
@@ -2008,7 +2009,7 @@
     keys[e.code]=false;
     if(e.code==="KeyA")keyA=false;
     if(e.code==="KeyD")keyD=false;
-    if(e.code==="ShiftLeft"||e.code==="ShiftRight")filterHeld=!!(keys.ShiftLeft||keys.ShiftRight||mouseDownRight||autoMode);
+    if(e.code==="ShiftLeft"||e.code==="ShiftRight")scratchHeld=!!(mouseDownRight||keys.ShiftLeft||keys.ShiftRight);
   });
 
   song.addEventListener("ended", ()=>endGame(false));

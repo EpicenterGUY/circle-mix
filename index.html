@@ -23,7 +23,7 @@
       <button class="safeMenuBtn" id="safeEditor" type="button">EDITOR</button>
       <button class="safeMenuBtn big" id="safeStart" type="button">START</button>
     </div>
-    <div class="safeMenuSub">Z/X = CUT·HOLD·SLIDE / Shift = SCRATCH / ESC or H = SETTINGS</div>
+    <div class="safeMenuSub">Z/X = CUT·HOLD·SLIDE / RMB = SCRATCH / ESC or H = SETTINGS</div>
   </div>
 </div>
 <div id="safeOverlay">
@@ -105,7 +105,7 @@
 
 <div class="editorPanel" id="editorPanel">
   <h3>CHART EDITOR</h3>
-  <div class="editorHint">현재 음악 위치에 노트 찍기. SCRATCH는 Shift + 짧은 좌/우 긁기 액션으로 배치됨.</div>
+  <div class="editorHint">현재 음악 위치에 노트 찍기. SCRATCH는 우클릭을 누른 채 짧게 좌/우 또는 시계/반시계로 긁는 액션으로 배치됨.</div>
   <div class="editGrid" id="laneGrid">
     <button class="editBtn on" data-lane="0">1</button><button class="editBtn" data-lane="1">2</button><button class="editBtn" data-lane="2">3</button><button class="editBtn" data-lane="3">4</button>
     <button class="editBtn" data-lane="4">5</button><button class="editBtn" data-lane="5">6</button><button class="editBtn" data-lane="6">7</button><button class="editBtn" data-lane="7">8</button>
@@ -132,7 +132,7 @@
       <div class="keyCell">SWING</div><div class="keyCell">짧은 다이얼 FLICK</div><div class="keyCell">방향대로 조금만 휙 돌려도 인정</div>
       <div class="keyCell">SLIDE</div><div class="keyCell"><span class="kbd">Z</span>/<span class="kbd">X</span> 유지 + 다이얼</div><div class="keyCell">버튼을 누른 채 흰 목표점을 따라가기</div>
       <div class="keyCell">HOLD</div><div class="keyCell"><span class="kbd">Z</span>/<span class="kbd">X</span> 유지 / 우클릭</div><div class="keyCell">보라색 홀드 노트 유지</div>
-      <div class="keyCell">SCRATCH</div><div class="keyCell"><span class="kbd">Shift</span> + 짧은 좌/우 긁기</div><div class="keyCell">어두운 빨강/주황 톱니 호에서 짧게 마찰 액션</div>
+      <div class="keyCell">SCRATCH</div><div class="keyCell">우클릭 유지 + 짧은 긁기<br><span class="kbd">Shift</span> 보조</div><div class="keyCell">어두운 빨강/주황 톱니 호에서 짧은 마찰 액션</div>
       <div class="keyCell">AUTO</div><div class="keyCell"><span class="kbd">O</span> / 버튼</div><div class="keyCell">오토모드 전환</div>
       <div class="keyCell">MAP</div><div class="keyCell"><span class="kbd">M</span> / 버튼</div><div class="keyCell">NORMAL / TECH 전환</div>
     </div>
@@ -155,7 +155,7 @@
       SWING = 판정선 근처 작은 방향 호가 보일 때 방향대로 짧게 휙 돌리기. 처리 시 짧은 방향 전환 이펙트<br>
       SLIDE = Z/X를 누른 채 노란 목표점을 다이얼 판정 호로 따라가기. START/END 표시<br>
       HOLD = Z/X 또는 우클릭 유지. 몸통은 판정선 바깥에서 줄어듦<br>
-      SCRATCH = 짧은 톱니 호. Shift를 누른 채 좌/우로 짧게 긁기. 처리 시 작은 마찰 스파크<br><br>채보 밀도 = 긴 공백 없이 계속 흐름. 하이라이트/후반은 고밀도, 쉬는 구간은 단일 CUT으로 보강<br>게임 중 UI = 기본 숨김. H 또는 SETTINGS로 설정창 표시<br><br>
+      SCRATCH = 짧은 톱니/마찰 호. 우클릭을 누른 채 좌우 또는 시계/반시계 방향으로 짧게 긁기. Shift는 보조 입력. 처리 시 가벼운 마찰 스파크<br><br>채보 밀도 = 긴 공백 없이 계속 흐름. 하이라이트/후반은 고밀도, 쉬는 구간은 단일 CUT으로 보강<br>게임 중 UI = 기본 숨김. H 또는 SETTINGS로 설정창 표시<br><br>
       <b>조작</b><br>
       마우스 이동 = 즉시 다이얼 회전 / A,D = 키보드 회전<br>
       [ ] = 노트속도 / , . = 오프셋 / ESC = 일시정지 메뉴 / F = 전체화면
