@@ -21,6 +21,7 @@
     <div class="safeMenuSub">PC mouse circular tech rhythm game · PRESS START</div>
     <div class="safeMenuGrid">
       <button class="safeMenuBtn big" id="safeStart" type="button">START</button>
+      <button class="safeMenuBtn" id="safeTutorial" type="button">TUTORIAL</button>
       <button class="safeMenuBtn" id="safeSettingsBtn" type="button">SETTINGS</button>
       <button class="safeMenuBtn" id="safeEditor" type="button">CREATE</button>
       <button class="safeMenuBtn" id="safeFull" type="button">FULLSCREEN</button>
@@ -69,6 +70,7 @@
       <button class="safeMenuBtn" id="safeSetOffDown" type="button">OFFSET −</button>
       <button class="safeMenuBtn" id="safeSetOffUp" type="button">OFFSET ＋</button>
       <button class="safeMenuBtn safeFull" id="safeResume" type="button">RESUME</button>
+      <button class="safeMenuBtn safeFull" id="safeRestartStep" type="button" hidden>RESTART STEP</button>
       <button class="safeMenuBtn safeFull" id="safeExit" type="button">EXIT TO TITLE</button>
     </div>
   </div>
@@ -189,6 +191,40 @@
       <button class="btn secondary" id="editorStartBtn" type="button">EDITOR</button>
       <button class="btn secondary" id="startFullBtn" type="button">FULLSCREEN</button>
     </div>
+  </div>
+</div>
+
+
+<div class="tutorialPrompt" id="tutorialPrompt" hidden>
+  <div class="tutorialPromptCard">
+    <span>WELCOME TO CIRCLE MIX</span>
+    <h2>처음 플레이하시나요?</h2>
+    <p>실제 플레이 화면에서 각 노트를 짧게 연습합니다.</p>
+    <button class="btn" id="tutorialPromptStart" type="button">START TUTORIAL</button>
+    <button class="btn secondary" id="tutorialPromptSkip" type="button">SKIP</button>
+  </div>
+</div>
+
+<div class="tutorialHud" id="tutorialHud" hidden>
+  <div class="tutorialTop"><strong id="tutorialStepLabel">1 / 8</strong><span id="tutorialProgress">0 / 0</span></div>
+  <h2 id="tutorialTitle">AIM</h2>
+  <p id="tutorialDesc">Move the pointer.</p>
+  <em id="tutorialInputHint">INPUT</em>
+  <div class="tutorialCountdown" id="tutorialCountdown"></div>
+  <div class="tutorialActions">
+    <button class="btn secondary" id="tutorialSkipStep" type="button">SKIP STEP</button>
+    <button class="btn secondary" id="tutorialExit" type="button">EXIT TUTORIAL</button>
+  </div>
+</div>
+
+<div class="tutorialComplete" id="tutorialComplete" hidden>
+  <div class="tutorialPromptCard">
+    <span>TUTORIAL COMPLETE</span>
+    <h2>READY TO MIX</h2>
+    <p>튜토리얼 기록은 SCORE / POWER / 최고 기록에 저장되지 않았습니다.</p>
+    <button class="btn" id="tutorialPlayNow" type="button">PLAY NOW</button>
+    <button class="btn secondary" id="tutorialBackTitle" type="button">BACK TO TITLE</button>
+    <button class="btn secondary" id="tutorialReplay" type="button">REPLAY TUTORIAL</button>
   </div>
 </div>
 

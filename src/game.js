@@ -91,6 +91,24 @@
   const resumeBtn = document.getElementById("resumeBtn");
   const retryBtn = document.getElementById("retryBtn");
   const exitBtn = document.getElementById("exitBtn");
+  const safeTutorial = document.getElementById("safeTutorial");
+  const safeRestartStep = document.getElementById("safeRestartStep");
+  const tutorialPrompt = document.getElementById("tutorialPrompt");
+  const tutorialPromptStart = document.getElementById("tutorialPromptStart");
+  const tutorialPromptSkip = document.getElementById("tutorialPromptSkip");
+  const tutorialHud = document.getElementById("tutorialHud");
+  const tutorialStepLabel = document.getElementById("tutorialStepLabel");
+  const tutorialProgress = document.getElementById("tutorialProgress");
+  const tutorialTitle = document.getElementById("tutorialTitle");
+  const tutorialDesc = document.getElementById("tutorialDesc");
+  const tutorialInputHint = document.getElementById("tutorialInputHint");
+  const tutorialCountdown = document.getElementById("tutorialCountdown");
+  const tutorialSkipStep = document.getElementById("tutorialSkipStep");
+  const tutorialExit = document.getElementById("tutorialExit");
+  const tutorialComplete = document.getElementById("tutorialComplete");
+  const tutorialPlayNow = document.getElementById("tutorialPlayNow");
+  const tutorialBackTitle = document.getElementById("tutorialBackTitle");
+  const tutorialReplay = document.getElementById("tutorialReplay");
 
   const TAU = Math.PI * 2;
   const songs = window.CircleMixSongRegistry || { all:()=>[], localAll:()=>[], refreshLocal:async()=>[], get:()=>null, hasDifficulty:()=>false };
@@ -120,6 +138,7 @@
 
   let W=0,H=0,cx=0,cy=0,baseR=0,hitR=0,outerR=0;
   let running=false, startMs=0, lastMs=0, raf=0;
+  let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
@@ -352,6 +371,7 @@
     };
   }
   function saveBestRecord(result){
+    if(tutorialMode) return {saved:false, newRecord:false, newPowerRecord:false, previous:null, tutorial:true};
     if(result.autoPlay) return {saved:false, newRecord:false, newPowerRecord:false, previous:null};
     const records=readRecords();
     const key=recordKey(result.difficulty);
@@ -2202,6 +2222,7 @@
     keyA=false; keyD=false; filterHeld=false; scratchHeld=false; mouseDownRight=false;
     if(raf){ cancelAnimationFrame(raf); raf=0; }
     if(pauseOverlay) pauseOverlay.classList.remove("show");
+    if(pauseRetry) pauseRetry.textContent="RETRY";
     if(pauseSettingsOverlay) pauseSettingsOverlay.classList.remove("show");
     document.body.classList.remove("pausedInputBlocked", "pauseSettingsOpen", "showSettings");
     settingsVisible=false;
@@ -2253,6 +2274,39 @@
     requestAnimationFrame(tick);
   }
 
+
+
+  const TUTORIAL_COMPLETED_KEY="circleMixTutorialCompleted";
+  const TUTORIAL_PROMPT_KEY="circleMixTutorialPromptAnswered";
+  function keyLabel(code){ return ({KeyZ:"Z",KeyX:"X",Space:"SPACE",MouseLeft:"LMB",MouseRight:"RMB"})[code] || code.replace(/^Key/,""); }
+  function isMobileInput(){ return isMobileViewport && isMobileViewport(); }
+  function tutorialInputFor(kind){
+    if(isMobileInput()) return ({aim:"TOUCH / DRAG",cut:"TAP",hold:"TOUCH AND HOLD",slide:"HOLD AND FOLLOW",trace:"FOLLOW WITHOUT PRESSING",swing:"SHORT FAST SWIPE",scratch:"TWO-FINGER HOLD + SHORT SWIPE",mix:"TAP / HOLD / FOLLOW / SWIPE"})[kind] || "TOUCH";
+    return ({aim:"MOUSE / A-D AIM",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / LMB`,hold:`HOLD ${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / RMB`,slide:`HOLD ${keyLabel("KeyZ")} / ${keyLabel("KeyX")} AND FOLLOW`,trace:"DO NOT PRESS — FOLLOW THE PATH",swing:"FLICK POINTER CW / CCW",scratch:"RMB + SHORT SCRATCH GESTURE",mix:"Z / X / LMB / RMB + AIM"})[kind] || "INPUT";
+  }
+  const tutorialSteps=[
+    {name:"AIM",kind:"aim",desc:"Move the pointer to each glowing target.",targets:[0,2,5],notes:[]},
+    {name:"CUT",kind:"cut",desc:"Aim at the note and press on time.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5.5,lane:2},{type:"cut",beat:7,lane:5},{type:"cut",beat:8.5,lane:7}]},
+    {name:"HOLD",kind:"hold",desc:"Press and keep holding until the end.",notes:[{type:"fx",beat:4,lane:1,durationBeat:3}]},
+    {name:"SLIDE",kind:"slide",desc:"Hold and follow START to END.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4}]},
+    {name:"TRACE",kind:"trace",desc:"DO NOT PRESS — follow the path only.",notes:[{type:"traceCW",beat:4,lane:7,endLane:2,durationBeat:2},{type:"traceCCW",beat:7,lane:3,endLane:0,durationBeat:2}]},
+    {name:"SWING",kind:"swing",desc:"Move shortly and quickly in the shown direction.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
+    {name:"SCRATCH",kind:"scratch",desc:"Use the scratch gesture in the shown direction.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
+    {name:"MIX TEST",kind:"mix",desc:"A short practice mix with every note type.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7},{type:"slideCCW",beat:22,lane:1,endLane:6,durationBeat:3},{type:"traceCW",beat:26,lane:6,endLane:1,durationBeat:2},{type:"swingCCW",beat:29,lane:4},{type:"scratchCW",beat:31,lane:0,endLane:1,durationBeat:.55},{type:"cut",beat:33,lane:2}]}
+  ];
+  function buildTutorialChart(step){ return (step.notes||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT; n.spawnTime=n.hitTime-APPROACH; return n; }).sort((a,b)=>a.hitTime-b.hitTime); }
+  function showTutorialPrompt(){ if(localStorage.getItem(TUTORIAL_COMPLETED_KEY)==="true"||localStorage.getItem(TUTORIAL_PROMPT_KEY)==="true")return; if(tutorialPrompt)tutorialPrompt.hidden=false; }
+  function setTutorialHud(){ const st=tutorialSteps[tutorialStepIndex]; if(!st)return; tutorialHud.hidden=false; tutorialStepLabel.textContent=`${tutorialStepIndex+1} / ${tutorialSteps.length}`; tutorialTitle.textContent=st.name; tutorialDesc.textContent=st.desc; tutorialInputHint.textContent=tutorialInputFor(st.kind); tutorialProgress.textContent=st.targets?`${st._hit||0} / ${st.targets.length}`:`${judgedCount} / ${chart.length}`; }
+  function beep(freq=660,dur=.07){ ensureAudioCtx(); const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=freq; o.type="square"; g.gain.value=.035*(sfxEnabled ? clamp(sfxVolume,0,4) : 0); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur); }
+  function startTutorialStep(idx=tutorialStepIndex){ tutorialStepIndex=clamp(idx,0,tutorialSteps.length-1); const st=tutorialSteps[tutorialStepIndex]; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=true; document.body.classList.add("tutorialMode"); abortingRun=false; resultShown=false; completionPending=false; paused=false; chart=buildTutorialChart(st); score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1; feedback=[]; particles=[]; waves=[]; st._hit=0; st._done=false; running=true; setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none"; mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=-Math.PI/2; filterHeld=scratchHeld=mouseDownRight=false; tutorialCountdownUntil=performance.now()+3200; ["3","2","1","START"].forEach((txt,i)=>setTimeout(()=>{ if(tutorialMode&&tutorialStepIndex===idx){ tutorialCountdown.textContent=txt; beep(520+i*110,.06); if(txt==="START")setTimeout(()=>tutorialCountdown.textContent="",520);}},i*750)); audioStartedAt=performance.now()+3000; startMs=audioStartedAt; lastMs=performance.now(); setTutorialHud(); if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); }
+  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialStepIndex=0; startTutorialStep(0); }
+  function nextTutorialStep(){ if(tutorialStepIndex>=tutorialSteps.length-1) return completeTutorial(); startTutorialStep(tutorialStepIndex+1); }
+  function restartTutorialStep(){ startTutorialStep(tutorialStepIndex); }
+  function exitTutorial(toTitle=true){ tutorialMode=false; document.body.classList.remove("tutorialMode"); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
+  function completeTutorial(){ localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; document.body.classList.remove("tutorialMode"); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="flex"; }
+  function updateTutorialAim(){ const st=tutorialSteps[tutorialStepIndex]; if(!tutorialMode||!st?.targets)return; const target=st.targets[st._hit||0]; const a=laneAngle(target); addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.perfect,1,.12); if(aligned(a,.055)){ st._hit=(st._hit||0)+1; addWave(a,COLORS.perfect); beep(780,.05); if(st._hit>=st.targets.length&&!st._done){st._done=true;setTimeout(nextTutorialStep,450);} } }
+  function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialAttempts++; addFeedback("TRY AGAIN",cx,cy-baseR*.42,COLORS.miss); setTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
+
   function showResult(result, recordInfo){
     score=result.finalScore;
     if(resultSongTitle) resultSongTitle.textContent=`${result.songTitle} / ${result.difficulty.toUpperCase()} / ${result.starLevel}`;
@@ -2276,6 +2330,7 @@
   }
 
   function completeRun(){
+    if(tutorialMode) return completeTutorial();
     if(resultShown || abortingRun) return;
     resultShown=true;
     cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:false});
@@ -2307,6 +2362,7 @@
       if(raf){cancelAnimationFrame(raf);raf=0;}
     }
     if(pauseOverlay) pauseOverlay.classList.add("show");
+    if(tutorialMode && pauseRetry) pauseRetry.textContent="RESTART STEP";
     document.body.classList.add("pausedInputBlocked");
     setPauseMessage(message);
   }
@@ -2315,6 +2371,7 @@
     if(!paused) return;
     paused=false;
     if(pauseOverlay) pauseOverlay.classList.remove("show");
+    if(pauseRetry) pauseRetry.textContent="RETRY";
     document.body.classList.remove("pausedInputBlocked");
     fullscreenInterrupted=false;
     closePauseSettings();
@@ -2327,11 +2384,13 @@
   }
 
   function retryGame(){
+    if(tutorialMode) return restartTutorialStep();
     cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     start(editorMode?"editor":"play");
   }
 
   function exitToMenu(){
+    if(tutorialMode) return exitTutorial(false), showTitleMenu();
     cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     endGame(true);
     showSongSelect();
@@ -2343,9 +2402,12 @@
     if(!running)return;
     const dt=Math.min(.033,(ms-lastMs)/1000||.016);
     lastMs=ms; const t=now();
+    if(tutorialMode){ updateTutorialAim(); setTutorialHud(); if(tutorialFailed()) return; const st=tutorialSteps[tutorialStepIndex]; if(!st.targets && chart.length && judgedCount>=chart.length && !st._done){ st._done=true; setTimeout(nextTutorialStep,650); } }
     const lastHitTime = chart.length ? Math.max(...chart.map(n=>n.hitTime + (n.duration || 0))) : 0;
+    const tutorialEnd = tutorialMode && chart.length && t >= lastHitTime + HIT_WINDOW + 0.55;
     const notesSettled = judgedCount >= chart.length || song.ended || t >= lastHitTime + HIT_WINDOW + 0.25;
-    if((song.ended || t >= songEndTime()) && notesSettled){ scheduleCompletion(); }
+    if(!tutorialMode && (song.ended || t >= songEndTime()) && notesSettled){ scheduleCompletion(); }
+    if(tutorialEnd && notesSettled && !tutorialSteps[tutorialStepIndex].targets && !tutorialSteps[tutorialStepIndex]._done){ tutorialSteps[tutorialStepIndex]._done=true; setTimeout(nextTutorialStep,650); }
 
     // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
     filterHeld = gameState.autoEnabled || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
@@ -2375,7 +2437,7 @@
     updateDebugOverlay(t);
 
     const liveStats = calculateScoreStats();
-    score = liveStats.score;
+    score = tutorialMode ? 0 : liveStats.score;
     scoreBox.textContent=Math.floor(score);
     comboBox.textContent=combo;
     if(accuracyBox){
@@ -2561,6 +2623,7 @@
     document.body.classList.add("pauseSettingsOpen");
     if(quickSettingsBtn) quickSettingsBtn.classList.remove("on");
     if(pauseOverlay) pauseOverlay.classList.add("show");
+    if(tutorialMode && pauseRetry) pauseRetry.textContent="RESTART STEP";
     if(pauseSettingsOverlay) pauseSettingsOverlay.classList.add("show");
     syncPauseSettingsUI();
   }
@@ -2746,9 +2809,11 @@
   window.addEventListener("pointermove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();pointerActive=true;},{passive:true});
   window.addEventListener("touchmove",e=>{if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerMs=performance.now();pointerActive=true;}},{passive:true});
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
-  function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.keymapOverlay,.pauseOverlay,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
+  function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
   window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
   window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;}});
+  window.addEventListener("touchstart",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;} if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
+  window.addEventListener("touchend",e=>{if(!e.touches||e.touches.length<2){mouseDownRight=false;scratchHeld=false;} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
   window.addEventListener("keydown",e=>{
     keys[e.code]=true;
     if(e.code==="KeyA")keyA=true;
@@ -2779,7 +2844,7 @@
     }
     if(e.code==="KeyM"&&!e.repeat&&(!running||debugMode)){mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();}
     if(e.code==="KeyK"&&!e.repeat)toggleKeymap();
-    if(e.code==="Escape"&&!e.repeat){ if(keymapOverlay&&keymapOverlay.classList.contains("show")) toggleKeymap(false); else if(resultOverlay&&resultOverlay.classList.contains("show")) return; else if(pauseSettingsOpen) closePauseSettings(); else if(paused) resumeGame(); else showPause(); }
+    if(e.code==="Escape"&&!e.repeat){ if(tutorialMode && paused){ resumeGame(); return; } if(keymapOverlay&&keymapOverlay.classList.contains("show")) toggleKeymap(false); else if(resultOverlay&&resultOverlay.classList.contains("show")) return; else if(pauseSettingsOpen) closePauseSettings(); else if(paused) resumeGame(); else showPause(); }
     if(e.code==="KeyF"&&!e.repeat)requestFullscreenSafe();
     if(e.code==="KeyH"&&!e.repeat)toggleSettings();
     if(e.code==="KeyE"&&!e.repeat){toggleSettings(true); toggleEditor();}
@@ -3046,6 +3111,8 @@
   bindPress(pauseSetFull,requestFullscreenSafe);
 
   safeBind(safeStart,()=>showSongSelect());
+  safeBind(safeTutorial,()=>startTutorial());
+  safeBind(safeRestartStep,()=>restartTutorialStep());
   safeBind(safeEditor,()=>{ window.location.href="./editor.html"; });
   safeBind(safeTech,()=>{selectedMenuMode="tech";mapMode="tech";safeRefresh();updateButtons();});
   safeBind(safeNormal,()=>{selectedMenuMode="normal";mapMode="normal";safeRefresh();updateButtons();});
@@ -3065,6 +3132,13 @@
   safeBind(safeSetOffUp,()=>changeOffset(+0.03));
   safeBind(safeResume,()=>{safeSetOverlay(false);resumeGame();});
   safeBind(safeExit,exitToMenu);
+  bindPress(tutorialPromptStart,startTutorial);
+  bindPress(tutorialPromptSkip,()=>{localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); tutorialPrompt.hidden=true;});
+  bindPress(tutorialSkipStep,nextTutorialStep);
+  bindPress(tutorialExit,()=>exitTutorial(true));
+  bindPress(tutorialPlayNow,()=>{tutorialComplete.hidden=true; showSongSelect();});
+  bindPress(tutorialBackTitle,()=>{tutorialComplete.hidden=true; showTitleMenu();});
+  bindPress(tutorialReplay,startTutorial);
   bindPress(songSelectBack,()=>showTitleMenu());
   bindPress(songPlayBtn,(e)=>startSelectedSong(e));
 
@@ -3085,6 +3159,7 @@
 
   safeSetState("title");
   safeRefresh();
+  showTutorialPrompt();
 
 
 
