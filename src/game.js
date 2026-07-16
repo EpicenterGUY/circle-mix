@@ -64,6 +64,20 @@
   let mouseX=0, mouseY=0;
   let armAngle=-Math.PI/2, targetAngle=-Math.PI/2, prevArmAngle=-Math.PI/2, armVel=0;
   let keyA=false, keyD=false, filterHeld=false, scratchHeld=false, mouseDownRight=false;
+  let debugOverlayVisible=false;
+  let debugOverlay=null;
+  let pointerActive=false;
+  let lastPointerMs=0;
+  let scratchMoveAmount=0;
+  let scratchSpeed=0;
+  let scratchCandidate=false;
+  let scratchThresholdMet=false;
+  let lastScratchResult="READY";
+  let autoInputDebug={
+    z:false,x:false,space:false,lmb:false,rmb:false,shiftFallback:false,
+    action:"NONE",targetAngle:null,targetDistance:null,scratchDirection:"NONE",
+    scratchMoveAmount:0,scratchSpeed:0,noteId:"-",noteType:"-"
+  };
   let focusNote=null;
   const keys={};
   let audioCtx=null;
@@ -671,10 +685,17 @@
   function checkScratch(n, t){
     // SCRATCH = 우클릭을 누른 채 짧게 좌/우 또는 시계/반시계로 긁는 마찰 액션.
     // Shift는 보조 입력/fallback으로만 허용하며, SLIDE처럼 긴 경로를 추적하지 않는다.
-    if(!scratchHeld)return false;
-    if(!aligned(n.angle,.026))return false;
     const dir=n.type==="scratchCW"?1:-1;
-    return Math.abs(armVel)>=SCRATCH_FLICK_SPEED && Math.sign(armVel)===dir;
+    scratchCandidate=!!(scratchHeld&&aligned(n.angle,.026));
+    scratchMoveAmount=Math.abs(norm(armAngle-prevArmAngle));
+    scratchSpeed=Math.abs(armVel);
+    scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
+    if(!scratchHeld){lastScratchResult="READY";return false;}
+    if(!aligned(n.angle,.026)){lastScratchResult="MISS";return false;}
+    if(!scratchThresholdMet){lastScratchResult="TOO SLOW";return false;}
+    const ok=Math.sign(armVel)===dir;
+    lastScratchResult=ok?"HIT":"MISS";
+    return ok;
   }
   function onCut(){
     if(!running||paused)return;
@@ -696,7 +717,49 @@
     return best;
   }
 
+  function noteDebugId(n){
+    if(!n)return "-";
+    const idx=chart.indexOf(n);
+    return (idx>=0?idx:"?")+"/b"+Number(n.beat||0).toFixed(2);
+  }
+
+  function autoActionForNote(n){
+    if(!n)return "NONE";
+    if(n.type==="cut")return "CUT";
+    if(n.type==="fx")return "HOLD";
+    if(n.type.startsWith("slide"))return "SLIDE";
+    if(n.type.startsWith("trace"))return "TRACE";
+    if(n.type.startsWith("swing"))return "SWING";
+    if(n.type.startsWith("scratch"))return "SCRATCH";
+    return "NONE";
+  }
+
+  function updateAutoDebug(t){
+    const n=autoMode?nextNote(t):null;
+    const action=autoActionForNote(n);
+    const isScratch=!!(n&&n.type.startsWith("scratch"));
+    const isHold=action==="HOLD"||action==="SLIDE";
+    const isCut=action==="CUT";
+    autoInputDebug={
+      z:autoMode&&(isCut||isHold),
+      x:autoMode&&isHold,
+      space:autoMode&&isCut,
+      lmb:autoMode&&isCut,
+      rmb:autoMode&&isScratch,
+      shiftFallback:false,
+      action,
+      targetAngle:n?((n.type.startsWith("slide")||n.type.startsWith("trace")||n.type.startsWith("scratch"))?slideAngle(n,t):n.angle):null,
+      targetDistance:autoMode&&n?hitR:null,
+      scratchDirection:isScratch?(n.type==="scratchCW"?"CW":"CCW"):"NONE",
+      scratchMoveAmount:isScratch?Math.abs(n.slideAmount||0):0,
+      scratchSpeed:isScratch?SCRATCH_FLICK_SPEED*1.5:0,
+      noteId:noteDebugId(n),
+      noteType:n?n.type:"-"
+    };
+  }
+
   function updateAuto(t){
+    updateAutoDebug(t);
     if(!autoMode)return;
 
     const activePath=chart.find(n=>!n.done&&!n.missed&&n.type.startsWith("slide")&&t>=n.hitTime&&t<=n.hitTime+n.duration);
@@ -1759,6 +1822,10 @@
     // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
     filterHeld = autoMode || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
     scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
+    scratchMoveAmount=Math.abs(norm(armAngle-prevArmAngle));
+    scratchSpeed=Math.abs(armVel);
+    scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
+    scratchCandidate=!!scratchHeld;
     updateAuto(t);
     updateArm(dt);
     updateNotes(t,dt);
@@ -1777,6 +1844,7 @@
     drawFocusHalo(focusNote,t);
     drawArm();
     drawEffects(dt);
+    updateDebugOverlay(t);
 
     scoreBox.textContent="SCORE "+Math.floor(score);
     comboBox.textContent="COMBO "+combo;
@@ -1812,6 +1880,8 @@
     mouseX=cx; mouseY=cy-hitR;
     armAngle=targetAngle=prevArmAngle=-Math.PI/2; armVel=0;
     filterHeld=false; scratchHeld=false; mouseDownRight=false;
+    lastScratchResult="READY";
+    updateAutoDebug(0);
     updateButtons();
     if(editorMode) updateEditorStatus();
 
@@ -1845,6 +1915,59 @@
     settingsVisible = force!==undefined ? force : !settingsVisible;
     document.body.classList.toggle("showSettings", settingsVisible);
     if(quickSettingsBtn) quickSettingsBtn.classList.toggle("on", settingsVisible);
+  }
+
+  function formatBool(v){return v?"ON":"OFF";}
+  function formatAngle(a){return a===null||a===undefined?"-":(norm(a)*180/Math.PI).toFixed(1)+"°";}
+  function formatNum(v,d=2){return v===null||v===undefined?"-":Number(v).toFixed(d);}
+  function ensureDebugOverlay(){
+    if(debugOverlay)return debugOverlay;
+    debugOverlay=document.createElement("div");
+    debugOverlay.id="inputDebugOverlay";
+    debugOverlay.setAttribute("aria-live","off");
+    document.body.appendChild(debugOverlay);
+    return debugOverlay;
+  }
+  function toggleDebugOverlay(){
+    debugOverlayVisible=!debugOverlayVisible;
+    const el=ensureDebugOverlay();
+    el.classList.toggle("show",debugOverlayVisible);
+    if(debugOverlayVisible)updateDebugOverlay(now());
+  }
+  function updateDebugOverlay(t){
+    if(!debugOverlayVisible)return;
+    const el=ensureDebugOverlay();
+    const dx=mouseX-cx, dy=mouseY-cy;
+    const mouseAngle=Math.atan2(dy,dx);
+    const mouseDist=Math.hypot(dx,dy);
+    pointerActive=(performance.now()-lastPointerMs)<1600 || mouseDownRight || !!keys.Space;
+    el.innerHTML=`<div class="debugTitle">INPUT DEBUG <span>${autoMode?"AUTO":"MANUAL"}</span></div>
+      <div class="debugGrid"><b>REAL INPUT</b><b></b>
+        <span>Z</span><strong>${formatBool(keys.KeyZ)}</strong><span>X</span><strong>${formatBool(keys.KeyX)}</strong>
+        <span>Space</span><strong>${formatBool(keys.Space)}</strong><span>LMB</span><strong>${formatBool(!!keys.MouseLeft)}</strong>
+        <span>RMB</span><strong>${formatBool(mouseDownRight)}</strong><span>Shift</span><strong>${formatBool(keys.ShiftLeft||keys.ShiftRight)}</strong>
+        <span>Mouse X/Y</span><strong>${mouseX.toFixed(0)}, ${mouseY.toFixed(0)}</strong>
+        <span>Mouse angle</span><strong>${formatAngle(mouseAngle)}</strong>
+        <span>Distance</span><strong>${mouseDist.toFixed(1)}</strong>
+        <span>Pointer active</span><strong>${formatBool(pointerActive)}</strong>
+      </div>
+      <div class="debugGrid"><b>AUTO INPUT</b><b></b>
+        <span>AUTO Z</span><strong>${formatBool(autoInputDebug.z)}</strong><span>AUTO X</span><strong>${formatBool(autoInputDebug.x)}</strong>
+        <span>AUTO Space</span><strong>${formatBool(autoInputDebug.space)}</strong><span>AUTO LMB</span><strong>${formatBool(autoInputDebug.lmb)}</strong>
+        <span>AUTO RMB</span><strong>${formatBool(autoInputDebug.rmb)}</strong><span>AUTO Shift fallback</span><strong>${formatBool(autoInputDebug.shiftFallback)}</strong>
+        <span>Current auto action</span><strong>${autoInputDebug.action}</strong>
+        <span>Target angle</span><strong>${formatAngle(autoInputDebug.targetAngle)}</strong>
+        <span>Target distance</span><strong>${formatNum(autoInputDebug.targetDistance,1)}</strong>
+        <span>Scratch direction</span><strong>${autoInputDebug.scratchDirection}</strong>
+        <span>Scratch movement/speed</span><strong>${formatNum(autoInputDebug.scratchMoveAmount,2)} / ${formatNum(autoInputDebug.scratchSpeed,2)}</strong>
+        <span>Note target</span><strong>${autoInputDebug.noteId} ${autoInputDebug.noteType}</strong>
+      </div>
+      <div class="debugGrid"><b>SCRATCH DEBUG</b><b></b>
+        <span>RMB pressed</span><strong>${formatBool(mouseDownRight)}</strong><span>Candidate</span><strong>${formatBool(scratchCandidate)}</strong>
+        <span>Movement amount</span><strong>${formatNum(scratchMoveAmount,3)}</strong><span>Speed</span><strong>${formatNum(scratchSpeed,2)}</strong>
+        <span>Threshold</span><strong>${SCRATCH_FLICK_SPEED.toFixed(2)}</strong><span>Over threshold</span><strong>${formatBool(scratchThresholdMet)}</strong>
+        <span>Recent result</span><strong>${lastScratchResult}</strong>
+      </div>`;
   }
 
   function updateModeButtons(){
@@ -1963,18 +2086,19 @@
   keymapOverlay.addEventListener("click",e=>{if(e.target===keymapOverlay)toggleKeymap(false);});
   if(laneGrid) laneGrid.addEventListener("click",e=>{const btn=e.target.closest("[data-lane]");if(!btn)return;selectedLane=Number(btn.dataset.lane)||0;laneGrid.querySelectorAll("[data-lane]").forEach(b=>b.classList.toggle("on",b===btn));updateEditorStatus();});
 
-  window.addEventListener("mousemove",e=>{mouseX=e.clientX;mouseY=e.clientY;},{passive:true});
-  window.addEventListener("pointermove",e=>{mouseX=e.clientX;mouseY=e.clientY;},{passive:true});
-  window.addEventListener("touchmove",e=>{if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;}},{passive:true});
+  window.addEventListener("mousemove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();},{passive:true});
+  window.addEventListener("pointermove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();pointerActive=true;},{passive:true});
+  window.addEventListener("touchmove",e=>{if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerMs=performance.now();pointerActive=true;}},{passive:true});
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.keymapOverlay,.pauseOverlay,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
-  window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; if(e.button===0 && running)onCut(); if(e.button===2 && running){mouseDownRight=true;filterHeld=true;}});
-  window.addEventListener("mouseup",e=>{if(e.button===2){mouseDownRight=false;filterHeld=false;}});
+  window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
+  window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;}});
   window.addEventListener("keydown",e=>{
     keys[e.code]=true;
     if(e.code==="KeyA")keyA=true;
     if(e.code==="KeyD")keyD=true;
     if(e.code==="Space"||e.code==="KeyZ"||e.code==="KeyX"){e.preventDefault(); if(!e.repeat)onCut();}
+    if((e.code==="KeyD"||e.code==="F3")&&!e.repeat){e.preventDefault();toggleDebugOverlay();}
     if(e.code==="KeyO"&&!e.repeat){autoMode=!autoMode;updateButtons();}
     if(e.code==="KeyP"&&!e.repeat){ ensureAudioCtx(); applyMusicVolume(); if(song.paused) song.play().catch(()=>{}); else song.pause(); }
     if(e.code==="KeyS"&&!e.repeat){ sfxEnabled=!sfxEnabled; updateButtons(); }
