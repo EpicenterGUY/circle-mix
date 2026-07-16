@@ -4,6 +4,7 @@
   const ctx = canvas.getContext("2d");
   const scoreBox = document.getElementById("scoreBox");
   const comboBox = document.getElementById("comboBox");
+  const accuracyBox = document.getElementById("accuracyBox");
   const autoBox = document.getElementById("autoBox");
   const mapBox = document.getElementById("mapBox");
   const autoToggle = document.getElementById("autoToggle");
@@ -60,6 +61,7 @@
   let running=false, startMs=0, lastMs=0, raf=0;
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
+  let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
   let chart=[], feedback=[], particles=[], waves=[], ringBursts=[], scratchBursts=[];
   let autoMode=false, mapMode="tech";
   let mouseX=0, mouseY=0;
@@ -484,19 +486,19 @@
   function aligned(angle, extra=0){return distAng(armAngle,angle)<DIAL_ARC_HALF+Math.PI*extra;}
   function activeHold(n,t){return (n.type==="fx"||n.type.startsWith("slide"))&&t>=n.hitTime&&t<=n.hitTime+n.duration;}
 
-  function addFeedback(text,x,y,color){feedback.push({text,x,y,color,life:.65});}
+  function addFeedback(text,x,y,color){feedback.push({text,x,y,color,life:.28});}
   function addParticles(x,y,color,count=12,power=1){
     for(let i=0;i<count;i++){
       const a=Math.random()*TAU, s=(34+Math.random()*112)*power;
-      particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.42+Math.random()*.28,color});
+      particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.16+Math.random()*.12,color});
     }
   }
-  function addWave(angle,color){waves.push({angle,color,life:.38});}
+  function addWave(angle,color){waves.push({angle,color,life:.24});}
   function addRingBurst(color, power=1, label=""){
-    ringBursts.push({color, power, life:.52, label});
+    ringBursts.push({color, power, life:.30, label});
   }
   function addScratchBurst(angle,color,dir=1){
-    scratchBursts.push({angle,color,dir,life:.32});
+    scratchBursts.push({angle,color,dir,life:.24});
   }
 
   function ensureAudioCtx(){
@@ -627,6 +629,8 @@
     n.done=true;
     playHitSound(n.type,label);
     score+=label==="PERFECT"?1200:800;
+    judgedCount++;
+    if(label==="PERFECT") perfectCount++; else greatCount++;
     combo++; maxCombo=Math.max(maxCombo,combo);
 
     let a=n.angle;
@@ -665,7 +669,7 @@
   }
   function miss(n){
     if(n.done||n.missed)return;
-    n.missed=true; combo=0;
+    n.missed=true; combo=0; judgedCount++; missCount++;
     let a=n.angle;
     if(n.type.startsWith("slide") || n.type.startsWith("scratch"))a=slideAngle(n,now());
     const isScratch=n.type&&n.type.startsWith("scratch");
@@ -898,41 +902,48 @@
 
   function drawBackground(t){
     ctx.clearRect(0,0,W,H);
-    ctx.save(); ctx.translate(cx,cy);
-    for(let i=0;i<40;i++){
-      const a=i/40*TAU+t*.06, r=baseR*(1.05+Math.sin(t*1.5+i)*.012);
-      ctx.strokeStyle=`rgba(255,255,255,${i%5===0?.14:.045})`; ctx.lineWidth=i%5===0?2:1;
-      ctx.beginPath(); ctx.moveTo(Math.cos(a)*baseR*.36,Math.sin(a)*baseR*.36); ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r); ctx.stroke();
-    }
-    const grad=ctx.createRadialGradient(0,0,baseR*.12,0,0,baseR*1.15);
-    grad.addColorStop(0,"#173a64"); grad.addColorStop(.45,"#101e37"); grad.addColorStop(1,"#050914");
-    ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(0,0,baseR*1.1,0,TAU); ctx.fill();
-    ctx.strokeStyle="rgba(255,255,255,.20)"; ctx.lineWidth=8; ctx.beginPath(); ctx.arc(0,0,hitR,0,TAU); ctx.stroke();
-    ctx.strokeStyle="rgba(92,255,251,.28)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,outerR,0,TAU); ctx.stroke();
 
-    // 8방향 착지 가이드. 노트가 어디로 떨어지는지 먼저 읽게 해줌.
+    const bg=ctx.createRadialGradient(cx,cy,baseR*.12,cx,cy,Math.max(W,H)*.72);
+    bg.addColorStop(0,"#050914");
+    bg.addColorStop(.26,"#071225");
+    bg.addColorStop(.62,"#050916");
+    bg.addColorStop(1,"#01030a");
+    ctx.fillStyle=bg;
+    ctx.fillRect(0,0,W,H);
+
+    ctx.save();
+    ctx.globalAlpha=.38;
+    ctx.strokeStyle="rgba(92,255,251,.08)";
+    ctx.lineWidth=1;
+    const grid=56;
+    for(let x=((t*10)%grid)-grid;x<W+grid;x+=grid){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(let y=((t*7)%grid)-grid;y<H+grid;y+=grid){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    ctx.restore();
+
+    ctx.save(); ctx.translate(cx,cy);
+    for(let r=baseR*.52;r<baseR*1.55;r+=baseR*.18){
+      ctx.strokeStyle=`rgba(${r%2?92:141},${r%2?255:107},${r%2?251:255},${r<hitR?.08:.045})`;
+      ctx.lineWidth=1; ctx.beginPath(); ctx.arc(0,0,r+Math.sin(t*1.7+r)*2,0,TAU); ctx.stroke();
+    }
+    for(let i=0;i<32;i++){
+      const a=i/32*TAU+t*.035, r1=baseR*.46, r2=baseR*(1.05+Math.sin(t*1.2+i)*.01);
+      ctx.strokeStyle=`rgba(255,255,255,${i%4===0?.10:.035})`; ctx.lineWidth=i%4===0?1.5:1;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a)*r1,Math.sin(a)*r1); ctx.lineTo(Math.cos(a)*r2,Math.sin(a)*r2); ctx.stroke();
+    }
+    const center=ctx.createRadialGradient(0,0,baseR*.10,0,0,baseR*.62);
+    center.addColorStop(0,"rgba(0,0,0,.92)"); center.addColorStop(.62,"rgba(3,7,17,.82)"); center.addColorStop(1,"rgba(3,8,18,.34)");
+    ctx.fillStyle=center; ctx.beginPath(); ctx.arc(0,0,baseR*.72,0,TAU); ctx.fill();
+
+    ctx.strokeStyle="rgba(255,255,255,.20)"; ctx.lineWidth=7; ctx.beginPath(); ctx.arc(0,0,hitR,0,TAU); ctx.stroke();
+    ctx.strokeStyle="rgba(92,255,251,.30)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,outerR,0,TAU); ctx.stroke();
     for(let i=0;i<8;i++){
       const a=laneAngle(i);
-      ctx.strokeStyle=i%2===0?"rgba(255,255,255,.16)":"rgba(255,255,255,.09)";
-      ctx.lineWidth=i%2===0?3:2;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a)*(hitR-16),Math.sin(a)*(hitR-16));
-      ctx.lineTo(Math.cos(a)*(hitR+16),Math.sin(a)*(hitR+16));
-      ctx.stroke();
-
-      ctx.fillStyle="rgba(255,255,255,.26)";
-      ctx.font="900 11px system-ui";
-      ctx.textAlign="center";
-      ctx.textBaseline="middle";
-      ctx.fillText(String(i+1),Math.cos(a)*(hitR+30),Math.sin(a)*(hitR+30));
+      ctx.strokeStyle=i%2===0?"rgba(255,255,255,.16)":"rgba(255,255,255,.08)";
+      ctx.lineWidth=i%2===0?3:2; ctx.beginPath(); ctx.moveTo(Math.cos(a)*(hitR-14),Math.sin(a)*(hitR-14)); ctx.lineTo(Math.cos(a)*(hitR+14),Math.sin(a)*(hitR+14)); ctx.stroke();
+      ctx.fillStyle="rgba(255,255,255,.25)"; ctx.font="800 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(i+1),Math.cos(a)*(hitR+30),Math.sin(a)*(hitR+30));
     }
-
-    ctx.strokeStyle="rgba(255,255,255,.08)"; ctx.lineWidth=1;
-    for(let r=baseR*.36;r<baseR*.95;r+=baseR*.16){ctx.beginPath();ctx.arc(0,0,r,0,TAU);ctx.stroke();}
-    ctx.fillStyle="#071120"; ctx.beginPath(); ctx.arc(0,0,baseR*.36,0,TAU); ctx.fill();
-    ctx.strokeStyle="rgba(255,255,255,.28)"; ctx.lineWidth=4; ctx.stroke();
-    ctx.strokeStyle="rgba(92,255,251,.20)"; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.arc(0,0,baseR*.27,0,TAU); ctx.stroke();
+    ctx.fillStyle="#030711"; ctx.beginPath(); ctx.arc(0,0,baseR*.35,0,TAU); ctx.fill();
+    ctx.strokeStyle="rgba(92,255,251,.22)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,baseR*.28,0,TAU); ctx.stroke();
     ctx.restore();
   }
 
@@ -1758,7 +1769,7 @@
   function updateButtons(){
     applyMusicVolume();
     autoBox.textContent=autoMode?"AUTO ON":"AUTO OFF";
-    mapBox.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
+    mapBox.textContent=mapMode==="tech"?"TECH":"NORMAL";
     autoToggle.textContent=autoMode?"AUTO ON":"AUTO OFF";
     autoToggle.classList.toggle("on",autoMode);
     mapToggle.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
@@ -1848,8 +1859,12 @@
     drawEffects(dt);
     updateDebugOverlay(t);
 
-    scoreBox.textContent="SCORE "+Math.floor(score);
-    comboBox.textContent="COMBO "+combo;
+    scoreBox.textContent=Math.floor(score);
+    comboBox.textContent=combo;
+    if(accuracyBox){
+      const acc = judgedCount ? ((perfectCount + greatCount*.72) / judgedCount * 100) : 100;
+      accuracyBox.textContent = acc.toFixed(1) + "%";
+    }
     updateButtons();
     if(editorMode) updateEditorStatus();
     raf=requestAnimationFrame(frame);
@@ -1867,7 +1882,7 @@
     editorMode=mode==="editor";
     if(editorPanel)editorPanel.classList.toggle("show",editorMode);
     useCustomChart=(selectedMenuMode==="custom" && customChartData.length>0);
-    chart=generateChart(); score=0; combo=0; maxCombo=0;
+    chart=generateChart(); score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0;
     feedback=[]; particles=[]; waves=[];
     running=true;
     setCleanGameplay(true);
@@ -2254,7 +2269,7 @@
   };
 
   safeBind(safeStart,()=>{safeStart.textContent="LOADING...";start("play");});
-  safeBind(safeEditor,()=>{safeStart.textContent="LOADING...";start("editor");});
+  safeBind(safeEditor,()=>{toggleKeymap(true);});
   safeBind(safeTech,()=>{selectedMenuMode="tech";mapMode="tech";safeRefresh();updateButtons();});
   safeBind(safeNormal,()=>{selectedMenuMode="normal";mapMode="normal";safeRefresh();updateButtons();});
   safeBind(safeAuto,()=>{autoMode=!autoMode;safeRefresh();updateButtons();});

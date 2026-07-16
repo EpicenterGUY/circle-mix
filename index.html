@@ -14,22 +14,26 @@
 <div id="safeMenu">
   <div class="safeMenuCard">
     <h1 class="safeMenuLogo">CIRCLE MIX<span>ANiMA</span></h1>
-    <div class="safeMenuSub">stable build / simple menu / landscape recommended</div>
-    <div class="safeMenuGrid">
-      <button class="safeMenuBtn on" id="safeTech" type="button">TECH HARD</button>
+    <div class="safeMenuSub">PC mouse circular tech rhythm game · PRESS START</div>
+    <div class="safeModePanel" aria-label="Mode select">
+      <div class="safePanelLabel">MODE SELECT</div>
+      <button class="safeMenuBtn on" id="safeTech" type="button">TECH</button>
       <button class="safeMenuBtn" id="safeNormal" type="button">NORMAL</button>
-      <button class="safeMenuBtn" id="safeAuto" type="button">AUTO OFF</button>
-      <button class="safeMenuBtn" id="safeFull" type="button">FULLSCREEN</button>
-      <button class="safeMenuBtn" id="safeSettingsBtn" type="button">SETTINGS</button>
-      <button class="safeMenuBtn" id="safeEditor" type="button">EDITOR</button>
-      <button class="safeMenuBtn big" id="safeStart" type="button">START</button>
+      <button class="safeMenuBtn" id="safeAuto" type="button">AUTO VIEW</button>
     </div>
-    <div class="safeMenuSub">Z/X = CUT·HOLD·SLIDE / RMB = SCRATCH / ESC or H = SETTINGS</div>
+    <div class="safeMenuGrid">
+      <button class="safeMenuBtn big" id="safeStart" type="button">START</button>
+      <button class="safeMenuBtn" id="safeSettingsBtn" type="button">SETTINGS</button>
+      <button class="safeMenuBtn" id="safeEditor" type="button">KEYMAP</button>
+      <button class="safeMenuBtn" id="safeFull" type="button">FULLSCREEN</button>
+    </div>
+    <div class="safeMenuSub">Z/X CUT·HOLD·SLIDE · RMB SCRATCH · ESC/H SETTINGS</div>
   </div>
 </div>
 <div id="safeOverlay">
   <div class="safeOverlayCard">
-    <h2 style="margin:0 0 14px">SETTINGS</h2>
+    <h2 class="safeOverlayTitle">SETTINGS</h2>
+    <div class="safeSettingsHint">SPEED / OFFSET / MUSIC / SFX / AUTO</div>
     <div class="safeOverlayGrid">
       <button class="safeMenuBtn" id="safeSetAuto" type="button">AUTO OFF</button>
       <button class="safeMenuBtn" id="safeSetMap" type="button">MAP TECH</button>
@@ -46,15 +50,11 @@
 </div>
 
 
-<div class="hud">
-  <h1>CIRCLE MIX ANIMA SAFE MENU</h1>
-  <div class="sub">ANiMA polished final / focus + scratch fx</div>
-  <div class="row">
-    <span class="pill" id="scoreBox">SCORE 0</span>
-    <span class="pill" id="comboBox">COMBO 0</span>
-    <span class="pill" id="autoBox">AUTO OFF</span>
-    <span class="pill" id="mapBox">MAP TECH</span>
-  </div>
+<div class="hud rhythmHud">
+  <div class="hudScore"><span>SCORE</span><strong id="scoreBox">0</strong></div>
+  <div class="hudSong"><span>CIRCLE MIX ANiMA</span><strong id="mapBox">TECH</strong></div>
+  <div class="hudStatus"><span>ACCURACY</span><strong id="accuracyBox">100.0%</strong><em id="autoBox">AUTO OFF</em></div>
+  <div class="hudCombo"><span>COMBO</span><strong id="comboBox">0</strong></div>
 </div>
 
 <div class="guide">
