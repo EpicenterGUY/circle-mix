@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CIRCLE MIX Chart Editor</title>
+<link rel="stylesheet" href="./src/editor.css" />
+</head>
+<body>
+<header class="topbar">
+  <a class="back" href="./index.html">← TITLE</a>
+  <div><strong>CIRCLE MIX CHART EDITOR</strong><span>local files only · PC recommended</span></div>
+  <button id="exportBtn" type="button">Export Chart JSON</button>
+</header>
+<main class="layout">
+  <section class="panel meta">
+    <h2>Song / Project</h2>
+    <label>Music file <input id="audioFile" type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" /></label>
+    <div class="fileInfo" id="fileInfo">No music selected. The file stays in this browser.</div>
+    <div class="grid2">
+      <label>Song ID <input id="songId" value="custom-song" /></label>
+      <label>Title <input id="title" value="Untitled" /></label>
+      <label>Artist <input id="artist" value="Unknown" /></label>
+      <label>BPM <input id="bpm" type="number" step="0.001" value="120" /></label>
+      <label>OFFSET <input id="offset" type="number" step="0.001" value="0" /></label>
+      <label>Difficulty <input id="difficulty" value="CUSTOM" /></label>
+      <label>Preview start <input id="previewStart" type="number" step="0.01" value="0" /></label>
+      <label>Jacket <input id="jacketFile" type="file" accept="image/*" /></label>
+    </div>
+    <div class="actions"><button id="saveProject" type="button">Save Local</button><button id="newProject" type="button">New</button><label class="check"><input id="autosave" type="checkbox" checked /> autosave</label></div>
+    <p class="notice">IndexedDB 임시 저장은 브라우저 데이터를 지우면 사라질 수 있습니다. 음악은 서버에 업로드되지 않습니다.</p>
+  </section>
+  <section class="stage panel">
+    <canvas id="preview" width="560" height="560"></canvas>
+    <div class="transport">
+      <button id="playBtn" type="button">Play</button><span id="timeLabel">0.000 / 0.000</span>
+      <input id="seek" type="range" min="0" max="0" step="0.001" value="0" />
+      <label>Speed <select id="rate"><option>0.5</option><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select></label>
+      <label>Zoom <input id="zoom" type="range" min="40" max="420" value="140" /></label>
+      <label>Snap <select id="snap"><option value="0.25">1/4</option><option value="0.125">1/8</option><option value="0.0833333333">1/12</option><option value="0.0625">1/16</option></select></label>
+      <label class="check"><input id="loop" type="checkbox" /> loop ±4s</label>
+      <label class="check"><input id="metro" type="checkbox" /> metronome</label>
+    </div>
+    <div class="timeline" id="timeline"><canvas id="timelineCanvas" height="160"></canvas></div>
+  </section>
+  <aside class="panel tools">
+    <h2>Notes</h2>
+    <div id="typeBtns" class="types"></div>
+    <div class="editProps">
+      <label>Time/beat <input id="noteBeat" type="number" step="0.001" /></label>
+      <label>Angle <input id="noteAngle" type="number" step="0.1" /></label>
+      <label>End angle <input id="noteEndAngle" type="number" step="0.1" /></label>
+      <label>Direction <select id="noteDirection"><option>CW</option><option>CCW</option><option>auto</option></select></label>
+      <label>Duration beats <input id="noteDuration" type="number" step="0.001" /></label>
+    </div>
+    <div class="actions"><button id="copyBtn">Copy</button><button id="pasteBtn">Paste</button><button id="deleteBtn">Delete</button><button id="undoBtn">Undo</button><button id="redoBtn">Redo</button></div>
+    <h3>Import / Metadata</h3>
+    <input id="importFile" type="file" accept="application/json,.json" />
+    <div class="actions"><button id="exportMetaBtn">Export Metadata JSON</button><button id="validateBtn">Validate</button><button id="autoPreviewBtn">AUTO Preview</button></div>
+    <h3>Local Projects</h3><div id="projects" class="projects"></div>
+    <h3>Validation</h3><div id="validation" class="validation">No checks yet.</div>
+    <h3>Events</h3><div id="noteList" class="noteList"></div>
+  </aside>
+</main>
+<audio id="audio" preload="metadata"></audio>
+<script src="./src/editor.js"></script>
+</body>
+</html>

@@ -63,6 +63,12 @@
   const songDifficulty = document.getElementById("songDifficulty");
   const songPlayBtn = document.getElementById("songPlayBtn");
   const songSelectBack = document.getElementById("songSelectBack");
+  const quickSettingsBtn = document.getElementById("quickSettingsBtn");
+  const quickEditorBtn = document.getElementById("quickEditorBtn");
+  const quickFullBtn = document.getElementById("quickFullBtn");
+  const resumeBtn = document.getElementById("pauseResume");
+  const retryBtn = document.getElementById("pauseRetry");
+  const exitBtn = document.getElementById("pauseMenu");
 
   const TAU = Math.PI * 2;
   const songs = window.CircleMixSongRegistry || { all:()=>[], get:()=>null, hasDifficulty:()=>false };
@@ -2324,7 +2330,7 @@
   }
 
   bindPress(startBtn,()=>showSongSelect());
-  bindPress(editorStartBtn,()=>start("editor"));
+  bindPress(editorStartBtn,()=>{ window.location.href="./editor.html"; });
   bindPress(startFullBtn,requestFullscreenSafe);
   bindPress(modeNormalBtn,()=>{selectedMenuMode="normal";updateModeButtons();});
   bindPress(modeTechBtn,()=>{selectedMenuMode="tech";updateModeButtons();});
@@ -2336,7 +2342,7 @@
   bindPress(editorToggle,()=>toggleEditor());
   bindPress(fullToggle,requestFullscreenSafe);
   bindPress(quickSettingsBtn,()=>toggleSettings());
-  bindPress(quickEditorBtn,()=>{toggleSettings(true); toggleEditor();});
+  bindPress(quickEditorBtn,()=>{ window.location.href="./editor.html"; });
   bindPress(quickFullBtn,requestFullscreenSafe);
   bindPress(resumeBtn,resumeGame);
   bindPress(retryBtn,retryGame);
@@ -2635,7 +2641,7 @@
   };
 
   safeBind(safeStart,()=>showSongSelect());
-  safeBind(safeEditor,()=>{if(debugMode)start("editor"); else toggleKeymap(true);});
+  safeBind(safeEditor,()=>{ window.location.href="./editor.html"; });
   safeBind(safeTech,()=>{selectedMenuMode="tech";mapMode="tech";safeRefresh();updateButtons();});
   safeBind(safeNormal,()=>{selectedMenuMode="normal";mapMode="normal";safeRefresh();updateButtons();});
   safeBind(safeAuto,()=>{autoMode=!autoMode;safeRefresh();updateButtons();});
