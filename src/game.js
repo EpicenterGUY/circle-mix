@@ -62,6 +62,9 @@
   const pauseSetSfx = document.getElementById("pauseSetSfx");
   const pauseSetAuto = document.getElementById("pauseSetAuto");
   const pauseSetFull = document.getElementById("pauseSetFull");
+  const pauseSetNoteContrast = document.getElementById("pauseSetNoteContrast");
+  const pauseSetPathBrightness = document.getElementById("pauseSetPathBrightness");
+  const pauseSetEffectIntensity = document.getElementById("pauseSetEffectIntensity");
   const resultOverlay = document.getElementById("resultOverlay");
   const resultScore = document.getElementById("resultScore");
   const resultPower = document.getElementById("resultPower");
@@ -128,13 +131,33 @@
   const DIAL_ARC_HALF = Math.PI * 0.075;
   const DIAL_ARC_VISUAL = Math.PI * 0.100;
   const BASE_NOTE_WIDTH = 8;
-  const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, trace:4.5, hold:11.5 };
+  const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, trace:3.0, hold:11.5 };
+  const VISUAL_SETTINGS_KEY = "circleMixVisualSettings.v1";
+  const VISUAL_CHOICES = { noteContrast:["NORMAL","HIGH"], pathBrightness:["LOW","NORMAL","HIGH"], effectIntensity:["LOW","NORMAL","HIGH"] };
+  const visualSettings = loadVisualSettings();
 
   const COLORS = {
     cut:"#5cfffb", swingCW:"#79ff7d", swingCCW:"#ff72d6", slide:"#ffe15a", fx:"#b77cff",
-    trace:"#dffcff", scratch:"#c94b2d", scratchCW:"#c94b2d", scratchCCW:"#d9782a",
+    trace:"#35f0c5", traceSoft:"#1ccfb8", scratch:"#d047ff", scratchCW:"#d047ff", scratchCCW:"#ff5aa8",
     perfect:"#fff36a", great:"#80ffdb", miss:"#ff4567"
   };
+
+  function loadVisualSettings(){
+    try{
+      const saved=JSON.parse(localStorage.getItem(VISUAL_SETTINGS_KEY)||"{}");
+      return {
+        noteContrast:VISUAL_CHOICES.noteContrast.includes(saved.noteContrast)?saved.noteContrast:"HIGH",
+        pathBrightness:VISUAL_CHOICES.pathBrightness.includes(saved.pathBrightness)?saved.pathBrightness:"NORMAL",
+        effectIntensity:VISUAL_CHOICES.effectIntensity.includes(saved.effectIntensity)?saved.effectIntensity:"NORMAL"
+      };
+    }catch(e){ return {noteContrast:"HIGH",pathBrightness:"NORMAL",effectIntensity:"NORMAL"}; }
+  }
+  function saveVisualSettings(){ try{ localStorage.setItem(VISUAL_SETTINGS_KEY, JSON.stringify(visualSettings)); }catch(e){} }
+  function visualScale(kind){
+    if(kind==="effect") return visualSettings.effectIntensity==="LOW"?.55:(visualSettings.effectIntensity==="HIGH"?1.15:.82);
+    if(kind==="path") return visualSettings.pathBrightness==="LOW"?.72:(visualSettings.pathBrightness==="HIGH"?1.22:1);
+    return visualSettings.noteContrast==="HIGH"?1.12:1;
+  }
 
   let W=0,H=0,cx=0,cy=0,baseR=0,hitR=0,outerR=0;
   let running=false, startMs=0, lastMs=0, raf=0;
@@ -1287,7 +1310,7 @@
     ctx.fillStyle=edge; ctx.fillRect(0,0,W,H);
 
     ctx.save();
-    ctx.globalAlpha=.46;
+    ctx.globalAlpha=visualSettings.noteContrast==="HIGH"?.22:.34;
     ctx.lineWidth=1;
     const grid=58;
     for(let x=((t*8)%grid)-grid;x<W+grid;x+=grid){
@@ -1327,27 +1350,27 @@
     center.addColorStop(0,"rgba(0,0,0,.96)"); center.addColorStop(.56,"rgba(2,6,15,.90)"); center.addColorStop(.82,"rgba(3,8,18,.48)"); center.addColorStop(1,"rgba(3,8,18,.18)");
     ctx.fillStyle=center; ctx.beginPath(); ctx.arc(0,0,baseR*.78,0,TAU); ctx.fill();
 
-    ctx.strokeStyle="rgba(255,255,255,.20)"; ctx.lineWidth=7; ctx.beginPath(); ctx.arc(0,0,hitR,0,TAU); ctx.stroke();
-    ctx.strokeStyle="rgba(92,255,251,.30)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,outerR,0,TAU); ctx.stroke();
+    ctx.strokeStyle=visualSettings.noteContrast==="HIGH"?"rgba(120,145,170,.11)":"rgba(160,185,210,.16)"; ctx.lineWidth=6; ctx.beginPath(); ctx.arc(0,0,hitR,0,TAU); ctx.stroke();
+    ctx.strokeStyle=visualSettings.noteContrast==="HIGH"?"rgba(80,145,170,.12)":"rgba(80,170,190,.18)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,outerR,0,TAU); ctx.stroke();
     for(let i=0;i<8;i++){
       const a=laneAngle(i);
-      ctx.strokeStyle=i%2===0?"rgba(255,255,255,.16)":"rgba(255,255,255,.08)";
+      ctx.strokeStyle=i%2===0?"rgba(150,170,190,.09)":"rgba(150,170,190,.045)";
       ctx.lineWidth=i%2===0?3:2; ctx.beginPath(); ctx.moveTo(Math.cos(a)*(hitR-14),Math.sin(a)*(hitR-14)); ctx.lineTo(Math.cos(a)*(hitR+14),Math.sin(a)*(hitR+14)); ctx.stroke();
-      ctx.fillStyle="rgba(255,255,255,.25)"; ctx.font="800 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(i+1),Math.cos(a)*(hitR+30),Math.sin(a)*(hitR+30));
+      ctx.fillStyle="rgba(160,180,200,.16)"; ctx.font="800 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(i+1),Math.cos(a)*(hitR+30),Math.sin(a)*(hitR+30));
     }
     ctx.fillStyle="#030711"; ctx.beginPath(); ctx.arc(0,0,baseR*.35,0,TAU); ctx.fill();
-    ctx.strokeStyle="rgba(92,255,251,.22)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,baseR*.28,0,TAU); ctx.stroke();
+    ctx.strokeStyle="rgba(80,145,170,.12)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,baseR*.28,0,TAU); ctx.stroke();
     ctx.restore();
   }
 
   function drawArm(){
     ctx.save(); ctx.translate(cx,cy); ctx.rotate(armAngle);
     const c=filterHeld?COLORS.fx:"#5cfffb";
-    ctx.save(); ctx.shadowBlur=26; ctx.shadowColor=c; ctx.lineCap="round";
+    ctx.save(); ctx.shadowBlur=12*visualScale("effect"); ctx.shadowColor=c; ctx.lineCap="round";
     ctx.strokeStyle="rgba(255,255,255,.22)"; ctx.lineWidth=21; ctx.beginPath(); ctx.arc(0,0,hitR,-DIAL_ARC_VISUAL,DIAL_ARC_VISUAL); ctx.stroke();
     ctx.strokeStyle=c; ctx.lineWidth=13; ctx.beginPath(); ctx.arc(0,0,hitR,-DIAL_ARC_HALF,DIAL_ARC_HALF); ctx.stroke();
     ctx.fillStyle=c; ctx.beginPath(); ctx.arc(hitR,0,8,0,TAU); ctx.fill(); ctx.restore();
-    ctx.shadowBlur=18; ctx.shadowColor=c; ctx.strokeStyle=c; ctx.lineWidth=5; ctx.lineCap="round";
+    ctx.shadowBlur=9*visualScale("effect"); ctx.shadowColor=c; ctx.strokeStyle=c; ctx.lineWidth=5; ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(baseR*.33,0); ctx.lineTo(hitR*.93,0); ctx.stroke();
     ctx.restore();
   }
@@ -1579,7 +1602,7 @@
     ctx.translate(cx,cy);
     ctx.globalAlpha=alpha;
     ctx.lineCap="round";
-    ctx.shadowBlur=22;
+    ctx.shadowBlur=8*visualScale("effect");
     ctx.shadowColor=color;
     ctx.strokeStyle=color;
     ctx.lineWidth=lineWidth;
@@ -1600,67 +1623,68 @@
     const half=lerp(Math.PI*.030, Math.PI*.060, k);
     const focus = n===focusNote;
     drawArcNote(n.angle,r,half,color,focus?NOTE_WIDTHS.cut+3:NOTE_WIDTHS.cut,focus?1:.92);
-    drawRingLabel("CUT",n.angle,r,focus?"#ffffff":color,focus?14:12);
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(n.angle); ctx.strokeStyle="rgba(3,7,17,.82)"; ctx.lineWidth=2.4; ctx.beginPath(); ctx.moveTo(r-7,-7); ctx.lineTo(r+7,7); ctx.stroke(); ctx.restore();
+    drawRingLabel("CUT",n.angle,r,focus?"#ffffff":color,focus?12:10);
   }
 
   function drawTrace(n,t){
     const active=t>=n.hitTime;
-    const r=clamp(active?hitR:noteR(n,t),hitR,outerR), color=COLORS.trace;
-    const k=progress(n,t);
     const focus=n===focusNote;
     const d=slideDelta(n);
-    const curr=slideAngle(n,t);
-    const remaining=d*clamp(1-(active?((t-n.hitTime)/Math.max(n.duration,.001)):0),0,1);
-    const alpha=focus?.56:.38;
-    const traceWidth=focus?Math.min(4,NOTE_WIDTHS.trace):Math.max(2.5,NOTE_WIDTHS.trace-.9);
-    const traceGlow=focus?10:5;
-    const pathStart=active?curr:n.angle;
-    const pathDelta=Math.abs(d)>.03 ? (active?remaining:d) : Math.PI*.26;
+    const dur=Math.max(n.duration,.001);
+    const ratio=clamp(active?((t-n.hitTime)/dur):0,0,1);
+    const r=clamp((active?hitR:noteR(n,t))-10,hitR-14,outerR-18);
+    const curr=active?slideAngle(n,t):n.angle;
+    const endA=n.angle+d;
+    const dir=d>=0?1:-1;
+    const pathScale=visualScale("path");
+    const futureAlpha=clamp((active?.22:.18)*pathScale,.10,.28);
+    const pastAlpha=clamp(.10*pathScale,.06,.18);
+    const hotAlpha=focus?.98:.88;
+    const fullDelta=Math.abs(d)>.03?d:dir*Math.PI*.26;
+    const ahead=fullDelta*0.22;
+    const behind=fullDelta*0.08;
 
-    drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(120,226,255,${alpha})`,traceWidth,1,color,traceGlow);
+    if(active && Math.abs(fullDelta*ratio)>0.003) drawDirectedArcSegments(r,n.angle,fullDelta*ratio,`rgba(35,240,197,${pastAlpha})`,7,1,null,0);
+    const farStart=active?curr+ahead:n.angle;
+    const farDelta=active?(endA-farStart):fullDelta;
+    if(Math.abs(farDelta)>0.003) drawDirectedArcSegments(r,farStart,farDelta,`rgba(35,240,197,${futureAlpha})`,7,1,null,0);
+    if(active && Math.abs(behind)>0.003) drawDirectedArcSegments(r,curr-behind,behind,`rgba(35,240,197,${Math.min(.24,pathScale*.18)})`,7,1,null,0);
+    if(Math.abs(ahead)>0.003) drawDirectedArcSegments(r,curr,ahead,`rgba(53,240,197,${hotAlpha*.28})`,13,1,null,0);
+    if(Math.abs(ahead)>0.003) drawDirectedArcSegments(r,curr,ahead,`rgba(53,240,197,${hotAlpha})`,NOTE_WIDTHS.trace,1,COLORS.trace,4*visualScale("effect"));
+
     ctx.save();
     ctx.translate(cx,cy);
     ctx.lineCap="round";
-    ctx.shadowBlur=focus?12:7;
-    ctx.shadowColor=color;
-    const targetAngle=active?curr:n.angle;
-    const startA=n.angle, endA=n.angle+d;
-    ctx.fillStyle=`rgba(120,226,255,${focus?.18:.11})`;
-    ctx.font=`800 ${focus?8:7}px system-ui`;
-    ctx.textAlign="center";
-    ctx.textBaseline="middle";
-    ctx.fillText("START",Math.cos(startA)*r,Math.sin(startA)*r-10);
-    ctx.fillText("END",Math.cos(endA)*r,Math.sin(endA)*r+10);
-    ctx.fillStyle=`rgba(255,255,255,${focus?.96:.88})`;
-    ctx.beginPath();ctx.arc(Math.cos(targetAngle)*r,Math.sin(targetAngle)*r,focus?5.6:4.4,0,TAU);ctx.fill();
-    ctx.strokeStyle=`rgba(120,226,255,${focus?.86:.70})`;ctx.lineWidth=1.4;ctx.stroke();
-    ctx.restore();
+    ctx.shadowBlur=4*visualScale("effect");
+    ctx.shadowColor=COLORS.trace;
+    ctx.strokeStyle=`rgba(53,240,197,${focus?.9:.72})`;
+    ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(Math.cos(n.angle)*r,Math.sin(n.angle)*r,7,0,TAU);ctx.stroke();
+    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,5,0,TAU);ctx.stroke();
+    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,10,0,TAU);ctx.stroke();
 
-    const arrowOuterPadding=focus?12:10;
-    const arrowRadius=Math.max(0,r-arrowOuterPadding);
-    const arrowProgress=clamp(active?((t-n.hitTime)/Math.max(n.duration,.001)):0,0,1);
-    const arrowAngle=n.angle+d*arrowProgress;
-    const arrowDir=d>=0?1:-1;
-    const arrowRotation=arrowAngle + (arrowDir>0 ? Math.PI/2 : -Math.PI/2);
-    const arrowX=cx + Math.cos(arrowAngle)*arrowRadius;
-    const arrowY=cy + Math.sin(arrowAngle)*arrowRadius;
-    if(Number.isFinite(arrowX)&&Number.isFinite(arrowY)&&Number.isFinite(arrowRotation)){
-      ctx.save();
-      ctx.translate(arrowX,arrowY);
-      ctx.rotate(arrowRotation);
-      ctx.fillStyle=`rgba(255,255,255,${focus?.94:.84})`;
-      ctx.shadowBlur=focus?10:6;
-      ctx.shadowColor=color;
-      const size=focus?10:8;
-      ctx.beginPath();
-      ctx.moveTo(size,0);
-      ctx.lineTo(-size*.55,-size*.65);
-      ctx.lineTo(-size*.28,0);
-      ctx.lineTo(-size*.55,size*.65);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+    const tx=Math.cos(curr)*r, ty=Math.sin(curr)*r;
+    const pointerInside=Math.abs(norm(armAngle-curr))<DIAL_ARC_HALF*1.3;
+    const pulse=.5+.5*Math.sin(t*24);
+    ctx.fillStyle="#ffffff"; ctx.beginPath();ctx.arc(tx,ty,focus?4.8:4.0,0,TAU);ctx.fill();
+    ctx.strokeStyle=pointerInside?"rgba(255,243,106,.98)":`rgba(53,240,197,${focus?.98:.86})`;
+    ctx.lineWidth=pointerInside?2.4:2;
+    ctx.beginPath();ctx.arc(tx,ty,(pointerInside?10:13)+(focus?pulse*1.5:0),0,TAU);ctx.stroke();
+
+    const arrowCount=focus?2:1;
+    for(let i=1;i<=arrowCount;i++){
+      const aa=curr+dir*(Math.PI*.055*i);
+      const ar=Math.max(hitR-18,r-8);
+      ctx.save();ctx.translate(Math.cos(aa)*ar,Math.sin(aa)*ar);ctx.rotate(aa+(dir>0?Math.PI/2:-Math.PI/2));
+      ctx.fillStyle=`rgba(53,240,197,${focus?.82:.62})`;
+      const size=7; ctx.beginPath();ctx.moveTo(size,0);ctx.lineTo(-size*.55,-size*.55);ctx.lineTo(-size*.25,0);ctx.lineTo(-size*.55,size*.55);ctx.closePath();ctx.fill();ctx.restore();
     }
+    if(!active && n.hitTime-t<.8){
+      ctx.fillStyle="rgba(53,240,197,.82)"; ctx.font="900 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("TRACE",Math.cos(n.angle)*(r-24),Math.sin(n.angle)*(r-24));
+    }
+    ctx.restore();
   }
 
   function drawSwing(n,t){
@@ -1738,7 +1762,7 @@
 
       ctx.save();
       ctx.translate(cx,cy);
-      ctx.shadowBlur=18;
+      ctx.shadowBlur=9*visualScale("effect");
       ctx.shadowColor=COLORS.slide;
 
       ctx.fillStyle="#ffffff";
@@ -1954,7 +1978,7 @@
       ctx.save();
       ctx.translate(cx,cy);
       ctx.lineCap="round";
-      ctx.shadowBlur=28+18*pulse;
+      ctx.shadowBlur=(10+8*pulse)*visualScale("effect");
       ctx.shadowColor=color;
 
       if(n.type.startsWith("swing")){
@@ -2032,12 +2056,12 @@
     for(let i=particles.length-1;i>=0;i--){
       const p=particles[i]; p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=.985; p.vy*=.985;
       if(p.life<=0){particles.splice(i,1);continue;}
-      ctx.globalAlpha=clamp(p.life/.6,0,1); ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,3.5,0,TAU); ctx.fill(); ctx.globalAlpha=1;
+      ctx.globalAlpha=clamp(p.life/.45,0,1)*visualScale("effect"); ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,2.4,0,TAU); ctx.fill(); ctx.globalAlpha=1;
     }
     for(let i=waves.length-1;i>=0;i--){
       const w=waves[i]; w.life-=dt; if(w.life<=0){waves.splice(i,1);continue;}
-      ctx.save(); ctx.translate(cx,cy); ctx.rotate(w.angle); ctx.globalAlpha=clamp(w.life/.38,0,1);
-      ctx.strokeStyle=w.color; ctx.lineWidth=5; ctx.beginPath(); ctx.arc(hitR,0,24+(1-w.life/.38)*36,0,TAU); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(w.angle); ctx.globalAlpha=clamp(w.life/.28,0,1)*visualScale("effect");
+      ctx.strokeStyle=w.color; ctx.lineWidth=3.5; ctx.beginPath(); ctx.arc(hitR,0,18+(1-w.life/.38)*28,0,TAU); ctx.stroke(); ctx.restore(); ctx.globalAlpha=1;
     }
     for(let i=ringBursts.length-1;i>=0;i--){
       const r=ringBursts[i];
@@ -2171,6 +2195,10 @@
   function formatOffset(){ return "OFFSET " + SONG_OFFSET.toFixed(2) + "s"; }
   function formatSfx(){ return "SFX " + Math.round(clamp(sfxVolume,0,4)*100) + "%" + (sfxEnabled ? "" : " OFF"); }
   function formatMusic(){ return "MUSIC " + Math.round(clamp(musicVolume,0,1)*100) + "%"; }
+  function formatNoteContrast(){ return "NOTE CONTRAST " + visualSettings.noteContrast; }
+  function formatPathBrightness(){ return "PATH BRIGHTNESS " + visualSettings.pathBrightness; }
+  function formatEffectIntensity(){ return "EFFECT INTENSITY " + visualSettings.effectIntensity; }
+  function cycleVisualSetting(key){ const list=VISUAL_CHOICES[key]; const idx=list.indexOf(visualSettings[key]); visualSettings[key]=list[(idx+1)%list.length]; saveVisualSettings(); updateButtons(); }
   function refreshSettingsUI(){ updateButtons(); }
 
   function setAutoMode(enabled, source="unknown"){
@@ -2220,6 +2248,9 @@
     if(offsetValue) offsetValue.textContent = formatOffset();
     if(sfxValue) sfxValue.textContent = formatSfx();
     if(musicValue) musicValue.textContent = formatMusic();
+    if(pauseSetNoteContrast) pauseSetNoteContrast.textContent = formatNoteContrast();
+    if(pauseSetPathBrightness) pauseSetPathBrightness.textContent = formatPathBrightness();
+    if(pauseSetEffectIntensity) pauseSetEffectIntensity.textContent = formatEffectIntensity();
     if(typeof safeRefresh === "function") safeRefresh();
   }
 
@@ -2307,7 +2338,7 @@
     {name:"CUT",kind:"cut",desc:"Aim at the note and press on time.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5.5,lane:2},{type:"cut",beat:7,lane:5},{type:"cut",beat:8.5,lane:7}]},
     {name:"HOLD",kind:"hold",desc:"Press and keep holding until the end.",notes:[{type:"fx",beat:4,lane:1,durationBeat:3}]},
     {name:"SLIDE",kind:"slide",desc:"Hold and follow START to END.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4}]},
-    {name:"TRACE",kind:"trace",desc:"DO NOT PRESS — follow the path only.",notes:[{type:"traceCW",beat:4,lane:7,endLane:2,durationBeat:2},{type:"traceCCW",beat:7,lane:3,endLane:0,durationBeat:2}]},
+    {name:"TRACE",kind:"trace",desc:"버튼을 누르지 말고 목표점을 따라가세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:2,durationBeat:2},{type:"traceCCW",beat:7,lane:3,endLane:0,durationBeat:2}]},
     {name:"SWING",kind:"swing",desc:"Move shortly and quickly in the shown direction.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
     {name:"SCRATCH",kind:"scratch",desc:"Use the scratch gesture in the shown direction.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
     {name:"MIX TEST",kind:"mix",desc:"A short practice mix with every note type.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7},{type:"slideCCW",beat:22,lane:1,endLane:6,durationBeat:3},{type:"traceCW",beat:26,lane:6,endLane:1,durationBeat:2},{type:"swingCCW",beat:29,lane:4},{type:"scratchCW",beat:31,lane:0,endLane:1,durationBeat:.55},{type:"cut",beat:33,lane:2}]}
@@ -2625,6 +2656,9 @@
       pauseSetSfx.textContent = formatSfx();
       pauseSetSfx.classList.toggle("on", sfxEnabled);
     }
+    if(pauseSetNoteContrast) pauseSetNoteContrast.textContent = formatNoteContrast();
+    if(pauseSetPathBrightness) pauseSetPathBrightness.textContent = formatPathBrightness();
+    if(pauseSetEffectIntensity) pauseSetEffectIntensity.textContent = formatEffectIntensity();
     if(pauseSetAuto){
       pauseSetAuto.textContent = gameState.autoEnabled ? "AUTO PLAY ON" : "AUTO PLAY OFF";
       pauseSetAuto.classList.toggle("on", gameState.autoEnabled);
@@ -2812,6 +2846,9 @@
   bindPress(sfxUp,()=>changeSfx(+0.20));
   bindPress(musicDown,()=>changeMusic(-0.10));
   bindPress(musicUp,()=>changeMusic(+0.10));
+  bindPress(pauseSetNoteContrast,()=>{cycleVisualSetting("noteContrast");syncPauseSettingsUI();});
+  bindPress(pauseSetPathBrightness,()=>{cycleVisualSetting("pathBrightness");syncPauseSettingsUI();});
+  bindPress(pauseSetEffectIntensity,()=>{cycleVisualSetting("effectIntensity");syncPauseSettingsUI();});
   bindPress(addCutBtn,()=>addEditorNote("cut"));bindPress(addSwingCWBtn,()=>addEditorNote("swingCW"));bindPress(addSwingCCWBtn,()=>addEditorNote("swingCCW"));bindPress(addFxBtn,()=>addEditorNote("fx"));bindPress(addSlideCWBtn,()=>addEditorNote("slideCW"));bindPress(addSlideCCWBtn,()=>addEditorNote("slideCCW"));bindPress(addScratchCWBtn,()=>addEditorNote("scratchCW"));bindPress(addScratchCCWBtn,()=>addEditorNote("scratchCCW"));
   bindPress(seekBackBtn,()=>{song.currentTime=Math.max(0,song.currentTime-1);updateEditorStatus();});
   bindPress(seekFwdBtn,()=>{song.currentTime=Math.min(song.duration||999,song.currentTime+1);updateEditorStatus();});
@@ -2897,6 +2934,9 @@
   const safeSetSpdUp=document.getElementById("safeSetSpdUp");
   const safeSetOffDown=document.getElementById("safeSetOffDown");
   const safeSetOffUp=document.getElementById("safeSetOffUp");
+  const safeSetNoteContrast=document.getElementById("safeSetNoteContrast");
+  const safeSetPathBrightness=document.getElementById("safeSetPathBrightness");
+  const safeSetEffectIntensity=document.getElementById("safeSetEffectIntensity");
   const safeResume=document.getElementById("safeResume");
   const safeExit=document.getElementById("safeExit");
   let pendingMobileStartMode = null;
@@ -3064,6 +3104,9 @@
     if(safeSetSpdUp)safeSetSpdUp.textContent=formatSpeed() + " ＋";
     if(safeSetOffDown)safeSetOffDown.textContent=formatOffset() + " −";
     if(safeSetOffUp)safeSetOffUp.textContent=formatOffset() + " ＋";
+    if(safeSetNoteContrast)safeSetNoteContrast.textContent=formatNoteContrast();
+    if(safeSetPathBrightness)safeSetPathBrightness.textContent=formatPathBrightness();
+    if(safeSetEffectIntensity)safeSetEffectIntensity.textContent=formatEffectIntensity();
   }
 
   const originalStart=start;
@@ -3148,6 +3191,9 @@
   safeBind(safeSetSpdUp,()=>changeSpeed(-0.04));
   safeBind(safeSetOffDown,()=>changeOffset(-0.03));
   safeBind(safeSetOffUp,()=>changeOffset(+0.03));
+  safeBind(safeSetNoteContrast,()=>cycleVisualSetting("noteContrast"));
+  safeBind(safeSetPathBrightness,()=>cycleVisualSetting("pathBrightness"));
+  safeBind(safeSetEffectIntensity,()=>cycleVisualSetting("effectIntensity"));
   safeBind(safeResume,()=>{safeSetOverlay(false);resumeGame();});
   safeBind(safeExit,exitToMenu);
   bindPress(tutorialPromptStart,startTutorial);
