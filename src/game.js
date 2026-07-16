@@ -34,6 +34,8 @@
   const musicUp = document.getElementById("musicUp");
   const musicValue = document.getElementById("musicValue");
   const difficultyBox = document.getElementById("difficultyBox");
+  const debugMode = new URLSearchParams(window.location.search).get("debug")==="1";
+  document.body.classList.toggle("debugMode", debugMode);
   const modeNormalStar = document.getElementById("modeNormalStar");
   const modeTechStar = document.getElementById("modeTechStar");
   const modeNormalBtn = document.getElementById("modeNormalBtn");
@@ -2312,7 +2314,7 @@
   bindPress(modeTechBtn,()=>{selectedMenuMode="tech";updateModeButtons();});
   bindPress(modeCustomBtn,()=>{selectedMenuMode="custom";updateModeButtons();});
   bindPress(autoToggle,()=>{autoMode=!autoMode;updateButtons();});
-  bindPress(mapToggle,()=>{mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();});
+  bindPress(mapToggle,()=>{if(running && !debugMode)return; mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();});
   bindPress(debugToggle,()=>toggleDebugOverlay());
   bindPress(keymapToggle,()=>toggleKeymap());
   bindPress(editorToggle,()=>toggleEditor());
@@ -2342,7 +2344,7 @@
   bindPress(exportBtn,exportChart);bindPress(importBtn,importChart);
   bindPress(clearChartBtn,()=>{customChartData=[];useCustomChart=false;rebuildCustomChart();});
   keymapOverlay.addEventListener("click",e=>{if(e.target===keymapOverlay)toggleKeymap(false);});
-  if(new URLSearchParams(window.location.search).get("debug")==="1")setDebugOverlayVisible(true);
+  if(debugMode)setDebugOverlayVisible(true);
   if(laneGrid) laneGrid.addEventListener("click",e=>{const btn=e.target.closest("[data-lane]");if(!btn)return;selectedLane=Number(btn.dataset.lane)||0;laneGrid.querySelectorAll("[data-lane]").forEach(b=>b.classList.toggle("on",b===btn));updateEditorStatus();});
 
   window.addEventListener("mousemove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();},{passive:true});
@@ -2358,7 +2360,7 @@
     if(e.code==="KeyD")keyD=true;
     if(e.code==="Space"||e.code==="KeyZ"||e.code==="KeyX"){e.preventDefault(); if(!e.repeat)onCut();}
     if((e.code==="KeyD"||e.code==="F3")&&!e.repeat){e.preventDefault();toggleDebugOverlay();}
-    if(e.code==="KeyO"&&!e.repeat){autoMode=!autoMode;updateButtons();updateDebugOverlay(now());}
+    if(e.code==="KeyO"&&!e.repeat&&(!running||debugMode)){autoMode=!autoMode;updateButtons();updateDebugOverlay(now());}
     if(e.code==="KeyP"&&!e.repeat){ ensureAudioCtx(); applyMusicVolume(); if(song.paused) song.play().catch(()=>{}); else song.pause(); }
     if(e.code==="KeyS"&&!e.repeat){ sfxEnabled=!sfxEnabled; updateButtons(); }
     if(e.code==="Minus"&&!e.repeat){ changeSfx(-0.20); }
@@ -2380,7 +2382,7 @@
       if(e.code==="KeyR")addEditorNote("scratchCW");
       if(e.code==="KeyY")addEditorNote("scratchCCW");
     }
-    if(e.code==="KeyM"&&!e.repeat){mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();}
+    if(e.code==="KeyM"&&!e.repeat&&(!running||debugMode)){mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();}
     if(e.code==="KeyK"&&!e.repeat)toggleKeymap();
     if(e.code==="Escape"&&!e.repeat){ if(keymapOverlay&&keymapOverlay.classList.contains("show")) toggleKeymap(false); else if(paused) resumeGame(); else showPause(); }
     if(e.code==="KeyF"&&!e.repeat)requestFullscreenSafe();
@@ -2409,6 +2411,8 @@
   const safeEditor=document.getElementById("safeEditor");
   const safeSetAuto=document.getElementById("safeSetAuto");
   const safeSetMap=document.getElementById("safeSetMap");
+  const safeSetKeymap=document.getElementById("safeSetKeymap");
+  const safeSetFull=document.getElementById("safeSetFull");
   const safeSetSfx=document.getElementById("safeSetSfx");
   const safeSetMusic=document.getElementById("safeSetMusic");
   const safeSetSpdDown=document.getElementById("safeSetSpdDown");
@@ -2504,7 +2508,7 @@
   };
 
   safeBind(safeStart,()=>{safeStart.textContent="LOADING...";start("play");});
-  safeBind(safeEditor,()=>{toggleKeymap(true);});
+  safeBind(safeEditor,()=>{if(debugMode)start("editor"); else toggleKeymap(true);});
   safeBind(safeTech,()=>{selectedMenuMode="tech";mapMode="tech";safeRefresh();updateButtons();});
   safeBind(safeNormal,()=>{selectedMenuMode="normal";mapMode="normal";safeRefresh();updateButtons();});
   safeBind(safeAuto,()=>{autoMode=!autoMode;safeRefresh();updateButtons();});
@@ -2512,7 +2516,9 @@
   safeBind(safeSettingsBtn,()=>toggleSettings(true));
 
   safeBind(safeSetAuto,()=>{autoMode=!autoMode;safeRefresh();updateButtons();});
-  safeBind(safeSetMap,()=>{mapMode=mapMode==="tech"?"normal":"tech";selectedMenuMode=mapMode;safeRefresh();restartIfRunning();});
+  safeBind(safeSetMap,()=>{if(running && !debugMode)return; mapMode=mapMode==="tech"?"normal":"tech";selectedMenuMode=mapMode;safeRefresh();restartIfRunning();});
+  safeBind(safeSetKeymap,()=>toggleKeymap(true));
+  safeBind(safeSetFull,requestFullscreenSafe);
   safeBind(safeSetSfx,()=>{sfxEnabled=!sfxEnabled;refreshSettingsUI();});
   safeBind(safeSetMusic,()=>changeMusic(musicVolume>=.95?-.45:.10));
   safeBind(safeSetSpdDown,()=>changeSpeed(+0.04));
