@@ -131,6 +131,12 @@
   const SCRATCH_FLICK_SPEED = 1.30;
   const DIAL_ARC_HALF = Math.PI * 0.075;
   const DIAL_ARC_VISUAL = Math.PI * 0.100;
+  const TRACE_PROFILES = {
+    normal:{ angularToleranceDeg:10, radialTolerancePx:18, radialToleranceRatio:.055, startGrace:.24, endpointWindow:.18, perfectCoverage:.92, greatCoverage:.75, maxFrameDt:.05 },
+    tutorial:{ angularToleranceDeg:16, radialTolerancePx:24, radialToleranceRatio:.075, startGrace:.25, endpointWindow:.20, perfectCoverage:.92, greatCoverage:.75, maxFrameDt:.05 }
+  };
+  const TRACE_SWING_LINK_MIN = .15;
+  const TRACE_SWING_LINK_MAX = .25;
   const BASE_NOTE_WIDTH = 8;
   const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, trace:3.0, hold:11.5 };
   const VISUAL_SETTINGS_KEY = "circleMixVisualSettings.v1";
@@ -303,6 +309,7 @@
     return 0;
   }
   function signedSweepRad(type, extra, rawDelta){
+    if(extra.signedSweepAngle !== undefined && Number.isFinite(Number(extra.signedSweepAngle))) return Number(extra.signedSweepAngle) * Math.PI / 180;
     if(extra.sweepAngle !== undefined && Number.isFinite(Number(extra.sweepAngle))) return Number(extra.sweepAngle) * Math.PI / 180;
     if(extra.turns !== undefined && Number.isFinite(Number(extra.turns)) && Number(extra.turns)!==0){
       const dir=directionSign(extra.direction) || (type.endsWith("CW")&&!type.endsWith("CCW")?1:(type.endsWith("CCW")?-1:Math.sign(rawDelta)||1));
@@ -335,7 +342,7 @@
 
       if(explicitSweep !== null){
         n.slideAmount = explicitSweep;
-        n.sweepAngle = Number((explicitSweep * 180 / Math.PI).toFixed(3));
+        n.signedSweepAngle = Number((explicitSweep * 180 / Math.PI).toFixed(3));
       }else if(type==="slideCW" || type==="traceCW"){
         while(raw <= 0) raw += TAU;
         n.slideAmount = raw + TAU * n.turns;
@@ -834,7 +841,7 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle }); }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); }
 
   function generateChart(){
     if(useCustomChart){
@@ -872,6 +879,7 @@
   }
 
   function slideDelta(n){
+    if(n.type?.startsWith("trace") && typeof n.signedSweepAngle === "number") return n.signedSweepAngle * Math.PI / 180;
     if(typeof n.slideAmount === "number") return n.slideAmount;
 
     // fallback: old chart compatibility
@@ -883,9 +891,34 @@
     if(n.type.startsWith("trace"))return norm(d);
     return d;
   }
+  function traceProgress(n,t){
+    return clamp((t-n.hitTime)/Math.max(n.duration||0,.001),0,1);
+  }
   function slideAngle(n,t){
     const duration=Math.max(n.duration||0,.001);
     return n.angle + slideDelta(n) * clamp((t-n.hitTime)/duration,0,1);
+  }
+  function traceTargetAngle(n,t){
+    return n.angle + slideDelta(n) * traceProgress(n,t);
+  }
+  function traceProfile(){
+    return tutorialMode ? TRACE_PROFILES.tutorial : TRACE_PROFILES.normal;
+  }
+  function traceTolerance(profile=traceProfile()){
+    return { angular:profile.angularToleranceDeg*Math.PI/180, radial:Math.max(profile.radialTolerancePx, hitR*profile.radialToleranceRatio) };
+  }
+  function pointerPolar(){
+    if(gameState.autoEnabled || keyA || keyD) return {angle:armAngle, radius:hitR};
+    const dx=mouseX-cx, dy=mouseY-cy;
+    return {angle:Math.atan2(dy,dx), radius:Math.hypot(dx,dy)};
+  }
+  function insideTraceTarget(n,t){
+    const tol=traceTolerance();
+    const p=pointerPolar();
+    const target=traceTargetAngle(n,t);
+    const angleError=Math.abs(norm(p.angle-target));
+    const radiusError=Math.abs(p.radius-hitR);
+    return {inside:angleError<=tol.angular && radiusError<=tol.radial, angleError, radiusError, target, tol};
   }
   function progress(n,t){return clamp((t-n.spawnTime)/(n.hitTime-n.spawnTime),0,1);}
   function noteR(n,t){return lerp(outerR,hitR,progress(n,t));}
@@ -1253,22 +1286,37 @@
 
       if(n.type.startsWith("trace")){
         const end=n.hitTime+n.duration;
-        const a=slideAngle(n,t);
-        if(t>=n.hitTime&&t<=end&&(gameState.autoEnabled||aligned(a,.040))){
-          if(gameState.autoEnabled)logAutoProcessing(n);
-          n.hold+=dt;
-          if(Math.random()<.45)addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.trace,1,.18);
+        const profile=traceProfile();
+        const a=traceTargetAngle(n,t);
+        if(n.validTrackedTime===undefined){ n.validTrackedTime=0; n.endpointCaptured=false; n.enteredTrace=false; n.lateTraceStart=false; }
+        if(t>=n.hitTime&&t<=end){
+          const hit=gameState.autoEnabled ? {inside:true,target:a} : insideTraceTarget(n,t);
+          if(hit.inside){
+            if(gameState.autoEnabled)logAutoProcessing(n);
+            n.enteredTrace=true;
+            if(t>n.hitTime+profile.startGrace && n.validTrackedTime<=0) n.lateTraceStart=true;
+            n.validTrackedTime += Math.min(Math.max(dt,0), profile.maxFrameDt);
+            n.hold=n.validTrackedTime;
+            if(end-t<=profile.endpointWindow) n.endpointCaptured=true;
+            if(Math.random()<.45)addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.trace,1,.18);
+          }
         }
         if(t>end){
-          const ratio=n.hold/Math.max(n.duration,.001);
-          if(ratio>=.45){ addWave(slideAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END"); judge(n,ratio>.72?"PERFECT":"GREAT",COLORS.trace); }
-          else miss(n);
+          const ratio=(n.validTrackedTime||0)/Math.max(n.duration,.001);
+          n.coverageRatio=ratio;
+          n.completed=ratio>=profile.greatCoverage && n.endpointCaptured===true;
+          if(n.completed){
+            const perfect=ratio>=profile.perfectCoverage && !n.lateTraceStart;
+            addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace);
+          }else miss(n);
         }
-        if(t>n.hitTime+.45&&n.hold<.025&&!gameState.autoEnabled)miss(n);
         continue;
       }
 
       if(n.type.startsWith("swing")){
+        const link=linkedTraceForSwing(n);
+        const needsTrace=chart.some(p=>p.type?.startsWith("trace") && p.hitTime+p.duration<=n.hitTime && n.hitTime-(p.hitTime+p.duration)>=TRACE_SWING_LINK_MIN && n.hitTime-(p.hitTime+p.duration)<=TRACE_SWING_LINK_MAX && distAng(traceTargetAngle(p,p.hitTime+p.duration),n.angle)<Math.PI*.12);
+        if(needsTrace && !link){ if(t>n.hitTime+.26) miss(n); continue; }
         if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(gameState.autoEnabled||checkSwing(n))){
           if(gameState.autoEnabled)logAutoProcessing(n);
           judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n));
@@ -1674,7 +1722,7 @@
     const dur=Math.max(n.duration,.001);
     const ratio=clamp(active?((t-n.hitTime)/dur):0,0,1);
     const r=clamp((active?hitR:noteR(n,t))-10,hitR-14,outerR-18);
-    const curr=active?slideAngle(n,t):n.angle;
+    const curr=active?traceTargetAngle(n,t):n.angle;
     const endA=n.angle+d;
     const dir=d>=0?1:-1;
     const pathScale=visualScale("path");
@@ -1682,16 +1730,18 @@
     const pastAlpha=clamp(.10*pathScale,.06,.18);
     const hotAlpha=focus?.98:.88;
     const fullDelta=Math.abs(d)>.03?d:dir*Math.PI*.26;
-    const ahead=fullDelta*0.22;
-    const behind=fullDelta*0.08;
+    const tol=traceTolerance();
+    const activeHalf=tol.angular;
+    const activeWidth=Math.max(NOTE_WIDTHS.trace+8, tol.radial*2);
 
     if(active && Math.abs(fullDelta*ratio)>0.003) drawDirectedArcSegments(r,n.angle,fullDelta*ratio,`rgba(35,240,197,${pastAlpha})`,7,1,null,0);
-    const farStart=active?curr+ahead:n.angle;
+    const farStart=active?curr:n.angle;
     const farDelta=active?(endA-farStart):fullDelta;
     if(Math.abs(farDelta)>0.003) drawDirectedArcSegments(r,farStart,farDelta,`rgba(35,240,197,${futureAlpha})`,7,1,null,0);
-    if(active && Math.abs(behind)>0.003) drawDirectedArcSegments(r,curr-behind,behind,`rgba(35,240,197,${Math.min(.24,pathScale*.18)})`,7,1,null,0);
-    if(Math.abs(ahead)>0.003) drawDirectedArcSegments(r,curr,ahead,`rgba(53,240,197,${hotAlpha*.28})`,13,1,null,0);
-    if(Math.abs(ahead)>0.003) drawDirectedArcSegments(r,curr,ahead,`rgba(53,240,197,${hotAlpha})`,NOTE_WIDTHS.trace,1,COLORS.trace,4*visualScale("effect"));
+    if(active){
+      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.30})`,activeWidth+4,1,null,0);
+      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha})`,activeWidth,1,COLORS.trace,4*visualScale("effect"));
+    }
 
     ctx.save();
     ctx.translate(cx,cy);
@@ -1705,7 +1755,7 @@
     ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,10,0,TAU);ctx.stroke();
 
     const tx=Math.cos(curr)*r, ty=Math.sin(curr)*r;
-    const pointerInside=Math.abs(norm(armAngle-curr))<DIAL_ARC_HALF*1.3;
+    const pointerInside=insideTraceTarget(n,t).inside;
     const pulse=.5+.5*Math.sin(t*24);
     ctx.fillStyle="#ffffff"; ctx.beginPath();ctx.arc(tx,ty,focus?4.8:4.0,0,TAU);ctx.fill();
     ctx.strokeStyle=pointerInside?"rgba(255,243,106,.98)":`rgba(53,240,197,${focus?.98:.86})`;
@@ -1728,7 +1778,7 @@
   }
 
   function linkedTraceForSwing(n){
-    return chart.find(p=>p.type?.startsWith("trace") && !p.missed && p.hitTime+p.duration<=n.hitTime+.08 && n.hitTime-(p.hitTime+p.duration)<=.35 && distAng(slideAngle(p,p.hitTime+p.duration),n.angle)<Math.PI*.12);
+    return chart.find(p=>p.type?.startsWith("trace") && p.completed && p.endpointCaptured && !p.missed && p.hitTime+p.duration<=n.hitTime && n.hitTime-(p.hitTime+p.duration)>=TRACE_SWING_LINK_MIN && n.hitTime-(p.hitTime+p.duration)<=TRACE_SWING_LINK_MAX && distAng(traceTargetAngle(p,p.hitTime+p.duration),n.angle)<Math.PI*.12);
   }
   function drawSwing(n,t){
     const link=linkedTraceForSwing(n);
@@ -2392,6 +2442,7 @@
     {name:"SLIDE",kind:"slide",desc:"Hold and follow START to END.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4}]},
     {name:"TRACE",kind:"trace",desc:"버튼을 누르지 말고 목표점을 따라가세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:2,durationBeat:2},{type:"traceCCW",beat:7,lane:3,endLane:0,durationBeat:2}]},
     {name:"SWING",kind:"swing",desc:"Move shortly and quickly in the shown direction.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
+    {name:"360 TRACE → SWING",kind:"trace",desc:"고급 연습: 한 바퀴 TRACE를 끝점까지 완료한 뒤 SWING하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:6.75,lane:0},{type:"traceCCW",beat:9,lane:4,endLane:4,durationBeat:2.5,signedSweepAngle:-360},{type:"swingCW",beat:11.75,lane:4}]},
     {name:"SCRATCH",kind:"scratch",desc:"Use the scratch gesture in the shown direction.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
     {name:"MIX TEST",kind:"mix",desc:"A short practice mix with every note type.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7},{type:"slideCCW",beat:22,lane:1,endLane:6,durationBeat:3},{type:"traceCW",beat:26,lane:6,endLane:1,durationBeat:2},{type:"swingCCW",beat:29,lane:4},{type:"scratchCW",beat:31,lane:0,endLane:1,durationBeat:.55},{type:"cut",beat:33,lane:2}]}
   ];
