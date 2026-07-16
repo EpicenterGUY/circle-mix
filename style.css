@@ -449,3 +449,126 @@ body.safeTitle .safeMenuCard{
 body.safeTitle .safeMenuGrid{
   margin-top:18px;
 }
+
+/* Compact gameplay HUD and safe playfield overlay fixes. */
+body.safeGame .rhythmHud,
+body.playingClean .rhythmHud{
+  inset:calc(8px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) auto calc(18px + env(safe-area-inset-left));
+  min-height:48px;
+  display:grid !important;
+  grid-template-columns:minmax(92px,1fr) minmax(190px,1.45fr) minmax(110px,1fr);
+  grid-template-rows:48px;
+  gap:10px;
+  align-items:center;
+  pointer-events:none;
+}
+body.safeGame .rhythmHud>div,
+body.playingClean .rhythmHud>div{
+  min-height:0;
+  padding:4px 8px;
+  border:0;
+  border-radius:8px;
+  background:rgba(3,8,18,.20);
+  box-shadow:none;
+  text-shadow:0 0 10px rgba(0,0,0,.80);
+}
+body.safeGame .rhythmHud span,
+body.playingClean .rhythmHud span{
+  font-size:9px;
+  line-height:1.1;
+  letter-spacing:.12em;
+  color:rgba(128,247,255,.86);
+}
+body.safeGame .rhythmHud strong,
+body.playingClean .rhythmHud strong{
+  display:block;
+  font-size:clamp(14px,2.2vw,18px);
+  line-height:1.15;
+  font-weight:850;
+  letter-spacing:.035em;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+body.safeGame .hudSong,
+body.playingClean .hudSong{
+  grid-column:2;
+  grid-row:1;
+  text-align:center;
+  background:transparent;
+}
+body.safeGame .hudSong span,
+body.safeGame .hudSong em,
+body.playingClean .hudSong span,
+body.playingClean .hudSong em{
+  display:none !important;
+}
+body.safeGame .hudScore,
+body.playingClean .hudScore{grid-column:1;grid-row:1;text-align:left;}
+body.safeGame .hudStatus,
+body.playingClean .hudStatus{grid-column:3;grid-row:1;text-align:right;}
+body.safeGame .hudStatus em,
+body.playingClean .hudStatus em{
+  display:block;
+  margin-top:1px;
+  font-size:9px;
+  line-height:1;
+  letter-spacing:.08em;
+  color:rgba(205,189,255,.82);
+}
+body.safeGame .hudCombo,
+body.playingClean .hudCombo{
+  position:fixed;
+  left:50%;
+  top:calc(62px + env(safe-area-inset-top));
+  transform:translateX(-50%);
+  width:auto;
+  min-width:0;
+  grid-column:auto;
+  grid-row:auto;
+  padding:0 !important;
+  border:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  text-align:center;
+  color:#fff;
+  text-shadow:0 0 12px rgba(0,0,0,.86),0 0 18px rgba(92,255,251,.35);
+}
+body.safeGame .hudCombo span,
+body.playingClean .hudCombo span{display:none !important;}
+body.safeGame .hudCombo strong,
+body.playingClean .hudCombo strong{
+  display:inline-block;
+  font-size:clamp(15px,2.1vw,20px);
+  line-height:1;
+  font-weight:950;
+  letter-spacing:.08em;
+}
+body.safeGame .hudCombo strong::after,
+body.playingClean .hudCombo strong::after{content:" COMBO";font-size:.72em;color:rgba(234,243,255,.74);}
+.pauseOverlay{z-index:120010 !important;pointer-events:auto;}
+.pauseOverlay.show{display:flex;}
+.pauseOverlay *{pointer-events:auto;}
+.pauseCard{position:relative;z-index:1;}
+.pauseButtons .btn{touch-action:manipulation;}
+@media(max-width:820px){
+  body.safeGame .rhythmHud,
+  body.playingClean .rhythmHud{
+    inset:calc(6px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) auto calc(10px + env(safe-area-inset-left));
+    grid-template-columns:minmax(78px,1fr) minmax(130px,1.35fr) minmax(88px,1fr);
+    grid-template-rows:44px;
+    gap:6px;
+  }
+  body.safeGame .rhythmHud>div,
+  body.playingClean .rhythmHud>div{padding:3px 5px;background:rgba(3,8,18,.16);}
+  body.safeGame .rhythmHud strong,
+  body.playingClean .rhythmHud strong{font-size:13px;}
+  body.safeGame .rhythmHud span,
+  body.playingClean .rhythmHud span,
+  body.safeGame .hudStatus em,
+  body.playingClean .hudStatus em{font-size:8px;}
+  body.safeGame .hudCombo,
+  body.playingClean .hudCombo{top:calc(52px + env(safe-area-inset-top));}
+  body.safeGame .hudCombo strong,
+  body.playingClean .hudCombo strong{font-size:15px;}
+}

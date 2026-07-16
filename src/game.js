@@ -42,9 +42,9 @@
   const modeTechBtn = document.getElementById("modeTechBtn");
   const modeCustomBtn = document.getElementById("modeCustomBtn");
   const pauseOverlay = document.getElementById("pauseOverlay");
-  const pauseResume = document.getElementById("pauseResume");
-  const pauseRetry = document.getElementById("pauseRetry");
-  const pauseMenu = document.getElementById("pauseMenu");
+  const pauseResume = document.getElementById("resumeBtn");
+  const pauseRetry = document.getElementById("retryBtn");
+  const pauseMenu = document.getElementById("exitBtn");
   const resultOverlay = document.getElementById("resultOverlay");
   const resultScore = document.getElementById("resultScore");
   const resultRank = document.getElementById("resultRank");
@@ -66,9 +66,9 @@
   const quickSettingsBtn = document.getElementById("quickSettingsBtn");
   const quickEditorBtn = document.getElementById("quickEditorBtn");
   const quickFullBtn = document.getElementById("quickFullBtn");
-  const resumeBtn = document.getElementById("pauseResume");
-  const retryBtn = document.getElementById("pauseRetry");
-  const exitBtn = document.getElementById("pauseMenu");
+  const resumeBtn = document.getElementById("resumeBtn");
+  const retryBtn = document.getElementById("retryBtn");
+  const exitBtn = document.getElementById("exitBtn");
 
   const TAU = Math.PI * 2;
   const songs = window.CircleMixSongRegistry || { all:()=>[], localAll:()=>[], refreshLocal:async()=>[], get:()=>null, hasDifficulty:()=>false };
@@ -151,23 +151,35 @@
 
   function resize(){
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(window.innerWidth * dpr);
-    canvas.height = Math.floor(window.innerHeight * dpr);
-    canvas.style.width = window.innerWidth + "px";
-    canvas.style.height = window.innerHeight + "px";
-    ctx.setTransform(dpr,0,0,dpr,0,0);
     W=window.innerWidth; H=window.innerHeight;
-    cx=W*.5;
-    const isMobileLandscape = window.matchMedia && window.matchMedia("(max-width: 932px) and (orientation: landscape)").matches;
-    const hudReserve = isMobileLandscape ? 58 : 0;
-    const safeBottom = isMobileLandscape ? 10 : 0;
-    const usableH = Math.max(180, H - hudReserve - safeBottom);
-    cy = isMobileLandscape ? hudReserve + usableH * .5 : H*.53;
-    baseR = isMobileLandscape ? Math.min(W * .30, usableH * .39, 176) : Math.min(W,H)*.287;
-    hitR=baseR;
-    outerR=baseR*1.86;
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+
+    const hudHeight = 60;
+    const horizontalPadding = W <= 820 ? 14 : 24;
+    const bottomPadding = W <= 820 ? 16 : 24;
+    const topPadding = hudHeight + 14;
+    const availableWidth = Math.max(220, W - horizontalPadding * 2);
+    const availableHeight = Math.max(220, H - topPadding - bottomPadding);
+    const playfieldSize = Math.min(availableWidth, availableHeight);
+    const outerGlowSize = 26;
+    const outerLineWidth = 2;
+    const safeMargin = Math.max(32, outerGlowSize + outerLineWidth);
+
+    cx = W * .5;
+    cy = topPadding + availableHeight * .5;
+    outerR = Math.max(96, playfieldSize * .5 - safeMargin);
+    baseR = outerR / 1.86;
+    hitR = baseR;
   }
   window.addEventListener("resize", resize);
+  window.addEventListener("orientationchange", resize);
+  if(window.ResizeObserver){
+    new ResizeObserver(resize).observe(document.documentElement);
+  }
   resize();
 
   function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
@@ -1994,9 +2006,10 @@
   function updateButtons(){
     applyMusicVolume();
     autoBox.textContent=autoMode?"AUTO ON":"AUTO OFF";
-    mapBox.textContent=(mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
+    const hudModeLabel = (mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
+    mapBox.textContent=((selectedSong?.title || "") + " · " + hudModeLabel).trim();
     const hudSongTitle = document.querySelector(".hudSong span");
-    if(hudSongTitle) hudSongTitle.textContent = selectedSong?.title || "";
+    if(hudSongTitle) hudSongTitle.textContent = "";
     autoToggle.textContent=autoMode?"AUTO ON":"AUTO OFF";
     autoToggle.classList.toggle("on",autoMode);
     mapToggle.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
