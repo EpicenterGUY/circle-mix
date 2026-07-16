@@ -882,17 +882,37 @@
       .sort((a,b)=>a.hitTime-b.hitTime);
   }
 
+  function resolveTraceMotion(n){
+    const startAngle=n.angle;
+    let signedSweepAngle;
+    if(typeof n.signedSweepAngle === "number" && Number.isFinite(n.signedSweepAngle)){
+      signedSweepAngle=n.signedSweepAngle*Math.PI/180;
+    }else if(typeof n.slideAmount === "number" && Number.isFinite(n.slideAmount)){
+      signedSweepAngle=n.slideAmount;
+    }else{
+      // Legacy chart compatibility: only derive sweep from endAngle when no
+      // normalized signed sweep exists. Direction is interpreted exactly once.
+      let d=(n.endAngle ?? n.angle)-n.angle;
+      if(n.type==="traceCW"){while(d<=0)d+=TAU;}
+      else if(n.type==="traceCCW"){while(d>=0)d-=TAU;}
+      else d=norm(d);
+      signedSweepAngle=d;
+    }
+    const finalUnwrappedAngle=startAngle+signedSweepAngle;
+    return {startAngle,signedSweepAngle,finalUnwrappedAngle,finalAngle:norm(finalUnwrappedAngle)};
+  }
+  function traceAngleAtProgress(n,progress){
+    const motion=resolveTraceMotion(n);
+    return norm(motion.startAngle + motion.signedSweepAngle * clamp(progress,0,1));
+  }
   function slideDelta(n){
-    if(n.type?.startsWith("trace") && typeof n.signedSweepAngle === "number") return n.signedSweepAngle * Math.PI / 180;
+    if(n.type?.startsWith("trace")) return resolveTraceMotion(n).signedSweepAngle;
     if(typeof n.slideAmount === "number") return n.slideAmount;
 
     // fallback: old chart compatibility
     let d=n.endAngle-n.angle;
     if(n.type==="slideCW"){while(d<=0)d+=TAU;return d;}
     if(n.type==="slideCCW"){while(d>=0)d-=TAU;return d;}
-    if(n.type==="traceCW"){while(d<=0)d+=TAU;return d;}
-    if(n.type==="traceCCW"){while(d>=0)d-=TAU;return d;}
-    if(n.type.startsWith("trace"))return norm(d);
     return d;
   }
   function traceProgress(n,t){
@@ -903,7 +923,15 @@
     return n.angle + slideDelta(n) * clamp((t-n.hitTime)/duration,0,1);
   }
   function traceTargetAngle(n,t){
-    return n.angle + slideDelta(n) * traceProgress(n,t);
+    return traceAngleAtProgress(n,traceProgress(n,t));
+  }
+  function traceEndpointRegion(n,profile=traceProfile()){
+    const motion=resolveTraceMotion(n);
+    const p=pointerPolar();
+    const tol=traceTolerance(profile);
+    const angleError=distAng(p.angle,motion.finalAngle);
+    const radiusError=Math.abs(p.radius-hitR);
+    return {targetAngle:motion.finalAngle,targetRadius:hitR,pointerAngle:p.angle,pointerRadius:p.radius,angleError,radiusError,angularTolerance:tol.angular,radialTolerance:tol.radial,inside:angleError<=tol.angular && radiusError<=tol.radial,motion};
   }
   function traceProfile(){
     return tutorialMode ? TRACE_PROFILES.tutorial : TRACE_PROFILES.normal;
@@ -1256,6 +1284,7 @@
     n.missed=true; n.failReason=reason || inferMissReason(n, now()); combo=0; judgedCount++; missCount++;
     let a=n.angle;
     if(n.type.startsWith("slide") || n.type.startsWith("scratch"))a=slideAngle(n,now());
+    if(n.type?.startsWith("trace")) a=resolveTraceMotion(n).finalAngle;
     const isScratch=n.type&&n.type.startsWith("scratch");
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
     addFeedback(tutorialMode ? n.failReason : "MISS",p.x,p.y-18,COLORS.miss);
@@ -1461,8 +1490,10 @@
             n.lastTraceReason="START_GRACE";
           }
           n.traceQualityTime += frameDt*(hit.trackingWeight||0);
-          if(end-t<=profile.endpointWindow && hit.inside) n.endpointInsideTime += frameDt;
+          const endpointRegion=isAutoActive() ? {inside:true,angleError:0,radiusError:0,pointerAngle:resolveTraceMotion(n).finalAngle,pointerRadius:hitR,motion:resolveTraceMotion(n)} : traceEndpointRegion(n,profile);
+          if(end-t<=profile.endpointWindow && endpointRegion.inside) n.endpointInsideTime += frameDt;
           n.endpointCaptured=(n.endpointInsideTime||0) >= profile.endpointRequiredTime;
+          n.lastTraceEndpointRegion=endpointRegion;
           n.coverageRatio=(n.validTrackedTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
           n.traceQuality=(n.traceQualityTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
           n.lastTraceRegion=hit.region;
@@ -1486,6 +1517,21 @@ maxAngleError=${((n.maxAngleError||0)*180/Math.PI).toFixed(1)}
 avgAngleError=${(((n.angleErrorSum||0)/Math.max(n.errorSamples||0,1))*180/Math.PI).toFixed(1)}
 maxRadiusError=${(n.maxRadiusError||0).toFixed(1)}
 reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDPOINT_MISSED":"LOW_COVERAGE"))}`);
+            if(!n.endpointCaptured){
+              const ep=n.lastTraceEndpointRegion||traceEndpointRegion(n,profile);
+              const m=resolveTraceMotion(n);
+              const renderedFinalAngle=norm(n.angle+slideDelta(n));
+              console.log(`[Trace Endpoint]
+startAngle=${(m.startAngle*180/Math.PI).toFixed(1)}
+signedSweepAngle=${(m.signedSweepAngle*180/Math.PI).toFixed(1)}
+renderedFinalAngle=${(renderedFinalAngle*180/Math.PI).toFixed(1)}
+expectedEndpointAngle=${(m.finalAngle*180/Math.PI).toFixed(1)}
+pointerAngle=${(ep.pointerAngle*180/Math.PI).toFixed(1)}
+endpointAngleError=${(ep.angleError*180/Math.PI).toFixed(1)}
+endpointRadiusError=${ep.radiusError.toFixed(1)}
+endpointCaptured=${n.endpointCaptured===true}`);
+              if(distAng(renderedFinalAngle,m.finalAngle)>.001) console.error("[Trace Endpoint] renderedFinalAngle/expectedEndpointAngle mismatch", n);
+            }
           }
           if(passed){
             const perfect=!tutorialMode && quality>=profile.perfectQuality && n.endpointCaptured===true;
@@ -1900,12 +1946,13 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
   function drawTrace(n,t){
     const active=t>=n.hitTime;
     const focus=n===focusNote;
-    const d=slideDelta(n);
+    const motion=resolveTraceMotion(n);
+    const d=motion.signedSweepAngle;
     const dur=Math.max(n.duration,.001);
     const ratio=clamp(active?((t-n.hitTime)/dur):0,0,1);
     const r=active?hitR:clamp(noteR(n,t)-10,hitR-14,outerR-18);
-    const curr=active?traceTargetAngle(n,t):n.angle;
-    const endA=n.angle+d;
+    const curr=active?traceTargetAngle(n,t):motion.startAngle;
+    const endA=motion.finalAngle;
     const dir=d>=0?1:-1;
     const pathScale=visualScale("path");
     const futureAlpha=clamp((active?.22:.18)*pathScale,.10,.28);
@@ -1918,9 +1965,9 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
     const activeWidth=Math.max(NOTE_WIDTHS.trace+8, region.outerRadialTolerance*2);
     const innerWidth=Math.max(NOTE_WIDTHS.trace+6, region.innerRadialTolerance*2);
 
-    if(active && Math.abs(fullDelta*ratio)>0.003) drawDirectedArcSegments(r,n.angle,fullDelta*ratio,`rgba(35,240,197,${pastAlpha})`,7,1,null,0);
-    const farStart=active?curr:n.angle;
-    const farDelta=active?(endA-farStart):fullDelta;
+    if(active && Math.abs(fullDelta*ratio)>0.003) drawDirectedArcSegments(r,motion.startAngle,fullDelta*ratio,`rgba(35,240,197,${pastAlpha})`,7,1,null,0);
+    const farStart=active?curr:motion.startAngle;
+    const farDelta=active?(motion.finalUnwrappedAngle-(motion.startAngle+d*ratio)):fullDelta;
     if(Math.abs(farDelta)>0.003) drawDirectedArcSegments(r,farStart,farDelta,`rgba(35,240,197,${futureAlpha})`,7,1,null,0);
     if(active){
       drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.22})`,activeWidth,1,null,0);
@@ -1932,9 +1979,10 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
     ctx.lineCap="round";
     ctx.shadowBlur=4*visualScale("effect");
     ctx.shadowColor=COLORS.trace;
-    ctx.strokeStyle=`rgba(53,240,197,${focus?.9:.72})`;
     ctx.lineWidth=2;
-    ctx.beginPath();ctx.arc(Math.cos(n.angle)*r,Math.sin(n.angle)*r,7,0,TAU);ctx.stroke();
+    ctx.strokeStyle=`rgba(53,240,197,${focus?.9:.72})`;
+    ctx.beginPath();ctx.arc(Math.cos(motion.startAngle)*r,Math.sin(motion.startAngle)*r,7,0,TAU);ctx.stroke();
+    ctx.strokeStyle=`rgba(255,225,90,${focus?.98:.86})`;
     ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,5,0,TAU);ctx.stroke();
     ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,10,0,TAU);ctx.stroke();
 
@@ -2647,7 +2695,15 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
   function beep(freq=660,dur=.07){ ensureAudioCtx(); const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=freq; o.type="square"; g.gain.value=.035*(sfxEnabled ? clamp(sfxVolume,0,4) : 0); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur); }
   function clearTutorialTimers(){ for(const id of tutorialState.timers) clearTimeout(id); tutorialState.timers=[]; for(const id of tutorialState.rafIds) cancelAnimationFrame(id); tutorialState.rafIds=[]; }
   function tutorialSetTimeout(fn,delay){ const token=tutorialStepToken, session=tutorialSessionId; const id=setTimeout(()=>{ if(!tutorialMode || token!==tutorialStepToken || session!==tutorialSessionId) return; fn(); },delay); tutorialState.timers.push(id); return id; }
-  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function resetTraceRuntimeState(){
+    for(const n of chart){
+      if(!n?.type?.startsWith("trace")) continue;
+      delete n.validTrackedTime; delete n.traceQualityTime; delete n.activeTraceDuration; delete n.endpointInsideTime;
+      delete n.endpointCaptured; delete n.enteredTrace; delete n.lateTraceStart; delete n.lastTraceRegion; delete n.lastTraceEndpointRegion;
+      delete n.coverageRatio; delete n.traceQuality; delete n.failReason; delete n.lastTraceReason; delete n.autoProcessingLogged;
+    }
+  }
+  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; resetTraceRuntimeState(); feedback=[]; particles=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
   function logTutorialAdvance(reason,extra={}){ if(!debugMode)return; const st=tutorialSteps[tutorialStepIndex]; console.log(`[Tutorial Advance]\nstep=${st?.kind||"-"}\nphase=${st?.phase||"-"}\nreason=${reason}\nsource=${extra.source||tutorialState.lastSource||"-"}\nsuccessCount=${tutorialState.successCount}\nsessionId=${tutorialSessionId}\nstepToken=${tutorialStepToken}\nfunction=${extra.fn||"-"}\ntimer=${!!extra.timer}\nnoteId=${extra.noteId||"-"}\npreviousStepToken=${extra.previousStepToken??tutorialStepToken}\ncurrentStepToken=${tutorialStepToken}`); }
   function tutorialHandleJudgement(ev){ if(!tutorialMode || ev.stepToken!==tutorialStepToken || ev.sessionId!==tutorialSessionId) return; tutorialState.currentJudgement=ev.judgement; tutorialState.lastSource=ev.source; if(ev.source==="auto"){ logTutorialAdvance("AUTO_JUDGEMENT_BLOCKED",ev); return; } if(ev.reason!=="USER_JUDGEMENT") return; tutorialState.successCount++; tutorialState.successStreak++; if(tutorialState.successCount>=Math.max(1,chart.length)) advanceTutorialPhase("USER_JUDGEMENT",ev); }
   function tutorialCompleteExploreTarget(reason,source="pointer"){ const st=tutorialSteps[tutorialStepIndex]; if(!tutorialMode||!st?.targets||performance.now()<tutorialState.inputEnabledAt)return; st._hit=(st._hit||0)+1; tutorialState.successCount=st._hit; tutorialState.successStreak++; tutorialState.lastSource=source; addWave(laneAngle(st.targets[Math.max(0,st._hit-1)]),COLORS.perfect); beep(780,.05); if(st._hit>=st.targets.length) advanceTutorialPhase(reason,{source,fn:"tutorialCompleteExploreTarget"}); }
@@ -2822,8 +2878,9 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
     useCustomChart=(selectedMenuMode==="custom" && customChartData.length>0);
     chart=generateChart();
     if(!chart.length){ alert("채보가 비어 있어 플레이를 시작할 수 없습니다."); endGame(true); return false; }
+    resetTraceRuntimeState();
     score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0; actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0);
-    feedback=[]; particles=[]; waves=[];
+    feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
     running=true;
     setCleanGameplay(true);
     toggleSettings(false);
