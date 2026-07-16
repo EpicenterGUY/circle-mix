@@ -922,36 +922,62 @@
   function drawBackground(t){
     ctx.clearRect(0,0,W,H);
 
-    const bg=ctx.createRadialGradient(cx,cy,baseR*.12,cx,cy,Math.max(W,H)*.72);
-    bg.addColorStop(0,"#050914");
-    bg.addColorStop(.26,"#071225");
-    bg.addColorStop(.62,"#050916");
-    bg.addColorStop(1,"#01030a");
+    const bg=ctx.createRadialGradient(cx,cy,baseR*.10,cx,cy,Math.max(W,H)*.78);
+    bg.addColorStop(0,"#02050e");
+    bg.addColorStop(.24,"#06142a");
+    bg.addColorStop(.56,"#071126");
+    bg.addColorStop(.78,"#030713");
+    bg.addColorStop(1,"#010209");
     ctx.fillStyle=bg;
     ctx.fillRect(0,0,W,H);
 
+    const edge=ctx.createRadialGradient(cx,cy,baseR*.62,cx,cy,Math.max(W,H)*.62);
+    edge.addColorStop(0,"rgba(0,0,0,0)");
+    edge.addColorStop(.52,"rgba(92,255,251,.055)");
+    edge.addColorStop(.74,"rgba(141,107,255,.07)");
+    edge.addColorStop(1,"rgba(0,0,0,.22)");
+    ctx.fillStyle=edge; ctx.fillRect(0,0,W,H);
+
     ctx.save();
-    ctx.globalAlpha=.38;
-    ctx.strokeStyle="rgba(92,255,251,.08)";
+    ctx.globalAlpha=.46;
     ctx.lineWidth=1;
-    const grid=56;
-    for(let x=((t*10)%grid)-grid;x<W+grid;x+=grid){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-    for(let y=((t*7)%grid)-grid;y<H+grid;y+=grid){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    const grid=58;
+    for(let x=((t*8)%grid)-grid;x<W+grid;x+=grid){
+      ctx.strokeStyle="rgba(92,255,251,.052)";
+      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();
+    }
+    for(let y=((t*5)%grid)-grid;y<H+grid;y+=grid){
+      ctx.strokeStyle="rgba(141,107,255,.046)";
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalCompositeOperation="screen";
+    for(let i=0;i<44;i++){
+      const seed=i*97.13;
+      const px=((Math.sin(seed)*43758.5453)%1+1)%1*W;
+      const py=(((Math.sin(seed*1.7)*24634.6345)%1+1)%1*H + t*(10+i%5*3))%(H+80)-40;
+      const pulse=.35+.35*Math.sin(t*.9+i);
+      ctx.fillStyle=`rgba(${i%3===0?141:92},${i%3===0?107:255},255,${.055+pulse*.055})`;
+      ctx.beginPath();ctx.arc(px,py,1.1+(i%4)*.35,0,TAU);ctx.fill();
+    }
     ctx.restore();
 
     ctx.save(); ctx.translate(cx,cy);
-    for(let r=baseR*.52;r<baseR*1.55;r+=baseR*.18){
-      ctx.strokeStyle=`rgba(${r%2?92:141},${r%2?255:107},${r%2?251:255},${r<hitR?.08:.045})`;
-      ctx.lineWidth=1; ctx.beginPath(); ctx.arc(0,0,r+Math.sin(t*1.7+r)*2,0,TAU); ctx.stroke();
+    for(let r=baseR*.55;r<baseR*1.72;r+=baseR*.18){
+      const cyan=(Math.round(r/baseR*10)%2)===0;
+      ctx.strokeStyle=`rgba(${cyan?92:141},${cyan?255:107},${cyan?251:255},${r<hitR?.095:.052})`;
+      ctx.lineWidth=r<hitR?1.4:1; ctx.beginPath(); ctx.arc(0,0,r+Math.sin(t*1.25+r)*2.4,0,TAU); ctx.stroke();
     }
-    for(let i=0;i<32;i++){
-      const a=i/32*TAU+t*.035, r1=baseR*.46, r2=baseR*(1.05+Math.sin(t*1.2+i)*.01);
-      ctx.strokeStyle=`rgba(255,255,255,${i%4===0?.10:.035})`; ctx.lineWidth=i%4===0?1.5:1;
+    for(let i=0;i<40;i++){
+      const a=i/40*TAU+t*.026, r1=baseR*.50, r2=baseR*(1.12+Math.sin(t*.9+i)*.012);
+      ctx.strokeStyle=`rgba(255,255,255,${i%5===0?.105:.026})`; ctx.lineWidth=i%5===0?1.35:1;
       ctx.beginPath(); ctx.moveTo(Math.cos(a)*r1,Math.sin(a)*r1); ctx.lineTo(Math.cos(a)*r2,Math.sin(a)*r2); ctx.stroke();
     }
-    const center=ctx.createRadialGradient(0,0,baseR*.10,0,0,baseR*.62);
-    center.addColorStop(0,"rgba(0,0,0,.92)"); center.addColorStop(.62,"rgba(3,7,17,.82)"); center.addColorStop(1,"rgba(3,8,18,.34)");
-    ctx.fillStyle=center; ctx.beginPath(); ctx.arc(0,0,baseR*.72,0,TAU); ctx.fill();
+    const center=ctx.createRadialGradient(0,0,baseR*.08,0,0,baseR*.70);
+    center.addColorStop(0,"rgba(0,0,0,.96)"); center.addColorStop(.56,"rgba(2,6,15,.90)"); center.addColorStop(.82,"rgba(3,8,18,.48)"); center.addColorStop(1,"rgba(3,8,18,.18)");
+    ctx.fillStyle=center; ctx.beginPath(); ctx.arc(0,0,baseR*.78,0,TAU); ctx.fill();
 
     ctx.strokeStyle="rgba(255,255,255,.20)"; ctx.lineWidth=7; ctx.beginPath(); ctx.arc(0,0,hitR,0,TAU); ctx.stroke();
     ctx.strokeStyle="rgba(92,255,251,.30)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,outerR,0,TAU); ctx.stroke();
