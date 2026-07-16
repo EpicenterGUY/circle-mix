@@ -122,10 +122,10 @@
       n.turns = extra.turns || 0;
       let raw = n.endAngle - n.angle;
 
-      if(type==="slideCW"){
+      if(type==="slideCW" || type==="traceCW"){
         while(raw <= 0) raw += TAU;
         n.slideAmount = raw + TAU * n.turns;
-      }else if(type==="slideCCW"){
+      }else if(type==="slideCCW" || type==="traceCCW"){
         while(raw >= 0) raw -= TAU;
         n.slideAmount = raw - TAU * n.turns;
       }else{
@@ -158,8 +158,9 @@
   function slide(n,b,lane,endLane,dir="CW",dur=4,turns=0){
     n.push(make(dir==="CW"?"slideCW":"slideCCW",b,lane,{endLane,duration:BEAT*dur,turns}));
   }
-  function trace(n,b,lane,endLane=lane,dur=1.5){
-    n.push(make("trace",b,lane,{endLane,duration:BEAT*dur}));
+  function trace(n,b,lane,endLane=lane,dur=1.5,dir="auto"){
+    const type = dir==="CW" ? "traceCW" : (dir==="CCW" ? "traceCCW" : "trace");
+    n.push(make(type,b,lane,{endLane,duration:BEAT*dur}));
   }
   function scratch(n,b,lane,endLane=lane,dir="CW",dur=.55){
     n.push(make(dir==="CW"?"scratchCW":"scratchCCW",b,lane,{endLane,duration:BEAT*dur,amount:Math.PI*.34}));
@@ -204,6 +205,8 @@
 
     // 0~32 Intro: 4박/2박 CUT 앵커로 기본 박자와 8방향 레인을 설명.
     anchor(n,4,20,4,[0,4,2,6]);
+    trace(n,6,1,3,1.35,"CW");
+    trace(n,9,6,4,1.35,"CCW");
     trace(n,18,6,0,1.4);
     trace(n,22.5,0);
     stair(n,24,[0,2,4,6],1.0);
@@ -285,6 +288,8 @@
 
     // 0~32 Intro: NORMAL보다 빠른 CUT 계단으로 판정감을 잡되 과밀하게 시작하지 않음.
     anchor(n,4,16,3,[0,4,2,6,1]);
+    trace(n,6,1,3,1.35,"CW");
+    trace(n,9,6,4,1.35,"CCW");
     trace(n,17.5,6,0,1.4);
     trace(n,20.8,0,2);
     stair(n,22,[0,2,4,6,1,3,5,7],.70);
@@ -896,9 +901,15 @@
 
   function drawDirectedArcSegments(r, start, amount, color, width, alpha=1){
     // Canvas arc는 2π 경계/긴 호에서 헷갈릴 수 있으므로
-    // 긴 슬라이드는 작은 조각으로 직접 그림.
+    // 긴 슬라이드는 작은 조각으로 직접 그림. 모든 호출은 화면 좌표 기준으로
+    // 새 path를 만들고 원형 플레이 영역 안에서만 stroke한다.
+    if(!Number.isFinite(r)||!Number.isFinite(start)||!Number.isFinite(amount)||Math.abs(amount)<0.001)return;
+    const safeR=clamp(r,hitR,outerR);
     const steps = Math.max(10, Math.ceil(Math.abs(amount) / (Math.PI / 18)));
     ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx,cy,outerR+Math.max(24,width*2),0,TAU);
+    ctx.clip();
     ctx.translate(cx,cy);
     ctx.lineCap="round";
     ctx.strokeStyle=color;
@@ -907,12 +918,11 @@
     ctx.beginPath();
     for(let i=0;i<=steps;i++){
       const a=start + amount * (i/steps);
-      const x=Math.cos(a)*r, y=Math.sin(a)*r;
+      const x=Math.cos(a)*safeR, y=Math.sin(a)*safeR;
       if(i===0) ctx.moveTo(x,y);
       else ctx.lineTo(x,y);
     }
     ctx.stroke();
-    ctx.globalAlpha=1;
     ctx.restore();
   }
 
@@ -1010,10 +1020,13 @@
     if(n.type.startsWith("scratch"))return;
     if(n.type==="fx")return;
     const color=noteColor(n);
-    const r=noteR(n,t);
+    const r=clamp(noteR(n,t),hitR,outerR);
     const a=n.angle;
     const isFocus=n===focusNote;
     ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx,cy,outerR+12,0,TAU);
+    ctx.clip();
     ctx.translate(cx,cy);
     ctx.lineCap="round";
     ctx.strokeStyle=isFocus?`rgba(255,255,255,.30)`:`rgba(255,255,255,.12)`;
@@ -1083,7 +1096,7 @@
 
   function drawTrace(n,t){
     const active=t>=n.hitTime;
-    const r=active?hitR:noteR(n,t), color=COLORS.trace;
+    const r=clamp(active?hitR:noteR(n,t),hitR,outerR), color=COLORS.trace;
     const k=progress(n,t);
     const focus=n===focusNote;
     const d=slideDelta(n);
@@ -1091,23 +1104,29 @@
     const remaining=d*clamp(1-(active?((t-n.hitTime)/Math.max(n.duration,.001)):0),0,1);
     const alpha=focus?.75:.62;
 
-    ctx.save();
-    ctx.translate(cx,cy);
-    ctx.lineCap="round";
-    ctx.shadowBlur=focus?18:10;
-    ctx.shadowColor=color;
     if(Math.abs(d)>.03){
       const pathStart=active?curr:n.angle;
       const pathDelta=active?remaining:d;
       drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(223,252,255,${alpha})`,focus?NOTE_WIDTHS.trace+1:NOTE_WIDTHS.trace,1);
       drawDirectedArcSegments(r,pathStart,pathDelta,`rgba(255,255,255,${focus?.36:.28})`,focus?2.2:1.6,1);
     }else{
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.lineCap="round";
+      ctx.shadowBlur=focus?18:10;
+      ctx.shadowColor=color;
       ctx.strokeStyle=`rgba(223,252,255,${alpha})`;
       ctx.lineWidth=focus?NOTE_WIDTHS.trace+1:NOTE_WIDTHS.trace;
       ctx.setLineDash([6,8]);
       ctx.beginPath();ctx.arc(0,0,r,n.angle-Math.PI*.13,n.angle+Math.PI*.13);ctx.stroke();
       ctx.setLineDash([]);
+      ctx.restore();
     }
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.lineCap="round";
+    ctx.shadowBlur=focus?18:10;
+    ctx.shadowColor=color;
     const targetAngle=active?curr:n.angle;
     const startA=n.angle, endA=n.angle+d;
     ctx.fillStyle=`rgba(223,252,255,${focus?.34:.24})`;
@@ -1807,9 +1826,13 @@
     const b=snapBeat(beatNow(),.25), lane=selectedLane;
     const d={type,beat:b,lane};
     if(type==="fx") d.durationBeat=4;
-    if(type==="slideCW"||type==="slideCCW"||type==="scratchCW"||type==="scratchCCW"){
+    if(type==="slideCW"||type==="slideCCW"){
       d.durationBeat=4;
       d.endLane=(lane+3)%8;
+    }
+    if(type==="scratchCW"||type==="scratchCCW"){
+      d.durationBeat=.55;
+      d.endLane=(lane+(type==="scratchCW"?1:7))%8;
     }
     customChartData.push(d);customChartData.sort((a,b)=>a.beat-b.beat);rebuildCustomChart();playHitSound(type,"PERFECT");
   }
