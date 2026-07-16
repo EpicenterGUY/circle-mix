@@ -217,15 +217,26 @@
     const hudHeight = 60;
     const horizontalPadding = W <= 820 ? 14 : 24;
     const bottomPadding = W <= 820 ? 16 : 24;
-    const topPadding = hudHeight + 14;
-    const availableWidth = Math.max(220, W - horizontalPadding * 2);
+    let topPadding = hudHeight + 14;
+    let leftPadding = horizontalPadding;
+    let rightPadding = horizontalPadding;
+    const tutorialPanelGap = 24;
+    const tutorialPanelWidth = 280;
+    const tutorialTopPanelHeight = 74;
+    const tutorialSidePanel = tutorialMode && W >= 980 && H >= 560;
+    const tutorialTopPanel = tutorialMode && !tutorialSidePanel && W > H;
+    document.body.classList.toggle("tutorialSidePanel", tutorialSidePanel);
+    document.body.classList.toggle("tutorialTopPanel", tutorialTopPanel);
+    if(tutorialSidePanel) rightPadding += tutorialPanelWidth + tutorialPanelGap;
+    if(tutorialTopPanel) topPadding += tutorialTopPanelHeight + 16;
+    const availableWidth = Math.max(220, W - leftPadding - rightPadding);
     const availableHeight = Math.max(220, H - topPadding - bottomPadding);
     const playfieldSize = Math.min(availableWidth, availableHeight);
     const outerGlowSize = 26;
     const outerLineWidth = 2;
     const safeMargin = Math.max(32, outerGlowSize + outerLineWidth);
 
-    cx = W * .5;
+    cx = leftPadding + availableWidth * .5;
     cy = topPadding + availableHeight * .5;
     outerR = Math.max(96, playfieldSize * .5 - safeMargin);
     baseR = outerR / 1.86;
@@ -2189,10 +2200,18 @@
       songAutoBtn.classList.toggle("on",gameState.autoEnabled);
       songAutoBtn.innerHTML=`AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span>`;
     }
-    const hudModeLabel = (mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
-    mapBox.textContent=((selectedSong?.title || "") + " · " + hudModeLabel).trim();
     const hudSongTitle = document.querySelector(".hudSong span");
-    if(hudSongTitle) hudSongTitle.textContent = "";
+    if(tutorialMode){
+      const st=tutorialSteps[tutorialStepIndex];
+      if(hudSongTitle) hudSongTitle.textContent = "TUTORIAL";
+      mapBox.textContent = st ? `STEP ${tutorialStepIndex+1} / ${tutorialSteps.length}` : "STEP";
+      if(difficultyBox) difficultyBox.textContent = st?.name || "";
+    }else{
+      const hudModeLabel = (mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
+      mapBox.textContent=((selectedSong?.title || "") + " · " + hudModeLabel).trim();
+      if(hudSongTitle) hudSongTitle.textContent = "";
+      if(difficultyBox) difficultyBox.textContent=(mapMode==="tech"?"TECH ":"NORMAL ") + formatDifficulty(mapMode);
+    }
     autoToggle.textContent=gameState.autoEnabled?"AUTO ON":"AUTO OFF";
     autoToggle.classList.toggle("on",gameState.autoEnabled);
     mapToggle.textContent=mapMode==="tech"?"MAP TECH":"MAP NORMAL";
@@ -2201,7 +2220,6 @@
     if(offsetValue) offsetValue.textContent = formatOffset();
     if(sfxValue) sfxValue.textContent = formatSfx();
     if(musicValue) musicValue.textContent = formatMusic();
-    if(difficultyBox) difficultyBox.textContent=(mapMode==="tech"?"TECH ":"NORMAL ") + formatDifficulty(mapMode);
     if(typeof safeRefresh === "function") safeRefresh();
   }
 
@@ -2296,14 +2314,14 @@
   ];
   function buildTutorialChart(step){ return (step.notes||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT; n.spawnTime=n.hitTime-APPROACH; return n; }).sort((a,b)=>a.hitTime-b.hitTime); }
   function showTutorialPrompt(){ if(localStorage.getItem(TUTORIAL_COMPLETED_KEY)==="true"||localStorage.getItem(TUTORIAL_PROMPT_KEY)==="true")return; if(tutorialPrompt)tutorialPrompt.hidden=false; }
-  function setTutorialHud(){ const st=tutorialSteps[tutorialStepIndex]; if(!st)return; tutorialHud.hidden=false; tutorialStepLabel.textContent=`${tutorialStepIndex+1} / ${tutorialSteps.length}`; tutorialTitle.textContent=st.name; tutorialDesc.textContent=st.desc; tutorialInputHint.textContent=tutorialInputFor(st.kind); tutorialProgress.textContent=st.targets?`${st._hit||0} / ${st.targets.length}`:`${judgedCount} / ${chart.length}`; }
+  function setTutorialHud(){ const st=tutorialSteps[tutorialStepIndex]; if(!st)return; tutorialHud.hidden=false; tutorialStepLabel.textContent=`STEP ${tutorialStepIndex+1} / ${tutorialSteps.length}`; tutorialTitle.textContent=st.name; tutorialDesc.textContent=st.desc; tutorialInputHint.textContent=tutorialInputFor(st.kind); tutorialProgress.textContent=st.targets?`${st._hit||0} / ${st.targets.length}`:`${judgedCount} / ${chart.length}`; updateButtons(); }
   function beep(freq=660,dur=.07){ ensureAudioCtx(); const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=freq; o.type="square"; g.gain.value=.035*(sfxEnabled ? clamp(sfxVolume,0,4) : 0); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur); }
-  function startTutorialStep(idx=tutorialStepIndex){ tutorialStepIndex=clamp(idx,0,tutorialSteps.length-1); const st=tutorialSteps[tutorialStepIndex]; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=true; document.body.classList.add("tutorialMode"); abortingRun=false; resultShown=false; completionPending=false; paused=false; chart=buildTutorialChart(st); score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1; feedback=[]; particles=[]; waves=[]; st._hit=0; st._done=false; running=true; setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none"; mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=-Math.PI/2; filterHeld=scratchHeld=mouseDownRight=false; tutorialCountdownUntil=performance.now()+3200; ["3","2","1","START"].forEach((txt,i)=>setTimeout(()=>{ if(tutorialMode&&tutorialStepIndex===idx){ tutorialCountdown.textContent=txt; beep(520+i*110,.06); if(txt==="START")setTimeout(()=>tutorialCountdown.textContent="",520);}},i*750)); audioStartedAt=performance.now()+3000; startMs=audioStartedAt; lastMs=performance.now(); setTutorialHud(); if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); }
+  function startTutorialStep(idx=tutorialStepIndex){ tutorialStepIndex=clamp(idx,0,tutorialSteps.length-1); const st=tutorialSteps[tutorialStepIndex]; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=true; document.body.classList.add("tutorialMode","tutorialIntro"); resize(); abortingRun=false; resultShown=false; completionPending=false; paused=false; chart=buildTutorialChart(st); score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1; feedback=[]; particles=[]; waves=[]; st._hit=0; st._done=false; running=true; setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none"; mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=-Math.PI/2; filterHeld=scratchHeld=mouseDownRight=false; tutorialCountdownUntil=performance.now()+3200; ["3","2","1","START"].forEach((txt,i)=>setTimeout(()=>{ if(tutorialMode&&tutorialStepIndex===idx){ tutorialCountdown.textContent=txt; beep(520+i*110,.06); if(txt==="START")setTimeout(()=>{ tutorialCountdown.textContent=""; document.body.classList.remove("tutorialIntro"); resize(); },520);}},i*750)); audioStartedAt=performance.now()+3000; startMs=audioStartedAt; lastMs=performance.now(); setTutorialHud(); if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); }
   function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialStepIndex=0; startTutorialStep(0); }
   function nextTutorialStep(){ if(tutorialStepIndex>=tutorialSteps.length-1) return completeTutorial(); startTutorialStep(tutorialStepIndex+1); }
   function restartTutorialStep(){ startTutorialStep(tutorialStepIndex); }
-  function exitTutorial(toTitle=true){ tutorialMode=false; document.body.classList.remove("tutorialMode"); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
-  function completeTutorial(){ localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; document.body.classList.remove("tutorialMode"); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="flex"; }
+  function exitTutorial(toTitle=true){ tutorialMode=false; document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); updateButtons(); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
+  function completeTutorial(){ localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); updateButtons(); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="flex"; }
   function updateTutorialAim(){ const st=tutorialSteps[tutorialStepIndex]; if(!tutorialMode||!st?.targets)return; const target=st.targets[st._hit||0]; const a=laneAngle(target); addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.perfect,1,.12); if(aligned(a,.055)){ st._hit=(st._hit||0)+1; addWave(a,COLORS.perfect); beep(780,.05); if(st._hit>=st.targets.length&&!st._done){st._done=true;setTimeout(nextTutorialStep,450);} } }
   function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialAttempts++; addFeedback("TRY AGAIN",cx,cy-baseR*.42,COLORS.miss); setTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
 
