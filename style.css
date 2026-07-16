@@ -256,6 +256,19 @@ html,body{
     .safeMenuBtn.big{grid-column:span 2}
   }
 
+
+.debugToggleBtn{
+  position:fixed;right:16px;top:62px;z-index:61;
+  padding:7px 9px;border-radius:999px;background:rgba(8,15,30,.62);
+  border:1px solid rgba(92,255,251,.30);color:#eaf3ff;font-size:10px;font-weight:1000;
+  letter-spacing:.06em;backdrop-filter:blur(8px);box-shadow:0 8px 26px rgba(0,0,0,.28);
+  user-select:none;touch-action:manipulation;opacity:.72;
+}
+.debugToggleBtn.on{background:#5cfffb;color:#06101d;opacity:.96}
+body.safeTitle .debugToggleBtn,
+body.safeSettings .debugToggleBtn{display:block}
+@media(max-width:820px){.debugToggleBtn{right:10px;top:10px;padding:6px 8px;font-size:9px;opacity:.70}}
+
 #inputDebugOverlay{
   position:fixed;left:16px;top:86px;z-index:60;display:none;
   width:min(360px,calc(100vw - 32px));max-height:calc(100vh - 110px);overflow:auto;

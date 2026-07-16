@@ -8,6 +8,7 @@
   const mapBox = document.getElementById("mapBox");
   const autoToggle = document.getElementById("autoToggle");
   const mapToggle = document.getElementById("mapToggle");
+  const debugToggle = document.getElementById("debugToggle");
   const keymapToggle = document.getElementById("keymapToggle");
   const keymapOverlay = document.getElementById("keymapOverlay");
   const closeKeymap = document.getElementById("closeKeymap");
@@ -76,7 +77,7 @@
   let autoInputDebug={
     z:false,x:false,space:false,lmb:false,rmb:false,shiftFallback:false,
     action:"NONE",targetAngle:null,targetDistance:null,scratchDirection:"NONE",
-    scratchMoveAmount:0,scratchSpeed:0,noteId:"-",noteType:"-"
+    scratchMoveAmount:0,scratchSpeed:0,scratchResult:"READY",noteId:"-",noteType:"-"
   };
   let focusNote=null;
   const keys={};
@@ -753,6 +754,7 @@
       scratchDirection:isScratch?(n.type==="scratchCW"?"CW":"CCW"):"NONE",
       scratchMoveAmount:isScratch?Math.abs(n.slideAmount||0):0,
       scratchSpeed:isScratch?SCRATCH_FLICK_SPEED*1.5:0,
+      scratchResult:isScratch?"HIT":lastScratchResult,
       noteId:noteDebugId(n),
       noteType:n?n.type:"-"
     };
@@ -1928,11 +1930,18 @@
     document.body.appendChild(debugOverlay);
     return debugOverlay;
   }
-  function toggleDebugOverlay(){
-    debugOverlayVisible=!debugOverlayVisible;
+  function setDebugOverlayVisible(visible){
+    debugOverlayVisible=!!visible;
     const el=ensureDebugOverlay();
     el.classList.toggle("show",debugOverlayVisible);
+    if(debugToggle){
+      debugToggle.classList.toggle("on",debugOverlayVisible);
+      debugToggle.setAttribute("aria-pressed", debugOverlayVisible?"true":"false");
+    }
     if(debugOverlayVisible)updateDebugOverlay(now());
+  }
+  function toggleDebugOverlay(){
+    setDebugOverlayVisible(!debugOverlayVisible);
   }
   function updateDebugOverlay(t){
     if(!debugOverlayVisible)return;
@@ -1947,19 +1956,21 @@
         <span>Space</span><strong>${formatBool(keys.Space)}</strong><span>LMB</span><strong>${formatBool(!!keys.MouseLeft)}</strong>
         <span>RMB</span><strong>${formatBool(mouseDownRight)}</strong><span>Shift</span><strong>${formatBool(keys.ShiftLeft||keys.ShiftRight)}</strong>
         <span>Mouse X/Y</span><strong>${mouseX.toFixed(0)}, ${mouseY.toFixed(0)}</strong>
-        <span>Mouse angle</span><strong>${formatAngle(mouseAngle)}</strong>
-        <span>Distance</span><strong>${mouseDist.toFixed(1)}</strong>
+        <span>Mouse/touch angle</span><strong>${formatAngle(mouseAngle)}</strong>
+        <span>Distance from center</span><strong>${mouseDist.toFixed(1)}</strong>
         <span>Pointer active</span><strong>${formatBool(pointerActive)}</strong>
       </div>
       <div class="debugGrid"><b>AUTO INPUT</b><b></b>
         <span>AUTO Z</span><strong>${formatBool(autoInputDebug.z)}</strong><span>AUTO X</span><strong>${formatBool(autoInputDebug.x)}</strong>
         <span>AUTO Space</span><strong>${formatBool(autoInputDebug.space)}</strong><span>AUTO LMB</span><strong>${formatBool(autoInputDebug.lmb)}</strong>
         <span>AUTO RMB</span><strong>${formatBool(autoInputDebug.rmb)}</strong><span>AUTO Shift fallback</span><strong>${formatBool(autoInputDebug.shiftFallback)}</strong>
-        <span>Current auto action</span><strong>${autoInputDebug.action}</strong>
+        <span>AUTO ACTION</span><strong>${autoInputDebug.action}</strong>
         <span>Target angle</span><strong>${formatAngle(autoInputDebug.targetAngle)}</strong>
         <span>Target distance</span><strong>${formatNum(autoInputDebug.targetDistance,1)}</strong>
         <span>Scratch direction</span><strong>${autoInputDebug.scratchDirection}</strong>
-        <span>Scratch movement/speed</span><strong>${formatNum(autoInputDebug.scratchMoveAmount,2)} / ${formatNum(autoInputDebug.scratchSpeed,2)}</strong>
+        <span>Scratch movement amount</span><strong>${formatNum(autoInputDebug.scratchMoveAmount,2)}</strong>
+        <span>Scratch speed</span><strong>${formatNum(autoInputDebug.scratchSpeed,2)}</strong>
+        <span>Scratch result</span><strong>${autoInputDebug.scratchResult}</strong>
         <span>Note target</span><strong>${autoInputDebug.noteId} ${autoInputDebug.noteType}</strong>
       </div>
       <div class="debugGrid"><b>SCRATCH DEBUG</b><b></b>
@@ -2058,6 +2069,7 @@
   bindPress(modeCustomBtn,()=>{selectedMenuMode="custom";updateModeButtons();});
   bindPress(autoToggle,()=>{autoMode=!autoMode;updateButtons();});
   bindPress(mapToggle,()=>{mapMode=mapMode==="tech"?"normal":"tech";restartIfRunning();});
+  bindPress(debugToggle,()=>toggleDebugOverlay());
   bindPress(keymapToggle,()=>toggleKeymap());
   bindPress(editorToggle,()=>toggleEditor());
   bindPress(fullToggle,requestFullscreenSafe);
@@ -2084,6 +2096,7 @@
   bindPress(exportBtn,exportChart);bindPress(importBtn,importChart);
   bindPress(clearChartBtn,()=>{customChartData=[];useCustomChart=false;rebuildCustomChart();});
   keymapOverlay.addEventListener("click",e=>{if(e.target===keymapOverlay)toggleKeymap(false);});
+  if(new URLSearchParams(window.location.search).get("debug")==="1")setDebugOverlayVisible(true);
   if(laneGrid) laneGrid.addEventListener("click",e=>{const btn=e.target.closest("[data-lane]");if(!btn)return;selectedLane=Number(btn.dataset.lane)||0;laneGrid.querySelectorAll("[data-lane]").forEach(b=>b.classList.toggle("on",b===btn));updateEditorStatus();});
 
   window.addEventListener("mousemove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();},{passive:true});
@@ -2099,7 +2112,7 @@
     if(e.code==="KeyD")keyD=true;
     if(e.code==="Space"||e.code==="KeyZ"||e.code==="KeyX"){e.preventDefault(); if(!e.repeat)onCut();}
     if((e.code==="KeyD"||e.code==="F3")&&!e.repeat){e.preventDefault();toggleDebugOverlay();}
-    if(e.code==="KeyO"&&!e.repeat){autoMode=!autoMode;updateButtons();}
+    if(e.code==="KeyO"&&!e.repeat){autoMode=!autoMode;updateButtons();updateDebugOverlay(now());}
     if(e.code==="KeyP"&&!e.repeat){ ensureAudioCtx(); applyMusicVolume(); if(song.paused) song.play().catch(()=>{}); else song.pause(); }
     if(e.code==="KeyS"&&!e.repeat){ sfxEnabled=!sfxEnabled; updateButtons(); }
     if(e.code==="Minus"&&!e.repeat){ changeSfx(-0.20); }
