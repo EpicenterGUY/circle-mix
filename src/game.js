@@ -142,6 +142,7 @@
   let paused=false;
   let settingsVisible=false;
   let fullscreenInterrupted=false;
+  let pauseOpenedSettings=false;
   let customChartData=[];
   const difficultyCache={normal:null,tech:null};
 
@@ -2087,13 +2088,16 @@
     updateButtons();
   }
 
-  function showPause(){
-    if(!running || paused) return;
-    paused=true;
-    song.pause();
-    if(raf){cancelAnimationFrame(raf);raf=0;}
+  function showPause(message=""){
+    if(!running) return;
+    if(!paused){
+      paused=true;
+      song.pause();
+      if(raf){cancelAnimationFrame(raf);raf=0;}
+    }
     if(pauseOverlay) pauseOverlay.classList.add("show");
     document.body.classList.add("pausedInputBlocked");
+    setPauseMessage(message);
   }
 
   function resumeGame(){
@@ -2102,6 +2106,7 @@
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     document.body.classList.remove("pausedInputBlocked");
     fullscreenInterrupted=false;
+    pauseOpenedSettings=false;
     setPauseMessage("");
     lastMs=performance.now();
     ensureAudioCtx();
@@ -2114,6 +2119,7 @@
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     document.body.classList.remove("pausedInputBlocked");
     hideResult();
+    pauseOpenedSettings=false;
     paused=false;
     start(editorMode?"editor":"play");
   }
@@ -2122,6 +2128,8 @@
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     document.body.classList.remove("pausedInputBlocked");
     hideResult();
+    pauseOpenedSettings=false;
+    fullscreenInterrupted=false;
     paused=false;
     endGame(true);
     showSongSelect();
@@ -2313,10 +2321,13 @@
   }
 
   function setPauseMessage(message){
-    if(!pauseMessage)return;
-    pauseMessage.textContent=message||"";
-    pauseMessage.classList.toggle("show", !!message);
+    if(pauseMessage){
+      pauseMessage.textContent=message||"";
+      pauseMessage.classList.toggle("show", !!message);
+    }
     if(enterFullscreenBtn) enterFullscreenBtn.hidden=!fullscreenInterrupted;
+    if(resumeBtn) resumeBtn.textContent=fullscreenInterrupted ? "RESUME WINDOWED" : "RESUME";
+    if(exitBtn) exitBtn.textContent=fullscreenInterrupted ? "EXIT TO SONG SELECT" : "EXIT";
   }
 
   async function lockLandscapeSafe(){
@@ -2324,12 +2335,17 @@
   }
 
   async function requestFullscreenEnter(){
-    if(document.fullscreenElement) return true;
+    if(document.fullscreenElement){
+      await lockLandscapeSafe();
+      return true;
+    }
     if(!gameRoot.requestFullscreen) return false;
     try{
       await gameRoot.requestFullscreen({navigationUI:"hide"});
       await lockLandscapeSafe();
       if(fullscreenRetryBtn) fullscreenRetryBtn.hidden=true;
+      fullscreenInterrupted=false;
+      setPauseMessage("");
       return true;
     }catch(e){
       if(fullscreenRetryBtn && isMobileViewport()) fullscreenRetryBtn.hidden=false;
@@ -2409,8 +2425,9 @@
     if(!el)return;
     let last=0;
     const h=e=>{ if(e){ e.preventDefault(); e.stopPropagation(); } const m=performance.now(); if(m-last<180)return; last=m; fn(e); };
-    if(window.PointerEvent)el.addEventListener("pointerup",h);
-    else{el.addEventListener("touchend",h,{passive:false});el.addEventListener("click",h);}
+    const block=e=>{ if(e){ e.preventDefault(); e.stopPropagation(); } };
+    if(window.PointerEvent){ el.addEventListener("pointerdown",block,{passive:false}); el.addEventListener("pointerup",h,{passive:false}); }
+    else{el.addEventListener("touchstart",block,{passive:false});el.addEventListener("touchend",h,{passive:false});el.addEventListener("click",h);}
   }
 
   bindPress(startBtn,()=>showSongSelect());
@@ -2429,7 +2446,7 @@
   bindPress(quickEditorBtn,()=>{ window.location.href="./editor.html"; });
   bindPress(quickFullBtn,requestFullscreenSafe);
   bindPress(resumeBtn,resumeGame);
-  bindPress(settingsBtn,()=>toggleSettings(true));
+  bindPress(settingsBtn,()=>{ pauseOpenedSettings=paused; toggleSettings(true); });
   bindPress(enterFullscreenBtn,requestFullscreenEnter);
   bindPress(fullscreenRetryBtn,requestFullscreenEnter);
   bindPress(mobilePauseBtn,showPause);
@@ -2737,8 +2754,15 @@
   toggleSettings=function(force){
     settingsVisible = force!==undefined ? force : !settingsVisible;
     if(settingsVisible && isMobileViewport()) originalToggleKeymap(false);
-    safeSetOverlay(settingsVisible);
-    originalToggleSettings(settingsVisible);
+    if(paused && pauseOpenedSettings){
+      document.body.classList.toggle("showSettings", settingsVisible);
+      if(quickSettingsBtn) quickSettingsBtn.classList.toggle("on", settingsVisible);
+      if(!settingsVisible && pauseOverlay) pauseOverlay.classList.add("show");
+    }else{
+      safeSetOverlay(settingsVisible);
+      originalToggleSettings(settingsVisible);
+    }
+    if(!settingsVisible) pauseOpenedSettings=false;
     safeRefresh();
   };
 
@@ -2776,8 +2800,7 @@
     if(!inFullscreen){ try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){} }
     if(running && !paused && isMobileViewport() && !inFullscreen){
       fullscreenInterrupted=true;
-      showPause();
-      setPauseMessage("전체화면이 종료되었습니다. RESUME WINDOWED 또는 ENTER FULLSCREEN을 선택하세요.");
+      showPause("전체화면이 종료되었습니다. RESUME WINDOWED 또는 ENTER FULLSCREEN을 선택하세요.");
     }
   });
   document.addEventListener("fullscreenerror",()=>{ if(fullscreenRetryBtn && isMobileViewport()) fullscreenRetryBtn.hidden=false; });
