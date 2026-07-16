@@ -171,6 +171,8 @@
   let W=0,H=0,cx=0,cy=0,baseR=0,hitR=0,outerR=0;
   let running=false, startMs=0, lastMs=0, raf=0;
   let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
+  let tutorialSessionId=0, tutorialStepToken=0;
+  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],inputEnabledAt:0,pointerMoved:false,lastSource:null};
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
@@ -928,7 +930,7 @@
       radial:Math.max(profile.outerRadialTolerancePx ?? profile.radialTolerancePx, hitR*(profile.outerRadialToleranceRatio ?? profile.radialToleranceRatio)) };
   }
   function pointerPolar(){
-    if(gameState.autoEnabled || keyA || keyD) return {angle:armAngle, radius:hitR};
+    if(isAutoActive() || keyA || keyD) return {angle:armAngle, radius:hitR};
     const dx=mouseX-cx, dy=mouseY-cy;
     return {angle:Math.atan2(dy,dx), radius:Math.hypot(dx,dy)};
   }
@@ -1191,8 +1193,9 @@
     noise.stop(t+noiseDur);
   }
 
-  function judge(n,label,color){
+  function judge(n,label,color,event={}){
     if(n.done||n.missed)return;
+    const judgeEvent={source:event.source||tutorialState.activeInput||"system", judgement:label, noteId:noteDebugId(n), reason:event.reason||"USER_JUDGEMENT", stepToken:tutorialStepToken, sessionId:tutorialSessionId};
     n.done=true;
     playHitSound(n.type,label);
     actualHitValue += noteWeight(n) * judgeValue(label);
@@ -1223,6 +1226,8 @@
       }
       addFeedback("SCRATCH",p.x,p.y+18,color);
     }
+
+    if(tutorialMode) tutorialHandleJudgement(judgeEvent);
 
     if(isSwing){
       addRingBurst(color,label==="PERFECT"?1.22:1.0,label);
@@ -1287,7 +1292,16 @@
     const c=chart.filter(n=>!n.done&&!n.missed&&n.type==="cut"&&Math.abs(t-n.hitTime)<=HIT_WINDOW)
                  .sort((a,b)=>Math.abs(t-a.hitTime)-Math.abs(t-b.hitTime));
     const n=c.find(x=>aligned(x.angle,.015));
-    if(n)judge(n,Math.abs(t-n.hitTime)<.065?"PERFECT":"GREAT",Math.abs(t-n.hitTime)<.065?COLORS.perfect:COLORS.great);
+    const source=tutorialState.activeInput || "pointer";
+    const st=tutorialMode?tutorialSteps[tutorialStepIndex]:null;
+    if(tutorialMode && st?.kind==="cut" && st.phase==="explore" && st.targets){
+      const target=st.targets[st._hit||0];
+      if(performance.now()>=tutorialState.inputEnabledAt && aligned(laneAngle(target),.055)){
+        tutorialCompleteExploreTarget("USER_JUDGEMENT", source);
+      }
+      return;
+    }
+    if(n)judge(n,Math.abs(t-n.hitTime)<.065?"PERFECT":"GREAT",Math.abs(t-n.hitTime)<.065?COLORS.perfect:COLORS.great,{source,reason:"USER_JUDGEMENT"});
   }
 
   function nextNote(t){
@@ -1318,22 +1332,24 @@
     return "NONE";
   }
 
+  function isAutoActive(){ return gameState.autoEnabled && !(tutorialMode && tutorialState.autoSuppressed); }
+
   function updateAutoDebug(t){
-    const n=gameState.autoEnabled?nextNote(t):null;
+    const n=isAutoActive()?nextNote(t):null;
     const action=autoActionForNote(n);
     const isScratch=!!(n&&n.type.startsWith("scratch"));
     const isHold=action==="HOLD"||action==="SLIDE";
     const isCut=action==="CUT";
     autoInputDebug={
-      z:gameState.autoEnabled&&(isCut||isHold),
-      x:gameState.autoEnabled&&isHold,
-      space:gameState.autoEnabled&&isCut,
-      lmb:gameState.autoEnabled&&isCut,
-      rmb:gameState.autoEnabled&&isScratch,
+      z:isAutoActive()&&(isCut||isHold),
+      x:isAutoActive()&&isHold,
+      space:isAutoActive()&&isCut,
+      lmb:isAutoActive()&&isCut,
+      rmb:isAutoActive()&&isScratch,
       shiftFallback:false,
       action,
       targetAngle:n?((n.type.startsWith("slide")||n.type.startsWith("trace")||n.type.startsWith("scratch"))?slideAngle(n,t):n.angle):null,
-      targetDistance:gameState.autoEnabled&&n?hitR:null,
+      targetDistance:isAutoActive()&&n?hitR:null,
       scratchDirection:isScratch?(n.type==="scratchCW"?"CW":"CCW"):"NONE",
       scratchMoveAmount:isScratch?Math.abs(n.slideAmount||0):0,
       scratchSpeed:isScratch?SCRATCH_FLICK_SPEED*1.5:0,
@@ -1345,7 +1361,7 @@
 
   function updateAuto(t){
     updateAutoDebug(t);
-    if(!gameState.autoEnabled)return;
+    if(!isAutoActive())return;
 
     const activePath=chart.find(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&t>=n.hitTime&&t<=n.hitTime+n.duration);
     if(activePath){
@@ -1366,21 +1382,21 @@
         armVel = dir*SCRATCH_FLICK_SPEED*1.5;
       }
       if((n.type==="cut"||n.type.startsWith("swing"))&&Math.abs(t-n.hitTime)<.030){
-        if(gameState.autoEnabled)logAutoProcessing(n);
-        judge(n,"PERFECT",noteColor(n));
+        if(isAutoActive())logAutoProcessing(n);
+        judge(n,"PERFECT",noteColor(n),{source:"auto",reason:"AUTO_JUDGEMENT"});
       }
     }
   }
 
   function updateArm(dt){
     const tNow = now();
-    if(gameState.autoEnabled && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
+    if(isAutoActive() && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
       return;
     }
 
     prevArmAngle=armAngle;
 
-    if(gameState.autoEnabled){
+    if(isAutoActive()){
       const diff=norm(targetAngle-armAngle);
       armAngle+=diff*clamp(1-Math.pow(.0001,dt),0,1);
     }else if(keyA||keyD){
@@ -1397,7 +1413,7 @@
   }
 
   function logAutoProcessing(n){
-    if(!debugMode || !gameState.autoEnabled || n.autoProcessingLogged)return;
+    if(!debugMode || !isAutoActive() || n.autoProcessingLogged)return;
     n.autoProcessingLogged=true;
     console.log(`[Auto] processing note type=${autoActionForNote(n)}`);
   }
@@ -1429,13 +1445,13 @@
         }
         if(t>=n.hitTime&&t<=end){
           const frameDt=Math.min(Math.max(dt,0), profile.maxFrameDt);
-          const hit=gameState.autoEnabled ? {inside:true,trackingWeight:1,angleError:0,radiusError:0,target:a,region:{pointerAngle:a,pointerRadius:hitR,angularTolerance:profile.outerAngularToleranceDeg*Math.PI/180,radialTolerance:Math.max(profile.outerRadialTolerancePx,hitR*profile.outerRadialToleranceRatio),inside:true}} : insideTraceTarget(n,t);
+          const hit=isAutoActive() ? {inside:true,trackingWeight:1,angleError:0,radiusError:0,target:a,region:{pointerAngle:a,pointerRadius:hitR,angularTolerance:profile.outerAngularToleranceDeg*Math.PI/180,radialTolerance:Math.max(profile.outerRadialTolerancePx,hitR*profile.outerRadialToleranceRatio),inside:true}} : insideTraceTarget(n,t);
           n.activeTraceDuration += frameDt;
           n.maxAngleError=Math.max(n.maxAngleError||0,hit.angleError||0);
           n.maxRadiusError=Math.max(n.maxRadiusError||0,hit.radiusError||0);
           n.angleErrorSum=(n.angleErrorSum||0)+(hit.angleError||0); n.errorSamples=(n.errorSamples||0)+1;
           if(hit.inside){
-            if(gameState.autoEnabled)logAutoProcessing(n);
+            if(isAutoActive())logAutoProcessing(n);
             n.enteredTrace=true;
             if(t>n.hitTime+profile.startGrace && n.validTrackedTime<=0) n.lateTraceStart=true;
             n.validTrackedTime += frameDt;
@@ -1473,7 +1489,7 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
           }
           if(passed){
             const perfect=!tutorialMode && quality>=profile.perfectQuality && n.endpointCaptured===true;
-            addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace);
+            addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
           }else miss(n,n.failReason||"STAY ON THE PATH LONGER");
         }
         continue;
@@ -1483,9 +1499,9 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
         const link=linkedTraceForSwing(n);
         const needsTrace=chart.some(p=>p.type?.startsWith("trace") && p.hitTime+p.duration<=n.hitTime && n.hitTime-(p.hitTime+p.duration)>=TRACE_SWING_LINK_MIN && n.hitTime-(p.hitTime+p.duration)<=TRACE_SWING_LINK_MAX && distAng(traceTargetAngle(p,p.hitTime+p.duration),n.angle)<Math.PI*.12);
         if(needsTrace && !link){ if(t>n.hitTime+.26) miss(n,"WRONG DIRECTION"); continue; }
-        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(gameState.autoEnabled||checkSwing(n))){
-          if(gameState.autoEnabled)logAutoProcessing(n);
-          judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n));
+        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(isAutoActive()||checkSwing(n))){
+          if(isAutoActive())logAutoProcessing(n);
+          judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n),{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
         }else if(t>n.hitTime+.26){
           miss(n,"WRONG DIRECTION");
         }
@@ -1495,47 +1511,47 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
       if(n.type==="fx"){
         const end=n.hitTime+n.duration;
         if(t>=n.hitTime&&t<=end){
-          if(gameState.autoEnabled||(filterHeld&&aligned(n.angle,.020))){
-            if(gameState.autoEnabled)logAutoProcessing(n);
+          if(isAutoActive()||(filterHeld&&aligned(n.angle,.020))){
+            if(isAutoActive())logAutoProcessing(n);
             n.hold+=dt;
             if(Math.random()<.45)addParticles(cx+Math.cos(n.angle)*hitR,cy+Math.sin(n.angle)*hitR,COLORS.fx,1,.25);
           }
         }
         if(t>end){
           const ratio=n.hold/n.duration;
-          if(ratio>=.55)judge(n,ratio>.85?"PERFECT":"GREAT",COLORS.fx);
+          if(ratio>=.55)judge(n,ratio>.85?"PERFECT":"GREAT",COLORS.fx,{source:tutorialState.activeInput||"keyboard",reason:"USER_JUDGEMENT"});
           else miss(n,filterHeld?"MOVE CLOSER TO THE PATH":"HOLD THE BUTTON");
         }
-        if(t>n.hitTime+.38&&n.hold<.035&&!gameState.autoEnabled)miss(n,filterHeld?"MOVE CLOSER TO THE PATH":"HOLD THE BUTTON");
+        if(t>n.hitTime+.38&&n.hold<.035&&!isAutoActive())miss(n,filterHeld?"MOVE CLOSER TO THE PATH":"HOLD THE BUTTON");
         continue;
       }
 
       if(n.type.startsWith("slide")){
         const end=n.hitTime+n.duration;
         const a=slideAngle(n,t);
-        const held=gameState.autoEnabled || (filterHeld&&aligned(a,.010));
+        const held=isAutoActive() || (filterHeld&&aligned(a,.010));
         const color=noteColor(n);
         const isScratch=false;
         if(t>=n.hitTime&&t<=end){
           if(held){
-            if(gameState.autoEnabled)logAutoProcessing(n);
+            if(isAutoActive())logAutoProcessing(n);
             n.hold+=dt;
             if(Math.random()<(isScratch?.72:.60))addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,color,1,isScratch?.30:.22);
           }
         }
         if(t>end){
           const ratio=n.hold/n.duration;
-          if(ratio>=.58)judge(n,ratio>.88?"PERFECT":"GREAT",color);
+          if(ratio>=.58)judge(n,ratio>.88?"PERFECT":"GREAT",color,{source:tutorialState.activeInput||"keyboard",reason:"USER_JUDGEMENT"});
           else miss(n,filterHeld?"FOLLOW THE CURRENT TARGET":"HOLD THE BUTTON");
         }
-        if(t>n.hitTime+.40&&n.hold<.03&&!gameState.autoEnabled)miss(n,filterHeld?"FOLLOW THE CURRENT TARGET":"HOLD THE BUTTON");
+        if(t>n.hitTime+.40&&n.hold<.03&&!isAutoActive())miss(n,filterHeld?"FOLLOW THE CURRENT TARGET":"HOLD THE BUTTON");
         continue;
       }
 
       if(n.type.startsWith("scratch")){
-        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(gameState.autoEnabled||checkScratch(n,t))){
-          if(gameState.autoEnabled)logAutoProcessing(n);
-          judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n));
+        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(isAutoActive()||checkScratch(n,t))){
+          if(isAutoActive())logAutoProcessing(n);
+          judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n),{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
         }else if(t>n.hitTime+.26){
           miss(n,scratchHeld?"WRONG DIRECTION":"HOLD THE BUTTON");
         }
@@ -2625,18 +2641,26 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
     {name:"360 TRACE · ADVANCED",kind:"trace",phase:"faded",desc:"Optional advanced practice after basic TRACE: one full circle then SWING.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:6.75,lane:0}]},
     {name:"MIX TEST",kind:"mix",phase:"standard",desc:"Final mix test uses normal note designs without detailed judge bands.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
   ];
-  function buildTutorialChart(step){ return (step.notes||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT; n.spawnTime=n.hitTime-APPROACH; return n; }).sort((a,b)=>a.hitTime-b.hitTime); }
+  function buildTutorialChart(step){ return (step.notes||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT; n.spawnTime=n.hitTime-APPROACH; n.done=false; n.missed=false; n.completed=false; n.hold=0; n.tutorialStepToken=tutorialStepToken; return n; }).sort((a,b)=>a.hitTime-b.hitTime); }
   function showTutorialPrompt(){ if(localStorage.getItem(TUTORIAL_COMPLETED_KEY)==="true"||localStorage.getItem(TUTORIAL_PROMPT_KEY)==="true")return; if(tutorialPrompt)tutorialPrompt.hidden=false; }
-  function setTutorialHud(){ const st=tutorialSteps[tutorialStepIndex]; if(!st)return; tutorialHud.hidden=false; tutorialStepLabel.textContent=`STEP ${tutorialStepIndex+1} / ${tutorialSteps.length}`; tutorialTitle.textContent=st.name; tutorialDesc.textContent=st.desc; tutorialInputHint.textContent=tutorialInputFor(st.kind); tutorialProgress.textContent=st.targets?`${st._hit||0} / ${st.targets.length}`:`${judgedCount} / ${chart.length}`; updateButtons(); }
+  function setTutorialHud(){ const st=tutorialSteps[tutorialStepIndex]; if(!st)return; tutorialHud.hidden=false; tutorialStepLabel.textContent=`STEP ${tutorialStepIndex+1} / ${tutorialSteps.length}`; tutorialTitle.textContent=st.name; tutorialDesc.textContent=st.desc; tutorialInputHint.textContent=(tutorialState.autoSuppressed&&tutorialState.previousAutoEnabled?"AUTO DISABLED IN TUTORIAL · ":"")+tutorialInputFor(st.kind); tutorialProgress.textContent=st.targets?`${st._hit||0} / ${st.targets.length}`:`${tutorialState.successCount||0} / ${chart.length}`; updateButtons(); }
   function beep(freq=660,dur=.07){ ensureAudioCtx(); const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=freq; o.type="square"; g.gain.value=.035*(sfxEnabled ? clamp(sfxVolume,0,4) : 0); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur); }
-  function startTutorialStep(idx=tutorialStepIndex){ tutorialStepIndex=clamp(idx,0,tutorialSteps.length-1); const st=tutorialSteps[tutorialStepIndex]; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=true; document.body.classList.add("tutorialMode","tutorialIntro"); resize(); abortingRun=false; resultShown=false; completionPending=false; paused=false; chart=buildTutorialChart(st); score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1; feedback=[]; particles=[]; waves=[]; st._hit=0; st._done=false; running=true; setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none"; mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=-Math.PI/2; filterHeld=scratchHeld=mouseDownRight=false; tutorialCountdownUntil=performance.now()+3200; ["3","2","1","START"].forEach((txt,i)=>setTimeout(()=>{ if(tutorialMode&&tutorialStepIndex===idx){ tutorialCountdown.textContent=txt; beep(520+i*110,.06); if(txt==="START")setTimeout(()=>{ tutorialCountdown.textContent=""; document.body.classList.remove("tutorialIntro"); resize(); },520);}},i*750)); audioStartedAt=performance.now()+3000; startMs=audioStartedAt; lastMs=performance.now(); setTutorialHud(); if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); }
-  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialStepIndex=0; startTutorialStep(0); }
-  function nextTutorialStep(){ if(tutorialStepIndex>=tutorialSteps.length-1) return completeTutorial(); startTutorialStep(tutorialStepIndex+1); }
+  function clearTutorialTimers(){ for(const id of tutorialState.timers) clearTimeout(id); tutorialState.timers=[]; for(const id of tutorialState.rafIds) cancelAnimationFrame(id); tutorialState.rafIds=[]; }
+  function tutorialSetTimeout(fn,delay){ const token=tutorialStepToken, session=tutorialSessionId; const id=setTimeout(()=>{ if(!tutorialMode || token!==tutorialStepToken || session!==tutorialSessionId) return; fn(); },delay); tutorialState.timers.push(id); return id; }
+  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function logTutorialAdvance(reason,extra={}){ if(!debugMode)return; const st=tutorialSteps[tutorialStepIndex]; console.log(`[Tutorial Advance]\nstep=${st?.kind||"-"}\nphase=${st?.phase||"-"}\nreason=${reason}\nsource=${extra.source||tutorialState.lastSource||"-"}\nsuccessCount=${tutorialState.successCount}\nsessionId=${tutorialSessionId}\nstepToken=${tutorialStepToken}\nfunction=${extra.fn||"-"}\ntimer=${!!extra.timer}\nnoteId=${extra.noteId||"-"}\npreviousStepToken=${extra.previousStepToken??tutorialStepToken}\ncurrentStepToken=${tutorialStepToken}`); }
+  function tutorialHandleJudgement(ev){ if(!tutorialMode || ev.stepToken!==tutorialStepToken || ev.sessionId!==tutorialSessionId) return; tutorialState.currentJudgement=ev.judgement; tutorialState.lastSource=ev.source; if(ev.source==="auto"){ logTutorialAdvance("AUTO_JUDGEMENT_BLOCKED",ev); return; } if(ev.reason!=="USER_JUDGEMENT") return; tutorialState.successCount++; tutorialState.successStreak++; if(tutorialState.successCount>=Math.max(1,chart.length)) advanceTutorialPhase("USER_JUDGEMENT",ev); }
+  function tutorialCompleteExploreTarget(reason,source="pointer"){ const st=tutorialSteps[tutorialStepIndex]; if(!tutorialMode||!st?.targets||performance.now()<tutorialState.inputEnabledAt)return; st._hit=(st._hit||0)+1; tutorialState.successCount=st._hit; tutorialState.successStreak++; tutorialState.lastSource=source; addWave(laneAngle(st.targets[Math.max(0,st._hit-1)]),COLORS.perfect); beep(780,.05); if(st._hit>=st.targets.length) advanceTutorialPhase(reason,{source,fn:"tutorialCompleteExploreTarget"}); }
+  function advanceTutorialPhase(reason="USER_JUDGEMENT",extra={}){ if(!tutorialMode || tutorialState.transitioning)return; tutorialState.transitioning=true; tutorialState.phaseCompleted=true; logTutorialAdvance(reason,extra); tutorialSetTimeout(()=>{ if(tutorialStepIndex>=tutorialSteps.length-1) completeTutorial(); else startTutorialStep(tutorialStepIndex+1); }, reason==="SKIP_BUTTON"?140:450); }
+  function startTutorialStep(idx=tutorialStepIndex){ clearTutorialTimers(); tutorialStepToken++; tutorialStepIndex=clamp(idx,0,tutorialSteps.length-1); const st=tutorialSteps[tutorialStepIndex]; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=true; tutorialState.autoSuppressed=true; document.body.classList.add("tutorialMode","tutorialIntro"); resize(); resetTutorialRuntimeState(); abortingRun=false; resultShown=false; completionPending=false; paused=false; chart=buildTutorialChart(st); score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; st._hit=0; st._done=false; running=true; setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none"; mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=-Math.PI/2; tutorialCountdownUntil=performance.now()+3200; tutorialState.inputEnabledAt=performance.now()+3350; ["3","2","1","START"].forEach((txt,i)=>tutorialSetTimeout(()=>{ tutorialCountdown.textContent=txt; beep(520+i*110,.06); if(txt==="START")tutorialSetTimeout(()=>{ tutorialCountdown.textContent=""; document.body.classList.remove("tutorialIntro"); resize(); tutorialState.transitioning=false; },520);},i*750)); audioStartedAt=performance.now()+3000; startMs=audioStartedAt; lastMs=performance.now(); setTutorialHud(); if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); }
+  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; tutorialStepIndex=0; startTutorialStep(0); }
+  function nextTutorialStep(){ advanceTutorialPhase("SKIP_BUTTON",{source:"button",fn:"nextTutorialStep"}); }
   function restartTutorialStep(){ startTutorialStep(tutorialStepIndex); }
-  function exitTutorial(toTitle=true){ tutorialMode=false; document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); updateButtons(); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
-  function completeTutorial(){ localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); updateButtons(); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="flex"; }
-  function updateTutorialAim(){ const st=tutorialSteps[tutorialStepIndex]; if(!tutorialMode||!st?.targets)return; const target=st.targets[st._hit||0]; const a=laneAngle(target); addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.perfect,1,.12); if(aligned(a,.055)){ st._hit=(st._hit||0)+1; addWave(a,COLORS.perfect); beep(780,.05); if(st._hit>=st.targets.length&&!st._done){st._done=true;setTimeout(nextTutorialStep,450);} } }
-  function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialAttempts++; addFeedback("TRY AGAIN",cx,cy-baseR*.42,COLORS.miss); setTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
+  function restoreTutorialAuto(){ gameState.autoEnabled=!!tutorialState.previousAutoEnabled; tutorialState.autoSuppressed=false; updateButtons(); safeRefresh&&safeRefresh(); }
+  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
+  function completeTutorial(){ clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none"; }
+  function updateTutorialAim(){ const st=tutorialSteps[tutorialStepIndex]; if(!tutorialMode||!st?.targets||tutorialState.transitioning)return; const target=st.targets[st._hit||0]; const a=laneAngle(target); addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.perfect,1,.12); if(tutorialState.pointerMoved && aligned(a,.055)) tutorialCompleteExploreTarget("USER_JUDGEMENT",tutorialState.lastSource||"pointer"); }
+  function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialState.failCount++; tutorialAttempts++; addFeedback("TRY AGAIN",cx,cy-baseR*.42,COLORS.miss); tutorialSetTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
 
   function showResult(result, recordInfo){
     score=result.finalScore;
@@ -2734,15 +2758,15 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
     if(!running)return;
     const dt=Math.min(.033,(ms-lastMs)/1000||.016);
     lastMs=ms; const t=now();
-    if(tutorialMode){ updateTutorialAim(); setTutorialHud(); if(tutorialFailed()) return; const st=tutorialSteps[tutorialStepIndex]; if(!st.targets && chart.length && judgedCount>=chart.length && !st._done){ st._done=true; setTimeout(nextTutorialStep,650); } }
+    if(tutorialMode){ updateTutorialAim(); setTutorialHud(); if(tutorialFailed()) return; }
     const lastHitTime = chart.length ? Math.max(...chart.map(n=>n.hitTime + (n.duration || 0))) : 0;
     const tutorialEnd = tutorialMode && chart.length && t >= lastHitTime + HIT_WINDOW + 0.55;
     const notesSettled = judgedCount >= chart.length || song.ended || t >= lastHitTime + HIT_WINDOW + 0.25;
     if(!tutorialMode && (song.ended || t >= songEndTime()) && notesSettled){ scheduleCompletion(); }
-    if(tutorialEnd && notesSettled && !tutorialSteps[tutorialStepIndex].targets && !tutorialSteps[tutorialStepIndex]._done){ tutorialSteps[tutorialStepIndex]._done=true; setTimeout(nextTutorialStep,650); }
+    if(tutorialEnd && notesSettled && !tutorialSteps[tutorialStepIndex].targets && !tutorialSteps[tutorialStepIndex]._done && tutorialState.successCount>=chart.length){ tutorialSteps[tutorialStepIndex]._done=true; advanceTutorialPhase("MIX_TEST_COMPLETE",{timer:true,fn:"frame"}); }
 
     // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
-    filterHeld = gameState.autoEnabled || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
+    filterHeld = isAutoActive() || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
     scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
     scratchMoveAmount=Math.abs(norm(armAngle-prevArmAngle));
     scratchSpeed=Math.abs(armVel);
@@ -3163,20 +3187,20 @@ reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDP
   if(editorAngleInput) editorAngleInput.addEventListener("change",()=>setEditorAngle(Number(editorAngleInput.value)||0));
   if(laneGrid) laneGrid.addEventListener("click",e=>{const btn=e.target.closest("[data-lane]");if(!btn)return;setEditorAngle((Number(btn.dataset.lane)||0)*45);});
 
-  window.addEventListener("mousemove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();},{passive:true});
-  window.addEventListener("pointermove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();pointerActive=true;},{passive:true});
-  window.addEventListener("touchmove",e=>{if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerMs=performance.now();pointerActive=true;}},{passive:true});
+  window.addEventListener("mousemove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now(); if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){tutorialState.pointerMoved=true;tutorialState.lastSource="pointer";}},{passive:true});
+  window.addEventListener("pointermove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();pointerActive=true; if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){tutorialState.pointerMoved=true;tutorialState.lastSource=e.pointerType==="touch"?"touch":"pointer";}},{passive:true});
+  window.addEventListener("touchmove",e=>{if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerMs=performance.now();pointerActive=true; if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){tutorialState.pointerMoved=true;tutorialState.lastSource="touch";}}},{passive:true});
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
-  window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
+  window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
   window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;}});
-  window.addEventListener("touchstart",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;} if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
+  window.addEventListener("touchstart",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;} if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
   window.addEventListener("touchend",e=>{if(!e.touches||e.touches.length<2){mouseDownRight=false;scratchHeld=false;} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
   window.addEventListener("keydown",e=>{
     keys[e.code]=true;
     if(e.code==="KeyA")keyA=true;
     if(e.code==="KeyD")keyD=true;
-    if(e.code==="Space"||e.code==="KeyZ"||e.code==="KeyX"){e.preventDefault(); if(!e.repeat)onCut();}
+    if(e.code==="Space"||e.code==="KeyZ"||e.code==="KeyX"){e.preventDefault(); tutorialState.activeInput="keyboard"; tutorialState.lastSource="keyboard"; if(!e.repeat)onCut();}
     if((e.code==="KeyD"||e.code==="F3")&&!e.repeat){e.preventDefault();toggleDebugOverlay();}
     if(e.code==="KeyO"&&!e.repeat){toggleAuto("keyboard");}
     if(e.code==="KeyP"&&!e.repeat){ ensureAudioCtx(); applyMusicVolume(); if(song.paused) song.play().catch(()=>{}); else song.pause(); }
