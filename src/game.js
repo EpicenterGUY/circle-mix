@@ -132,9 +132,26 @@
   const SCRATCH_FLICK_SPEED = 1.30;
   const DIAL_ARC_HALF = Math.PI * 0.075;
   const DIAL_ARC_VISUAL = Math.PI * 0.100;
+  // Tutorial and normal play intentionally share the exact same TRACE judgement.
+  // The tutorial only adds visual guidance, slower/simple charts and immediate retries.
+  const COMMON_TRACE_PROFILE = {
+    innerAngularToleranceDeg:12,
+    outerAngularToleranceDeg:20,
+    innerRadialTolerancePx:22,
+    outerRadialTolerancePx:34,
+    innerRadialToleranceRatio:.06,
+    outerRadialToleranceRatio:.09,
+    startGrace:.25,
+    endpointWindow:.25,
+    endpointRequiredTime:.10,
+    perfectQuality:.88,
+    greatQuality:.65,
+    maxFrameDt:.05,
+    graceGap:.14
+  };
   const TRACE_PROFILES = {
-    normal:{ innerAngularToleranceDeg:12, outerAngularToleranceDeg:20, innerRadialTolerancePx:22, outerRadialTolerancePx:34, innerRadialToleranceRatio:.06, outerRadialToleranceRatio:.09, startGrace:.25, endpointWindow:.25, endpointRequiredTime:.10, perfectQuality:.88, greatQuality:.65, maxFrameDt:.05, graceGap:.14 },
-    tutorial:{ innerAngularToleranceDeg:16, outerAngularToleranceDeg:24, innerRadialTolerancePx:28, outerRadialTolerancePx:42, innerRadialToleranceRatio:.075, outerRadialToleranceRatio:.115, startGrace:.25, endpointWindow:.25, endpointRequiredTime:.10, guidedQuality:.65, fadedQuality:.70, standardQuality:.74, perfectQuality:.88, greatQuality:.65, maxFrameDt:.05, graceGap:.14 }
+    normal:{...COMMON_TRACE_PROFILE},
+    tutorial:{...COMMON_TRACE_PROFILE}
   };
   const TRACE_SWING_LINK_MIN = .15;
   const TRACE_SWING_LINK_MAX = .25;
@@ -172,7 +189,7 @@
   let running=false, startMs=0, lastMs=0, raf=0;
   let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
   let tutorialSessionId=0, tutorialStepToken=0;
-  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],inputEnabledAt:0,pointerMoved:false,lastSource:null};
+  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0};
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
@@ -934,7 +951,8 @@
     return {targetAngle:motion.finalAngle,targetRadius:hitR,pointerAngle:p.angle,pointerRadius:p.radius,angleError,radiusError,angularTolerance:tol.angular,radialTolerance:tol.radial,inside:angleError<=tol.angular && radiusError<=tol.radial,motion};
   }
   function traceProfile(){
-    return tutorialMode ? TRACE_PROFILES.tutorial : TRACE_PROFILES.normal;
+    // One real judgement profile for both tutorial and normal play.
+    return TRACE_PROFILES.normal;
   }
   function getTraceJudgementRegion(n,t,profile=traceProfile()){
     const targetAngle=traceTargetAngle(n,t);
@@ -1450,7 +1468,6 @@
   function traceFailureFeedback(n,needed){
     const r=n.lastTraceRegion;
     if(!n.enteredTrace) return "MOVE CLOSER TO THE RING";
-    if(!n.endpointCaptured) return "REACH THE END POINT";
     if(r && r.radiusError > r.radialTolerance) return "MOVE CLOSER TO THE RING";
     if((n.traceQuality||0) < needed) return "STAY ON THE PATH LONGER";
     return "FOLLOW THE CURRENT TARGET";
@@ -1502,11 +1519,12 @@
           const quality=(n.traceQualityTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
           const coverage=(n.validTrackedTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
           n.coverageRatio=coverage; n.traceQuality=quality;
-          const st=tutorialMode?tutorialSteps[tutorialStepIndex]:null;
-          const tutorialNeeded=st?.phase==="guided"?profile.guidedQuality:(st?.phase==="faded"?profile.fadedQuality:(st?.phase==="standard"?profile.standardQuality:profile.greatQuality));
-          const needed=tutorialMode?tutorialNeeded:profile.greatQuality;
+          const needed=profile.greatQuality;
           const almostNever=!n.enteredTrace;
-          const passed=tutorialMode ? (quality>=needed && n.endpointCaptured===true) : (quality>=needed && !almostNever);
+          // Same pass/fail rule in tutorial and normal play. Reaching the endpoint
+          // upgrades a strong run to PERFECT, but missing one endpoint frame does
+          // not turn an otherwise valid TRACE into an automatic MISS.
+          const passed=quality>=needed && !almostNever;
           n.completed=passed;
           if(debugMode || tutorialMode){
             n.failReason=traceFailureFeedback(n,needed);
@@ -1534,7 +1552,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
             }
           }
           if(passed){
-            const perfect=!tutorialMode && quality>=profile.perfectQuality && n.endpointCaptured===true;
+            const perfect=quality>=profile.perfectQuality && n.endpointCaptured===true;
             addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
           }else miss(n,n.failReason||"STAY ON THE PATH LONGER");
         }
@@ -2686,7 +2704,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     {name:"TRACE · STANDARD",kind:"trace",phase:"standard",desc:"Normal TRACE display without the detailed band.",notes:[{type:"traceCCW",beat:4,lane:2,endLane:6,durationBeat:2.5}]},
     {name:"SWING · GUIDED",kind:"swing",phase:"guided",desc:"Tangent arrows and the direction cone show the allowed motion.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
     {name:"SCRATCH · GUIDED",kind:"scratch",phase:"guided",desc:"RMB/two-finger hold plus a short direction-change gesture.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
-    {name:"360 TRACE · ADVANCED",kind:"trace",phase:"faded",desc:"Optional advanced practice after basic TRACE: one full circle then SWING.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:6.75,lane:0}]},
+    {name:"360 TRACE · ADVANCED",kind:"trace",phase:"faded",desc:"Optional advanced practice after basic TRACE: one full circle then SWING.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:7.1,lane:0}]},
     {name:"MIX TEST",kind:"mix",phase:"standard",desc:"Final mix test uses normal note designs without detailed judge bands.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
   ];
   function buildTutorialChart(step){ return (step.notes||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT; n.spawnTime=n.hitTime-APPROACH; n.done=false; n.missed=false; n.completed=false; n.hold=0; n.tutorialStepToken=tutorialStepToken; return n; }).sort((a,b)=>a.hitTime-b.hitTime); }
@@ -2703,11 +2721,55 @@ endpointCaptured=${n.endpointCaptured===true}`);
       delete n.coverageRatio; delete n.traceQuality; delete n.failReason; delete n.lastTraceReason; delete n.autoProcessingLogged;
     }
   }
-  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; resetTraceRuntimeState(); feedback=[]; particles=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; resetTraceRuntimeState(); feedback=[]; particles=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
   function logTutorialAdvance(reason,extra={}){ if(!debugMode)return; const st=tutorialSteps[tutorialStepIndex]; console.log(`[Tutorial Advance]\nstep=${st?.kind||"-"}\nphase=${st?.phase||"-"}\nreason=${reason}\nsource=${extra.source||tutorialState.lastSource||"-"}\nsuccessCount=${tutorialState.successCount}\nsessionId=${tutorialSessionId}\nstepToken=${tutorialStepToken}\nfunction=${extra.fn||"-"}\ntimer=${!!extra.timer}\nnoteId=${extra.noteId||"-"}\npreviousStepToken=${extra.previousStepToken??tutorialStepToken}\ncurrentStepToken=${tutorialStepToken}`); }
-  function tutorialHandleJudgement(ev){ if(!tutorialMode || ev.stepToken!==tutorialStepToken || ev.sessionId!==tutorialSessionId) return; tutorialState.currentJudgement=ev.judgement; tutorialState.lastSource=ev.source; if(ev.source==="auto"){ logTutorialAdvance("AUTO_JUDGEMENT_BLOCKED",ev); return; } if(ev.reason!=="USER_JUDGEMENT") return; tutorialState.successCount++; tutorialState.successStreak++; if(tutorialState.successCount>=Math.max(1,chart.length)) advanceTutorialPhase("USER_JUDGEMENT",ev); }
-  function tutorialCompleteExploreTarget(reason,source="pointer"){ const st=tutorialSteps[tutorialStepIndex]; if(!tutorialMode||!st?.targets||performance.now()<tutorialState.inputEnabledAt)return; st._hit=(st._hit||0)+1; tutorialState.successCount=st._hit; tutorialState.successStreak++; tutorialState.lastSource=source; addWave(laneAngle(st.targets[Math.max(0,st._hit-1)]),COLORS.perfect); beep(780,.05); if(st._hit>=st.targets.length) advanceTutorialPhase(reason,{source,fn:"tutorialCompleteExploreTarget"}); }
-  function advanceTutorialPhase(reason="USER_JUDGEMENT",extra={}){ if(!tutorialMode || tutorialState.transitioning)return; tutorialState.transitioning=true; tutorialState.phaseCompleted=true; logTutorialAdvance(reason,extra); tutorialSetTimeout(()=>{ if(tutorialStepIndex>=tutorialSteps.length-1) completeTutorial(); else startTutorialStep(tutorialStepIndex+1); }, reason==="SKIP_BUTTON"?140:450); }
+  function tutorialHandleJudgement(ev){
+    if(!tutorialMode || tutorialState.transitioning) return;
+    if(ev.stepToken!==tutorialStepToken || ev.sessionId!==tutorialSessionId) return;
+    if(performance.now()<tutorialState.inputEnabledAt) return;
+    tutorialState.currentJudgement=ev.judgement;
+    tutorialState.lastSource=ev.source;
+    const validSources=new Set(["keyboard","pointer","touch"]);
+    if(!validSources.has(ev.source)){
+      if(ev.source==="auto") logTutorialAdvance("AUTO_JUDGEMENT_BLOCKED",ev);
+      return;
+    }
+    if(ev.reason!=="USER_JUDGEMENT") return;
+    if(tutorialState.consumedNoteIds.has(ev.noteId)) return;
+    tutorialState.consumedNoteIds.add(ev.noteId);
+    tutorialState.validUserInputCount++;
+    tutorialState.successCount++;
+    tutorialState.successStreak++;
+    const required=Math.max(1,chart.length);
+    if(tutorialState.successCount>=required) advanceTutorialPhase("USER_JUDGEMENT",ev);
+  }
+  function tutorialCompleteExploreTarget(reason,source="pointer"){
+    const st=tutorialSteps[tutorialStepIndex];
+    const nowMs=performance.now();
+    if(!tutorialMode||tutorialState.transitioning||!st?.targets||nowMs<tutorialState.inputEnabledAt)return;
+    if(nowMs-tutorialState.lastExploreCompletionAt<160)return;
+    tutorialState.lastExploreCompletionAt=nowMs;
+    st._hit=(st._hit||0)+1;
+    tutorialState.successCount=st._hit;
+    tutorialState.successStreak++;
+    tutorialState.validUserInputCount++;
+    tutorialState.lastSource=source;
+    addWave(laneAngle(st.targets[Math.max(0,st._hit-1)]),COLORS.perfect);
+    beep(780,.05);
+    tutorialState.exploreInsideSince=0;
+    if(st._hit>=st.targets.length) advanceTutorialPhase(reason,{source,fn:"tutorialCompleteExploreTarget"});
+  }
+  function advanceTutorialPhase(reason="USER_JUDGEMENT",extra={}){
+    if(!tutorialMode || tutorialState.transitioning)return;
+    if(reason!=="SKIP_BUTTON" && tutorialState.validUserInputCount<=0){
+      if(debugMode) console.warn("[Tutorial] blocked advance without valid user input", {reason,step:tutorialSteps[tutorialStepIndex]?.name});
+      return;
+    }
+    tutorialState.transitioning=true;
+    tutorialState.phaseCompleted=true;
+    logTutorialAdvance(reason,extra);
+    tutorialSetTimeout(()=>{ if(tutorialStepIndex>=tutorialSteps.length-1) completeTutorial(); else startTutorialStep(tutorialStepIndex+1); }, reason==="SKIP_BUTTON"?140:450);
+  }
   function startTutorialStep(idx=tutorialStepIndex){ clearTutorialTimers(); tutorialStepToken++; tutorialStepIndex=clamp(idx,0,tutorialSteps.length-1); const st=tutorialSteps[tutorialStepIndex]; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=true; tutorialState.autoSuppressed=true; document.body.classList.add("tutorialMode","tutorialIntro"); resize(); resetTutorialRuntimeState(); abortingRun=false; resultShown=false; completionPending=false; paused=false; chart=buildTutorialChart(st); score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; st._hit=0; st._done=false; running=true; setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none"; mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=-Math.PI/2; tutorialCountdownUntil=performance.now()+3200; tutorialState.inputEnabledAt=performance.now()+3350; ["3","2","1","START"].forEach((txt,i)=>tutorialSetTimeout(()=>{ tutorialCountdown.textContent=txt; beep(520+i*110,.06); if(txt==="START")tutorialSetTimeout(()=>{ tutorialCountdown.textContent=""; document.body.classList.remove("tutorialIntro"); resize(); tutorialState.transitioning=false; },520);},i*750)); audioStartedAt=performance.now()+3000; startMs=audioStartedAt; lastMs=performance.now(); setTutorialHud(); if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); }
   function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; tutorialStepIndex=0; startTutorialStep(0); }
   function nextTutorialStep(){ advanceTutorialPhase("SKIP_BUTTON",{source:"button",fn:"nextTutorialStep"}); }
@@ -2715,7 +2777,29 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function restoreTutorialAuto(){ gameState.autoEnabled=!!tutorialState.previousAutoEnabled; tutorialState.autoSuppressed=false; updateButtons(); safeRefresh&&safeRefresh(); }
   function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
   function completeTutorial(){ clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none"; }
-  function updateTutorialAim(){ const st=tutorialSteps[tutorialStepIndex]; if(!tutorialMode||!st?.targets||tutorialState.transitioning)return; const target=st.targets[st._hit||0]; const a=laneAngle(target); addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.perfect,1,.12); if(tutorialState.pointerMoved && aligned(a,.055)) tutorialCompleteExploreTarget("USER_JUDGEMENT",tutorialState.lastSource||"pointer"); }
+  function updateTutorialAim(){
+    const st=tutorialSteps[tutorialStepIndex];
+    if(!tutorialMode||!st?.targets||tutorialState.transitioning)return;
+    // AIM explore and the press-free TRACE still-target exercise may complete by
+    // pointer movement. CUT explore must wait for an actual CUT input in onCut().
+    const movementCompletes = st.kind==="aim" || (st.kind==="trace" && st.phase==="explore");
+    if(!movementCompletes)return;
+    const target=st.targets[st._hit||0];
+    if(target===undefined)return;
+    const a=laneAngle(target);
+    addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.perfect,1,.12);
+    const inside=tutorialState.pointerMoved && aligned(a,.055);
+    if(inside){
+      if(!tutorialState.exploreInsideSince) tutorialState.exploreInsideSince=performance.now();
+      // Require a short dwell so simply crossing a target while moving toward
+      // the right-side UI cannot accidentally finish or skip an explore step.
+      if(performance.now()-tutorialState.exploreInsideSince>=220){
+        tutorialCompleteExploreTarget("USER_JUDGEMENT",tutorialState.lastSource||"pointer");
+      }
+    }else{
+      tutorialState.exploreInsideSince=0;
+    }
+  }
   function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialState.failCount++; tutorialAttempts++; addFeedback("TRY AGAIN",cx,cy-baseR*.42,COLORS.miss); tutorialSetTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
 
   function showResult(result, recordInfo){
@@ -2816,10 +2900,11 @@ endpointCaptured=${n.endpointCaptured===true}`);
     lastMs=ms; const t=now();
     if(tutorialMode){ updateTutorialAim(); setTutorialHud(); if(tutorialFailed()) return; }
     const lastHitTime = chart.length ? Math.max(...chart.map(n=>n.hitTime + (n.duration || 0))) : 0;
-    const tutorialEnd = tutorialMode && chart.length && t >= lastHitTime + HIT_WINDOW + 0.55;
     const notesSettled = judgedCount >= chart.length || song.ended || t >= lastHitTime + HIT_WINDOW + 0.25;
     if(!tutorialMode && (song.ended || t >= songEndTime()) && notesSettled){ scheduleCompletion(); }
-    if(tutorialEnd && notesSettled && !tutorialSteps[tutorialStepIndex].targets && !tutorialSteps[tutorialStepIndex]._done && tutorialState.successCount>=chart.length){ tutorialSteps[tutorialStepIndex]._done=true; advanceTutorialPhase("MIX_TEST_COMPLETE",{timer:true,fn:"frame"}); }
+    // Tutorial progression is event-driven by tutorialHandleJudgement().
+    // Do not also advance from the render loop; that duplicate path caused
+    // intermittent stage skips when a late frame raced the next step.
 
     // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
     filterHeld = isAutoActive() || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
@@ -3186,10 +3271,21 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function bindPress(el,fn){
     if(!el)return;
     let last=0;
-    const h=e=>{ if(e){ e.preventDefault(); e.stopPropagation(); } const m=performance.now(); if(m-last<180)return; last=m; fn(e); };
-    const block=e=>{ if(e){ e.preventDefault(); e.stopPropagation(); } };
-    if(window.PointerEvent){ el.addEventListener("pointerdown",block,{passive:false}); el.addEventListener("pointerup",h,{passive:false}); }
-    else{el.addEventListener("touchstart",block,{passive:false});el.addEventListener("touchend",h,{passive:false});el.addEventListener("click",h);}
+    const h=e=>{ if(e){ if(e.cancelable)e.preventDefault(); e.stopPropagation(); } const m=performance.now(); if(m-last<180)return; last=m; fn(e); };
+    const block=e=>{ if(e){ if(e.cancelable)e.preventDefault(); e.stopPropagation(); } };
+    if(window.PointerEvent){
+      el.addEventListener("pointerdown",block,{passive:false});
+      el.addEventListener("pointerup",h,{passive:false});
+      el.addEventListener("pointercancel",block,{passive:false});
+      // Native click is a reliable fallback when pointerup is lost because an
+      // overlay or responsive layout moves during the press. Debouncing avoids
+      // double activation after pointerup + click.
+      el.addEventListener("click",h,{passive:false});
+    }else{
+      el.addEventListener("touchstart",block,{passive:false});
+      el.addEventListener("touchend",h,{passive:false});
+      el.addEventListener("click",h,{passive:false});
+    }
   }
 
   bindPress(startBtn,()=>showSongSelect());
@@ -3244,9 +3340,23 @@ endpointCaptured=${n.endpointCaptured===true}`);
   if(editorAngleInput) editorAngleInput.addEventListener("change",()=>setEditorAngle(Number(editorAngleInput.value)||0));
   if(laneGrid) laneGrid.addEventListener("click",e=>{const btn=e.target.closest("[data-lane]");if(!btn)return;setEditorAngle((Number(btn.dataset.lane)||0)*45);});
 
-  window.addEventListener("mousemove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now(); if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){tutorialState.pointerMoved=true;tutorialState.lastSource="pointer";}},{passive:true});
-  window.addEventListener("pointermove",e=>{mouseX=e.clientX;mouseY=e.clientY;lastPointerMs=performance.now();pointerActive=true; if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){tutorialState.pointerMoved=true;tutorialState.lastSource=e.pointerType==="touch"?"touch":"pointer";}},{passive:true});
-  window.addEventListener("touchmove",e=>{if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerMs=performance.now();pointerActive=true; if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){tutorialState.pointerMoved=true;tutorialState.lastSource="touch";}}},{passive:true});
+  function updateGameplayPointerFromEvent(e,source){
+    // Moving over tutorial buttons must not steer the in-game arm or satisfy an
+    // explore target. This was the main cause of stages skipping while the user
+    // moved toward the right-side SKIP STEP button.
+    if(isUiInputTarget(e.target))return;
+    const point=e.touches?.[0] || e;
+    if(!Number.isFinite(point.clientX)||!Number.isFinite(point.clientY))return;
+    mouseX=point.clientX; mouseY=point.clientY;
+    lastPointerMs=performance.now(); pointerActive=true;
+    if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){
+      tutorialState.pointerMoved=true;
+      tutorialState.lastSource=source;
+    }
+  }
+  window.addEventListener("mousemove",e=>updateGameplayPointerFromEvent(e,"pointer"),{passive:true});
+  window.addEventListener("pointermove",e=>updateGameplayPointerFromEvent(e,e.pointerType==="touch"?"touch":"pointer"),{passive:true});
+  window.addEventListener("touchmove",e=>updateGameplayPointerFromEvent(e,"touch"),{passive:true});
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
   window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});

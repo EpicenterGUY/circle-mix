@@ -690,11 +690,16 @@ body.tutorialMode .hudSong strong{font-size:16px;}
 body.tutorialMode .hudSong em{font-size:10px;}
 .tutorialHud{
   box-sizing:border-box;
-  pointer-events:none;
+  pointer-events:auto;
+  touch-action:manipulation;
+  isolation:isolate;
 }
 .tutorialHud .btn,
 .tutorialHud button{
+  position:relative;
+  z-index:2;
   pointer-events:auto;
+  touch-action:manipulation;
 }
 body.tutorialSidePanel .tutorialHud{
   left:auto;
