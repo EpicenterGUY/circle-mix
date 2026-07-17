@@ -235,6 +235,7 @@
   let paused=false;
   let completionPending=false, completionTimer=0, resultShown=false, abortingRun=false;
   let settingsVisible=false;
+  let settingsOrigin="title";
   let fullscreenInterrupted=false;
   let pauseSettingsOpen=false;
   let customChartData=[];
@@ -608,9 +609,25 @@
     return difficultyCache[mode];
   }
 
+  function formatStarValue(stars){
+    const value=Number(stars);
+    return Number.isFinite(value) ? value.toFixed(1)+"★" : "—";
+  }
+
   function formatDifficulty(mode=mapMode){
     const d=getDifficulty(mode);
-    return d ? d.stars.toFixed(1)+"★" : "-";
+    return d ? formatStarValue(d.stars) : "—";
+  }
+
+  function difficultyViewForSong(songData, difficultyId){
+    if(!songData || !difficultyId) return null;
+    const meta=songData.difficulties?.[difficultyId];
+    const label=meta?.label || difficultyId.toUpperCase();
+    if(songData.source==="builtin") return {id:difficultyId, label, stars:getDifficulty(difficultyId)?.stars};
+    const chart=songData.charts?.[difficultyId];
+    const metaStars=Number(meta?.stars);
+    const stars=Number.isFinite(metaStars) ? metaStars : (chart ? chartTools.calculateStars(chart) : undefined);
+    return {id:difficultyId, label, stars};
   }
 
   function addCutRun(n,start,step,lanes,types={}){
@@ -3719,6 +3736,41 @@ endpointCaptured=${n.endpointCaptured===true}`);
     showSongSelect();
   }
 
+  function exitToTitle(){
+    pauseSettingsOpen=false;
+    settingsVisible=false;
+    if(pauseSettingsOverlay) pauseSettingsOverlay.classList.remove("show");
+    if(pauseOverlay) pauseOverlay.classList.remove("show");
+    document.body.classList.remove("pausedInputBlocked", "pauseSettingsOpen", "showSettings");
+    if(tutorialMode) return exitTutorial(true);
+    showTitleMenu();
+  }
+
+  function currentSettingsOrigin(){
+    if(running || paused || document.body.classList.contains("safeGame")) return "gameplay";
+    if(songSelect && !songSelect.hidden) return "songSelect";
+    return "title";
+  }
+
+  function handleSettingsResume(){
+    const origin=settingsOrigin;
+    settingsVisible=false;
+    document.body.classList.remove("showSettings");
+    if(origin==="gameplay"){
+      safeSetState("game");
+      if(paused) resumeGame();
+      else originalToggleSettings(false);
+    }else if(origin==="songSelect"){
+      safeSetState("songSelect");
+      if(songSelect) songSelect.hidden=false;
+      originalToggleSettings(false);
+    }else{
+      safeSetState("title");
+      originalToggleSettings(false);
+    }
+    safeRefresh();
+  }
+
   function songEndTime(){ if(selectedSong?.source==="local") return Math.max(song.duration||0, chart.at(-1)?.hitTime||0)+2; return SONG_END_TIME; }
 
   function frame(ms){
@@ -4353,8 +4405,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
     syncSongUrl();
     songCarousel.innerHTML = tabHtml + (list.length ? list.map(songData => {
       const active = songData.id === selectedSongId;
-      const chartEntries = songData.source==="local" ? localChartEntries(songData) : Object.entries(songData.difficulties||{}).map(([id,meta])=>({id,meta,chart:songData.charts?.[id]}));
-      const diffs=chartEntries.map(({id,meta,chart})=>`${meta?.label||id.toUpperCase()} ${Number(meta?.stars || chartTools.calculateStars(chart||{})).toFixed(1)}★`).join(" · ");
+      const chartEntries = songData.source==="local" ? localChartEntries(songData) : Object.keys(songData.difficulties||{}).map(id=>({id}));
+      const diffs=chartEntries.map(({id})=>{ const diff=difficultyViewForSong(songData,id); return `${diff?.label || id.toUpperCase()} ${formatStarValue(diff?.stars)}`; }).join(" · ");
       const manage=songData.source==="local" ? `<div class="songManage"><button data-action="rename" data-song-id="${songData.id}">EDIT META</button><button data-action="clone" data-song-id="${songData.id}">CLONE</button><button data-action="delete" data-song-id="${songData.id}">DELETE</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : "";
       return `<div class="songCard${active ? " active" : ""}" data-song-id="${songData.id}">
         <button class="songCardPick" type="button" data-song-id="${songData.id}"><div class="songJacket" aria-hidden="true"><span>${songData.title}</span></div>
@@ -4378,7 +4430,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
       else diffHtml = entries.map(({id,meta,chart}) => {
         const label = meta?.label || id.toUpperCase();
         const best = getBestRecord(id, selectedSong);
-        const stars = selectedSource==="local" ? Number(meta?.stars || chartTools.calculateStars(chart||{})).toFixed(1)+"★" : formatDifficulty(id);
+        const diff=difficultyViewForSong(selectedSong,id);
+        const stars = formatStarValue(diff?.stars);
         const bestHtml = best ? `<small>BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")}<br>BEST POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"}<br>BEST RANK ${best.bestRank || "---"}<br>BEST ACCURACY ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}</small>` : `<small>BEST SCORE ---<br>BEST POWER ---<br>BEST RANK ---<br>BEST ACCURACY ---</small>`;
         return `<button class="songDiffBtn${selectedDifficultyId===id ? " on" : ""}" type="button" data-difficulty="${id}">${label} <span>${stars}</span>${bestHtml}</button>`;
       }).join("");
@@ -4496,7 +4549,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function safeSetOverlay(v){
-    safeSetState(v?"settings":(running?"game":"title"));
+    if(v) settingsOrigin=currentSettingsOrigin();
+    safeSetState(v?"settings":(settingsOrigin==="songSelect"?"songSelect":(settingsOrigin==="gameplay"?"game":"title")));
   }
 
   function safeRefresh(){
@@ -4559,7 +4613,9 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   const originalToggleSettings=toggleSettings;
   toggleSettings=function(force){
-    settingsVisible = force!==undefined ? force : !settingsVisible;
+    const nextVisible = force!==undefined ? force : !settingsVisible;
+    if(nextVisible) settingsOrigin=currentSettingsOrigin();
+    settingsVisible = nextVisible;
     if(settingsVisible && isMobileViewport()) originalToggleKeymap(false);
     if(paused){
       if(settingsVisible) openPauseSettings();
@@ -4605,8 +4661,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
   safeBind(safeSetPathBrightness,()=>cycleVisualSetting("pathBrightness"));
   safeBind(safeSetEffectIntensity,()=>cycleVisualSetting("effectIntensity"));
   safeBind(safeSetJudgeGuide,()=>cycleVisualSetting("judgeGuide"));
-  safeBind(safeResume,()=>{safeSetOverlay(false);resumeGame();});
-  safeBind(safeExit,exitToMenu);
+  safeBind(safeResume,handleSettingsResume);
+  safeBind(safeExit,exitToTitle);
   bindPress(tutorialPromptStart,startTutorial);
   bindPress(tutorialPromptSkip,()=>{localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); tutorialPrompt.hidden=true;});
   bindImmediatePress(tutorialSkipStep,nextTutorialStep);
