@@ -67,6 +67,7 @@
   const pauseSetPathBrightness = document.getElementById("pauseSetPathBrightness");
   const pauseSetEffectIntensity = document.getElementById("pauseSetEffectIntensity");
   const pauseSetJudgeGuide = document.getElementById("pauseSetJudgeGuide");
+  const pauseSetAimStabilizer = document.getElementById("pauseSetAimStabilizer");
   const resultOverlay = document.getElementById("resultOverlay");
   const resultScore = document.getElementById("resultScore");
   const resultPower = document.getElementById("resultPower");
@@ -162,8 +163,11 @@
   const BASE_NOTE_WIDTH = 8;
   const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, trace:3.0, hold:11.5 };
   const VISUAL_SETTINGS_KEY = "circleMixVisualSettings.v1";
+  const INPUT_SETTINGS_KEY = "circleMixInputSettings.v1";
+  const AIM_STABILIZER_MODES = ["OFF","LOW","MEDIUM"];
   const VISUAL_CHOICES = { noteContrast:["NORMAL","HIGH"], pathBrightness:["LOW","NORMAL","HIGH"], effectIntensity:["LOW","NORMAL","HIGH"], judgeGuide:["OFF","BEGINNER","ALWAYS"] };
   const visualSettings = loadVisualSettings();
+  const inputSettings = loadInputSettings();
 
   const COLORS = {
     cut:"#5cfffb", swingCW:"#79ff7d", swingCCW:"#ff72d6", slide:"#ffe15a", fx:"#b77cff",
@@ -183,6 +187,13 @@
     }catch(e){ return {noteContrast:"HIGH",pathBrightness:"NORMAL",effectIntensity:"NORMAL",judgeGuide:"BEGINNER"}; }
   }
   function saveVisualSettings(){ try{ localStorage.setItem(VISUAL_SETTINGS_KEY, JSON.stringify(visualSettings)); }catch(e){} }
+  function loadInputSettings(){
+    try{
+      const saved=JSON.parse(localStorage.getItem(INPUT_SETTINGS_KEY)||"{}");
+      return {aimStabilizer:AIM_STABILIZER_MODES.includes(saved.aimStabilizer)?saved.aimStabilizer:"LOW"};
+    }catch(e){ return {aimStabilizer:"LOW"}; }
+  }
+  function saveInputSettings(){ try{ localStorage.setItem(INPUT_SETTINGS_KEY, JSON.stringify(inputSettings)); }catch(e){} }
   function visualScale(kind){
     if(kind==="effect") return visualSettings.effectIntensity==="LOW"?.55:(visualSettings.effectIntensity==="HIGH"?1.15:.82);
     if(kind==="path") return visualSettings.pathBrightness==="LOW"?.72:(visualSettings.pathBrightness==="HIGH"?1.22:1);
@@ -202,7 +213,11 @@
   const gameState={autoEnabled:false};
   let mapMode="tech";
   let mouseX=0, mouseY=0;
-  let armAngle=-Math.PI/2, targetAngle=-Math.PI/2, prevArmAngle=-Math.PI/2, armVel=0;
+  let lastPointerSource="pointer";
+  let armAngle=-Math.PI/2, targetAngle=-Math.PI/2, prevArmAngle=-Math.PI/2, armVel=0, rawArmVel=0;
+  let rawTargetAngle=-Math.PI/2, stabilizedTargetAngle=-Math.PI/2, lastValidTargetAngle=-Math.PI/2;
+  let centerDeadzoneActive=false, cursorRadius=hitR, lastRawAngleForVelocity=-Math.PI/2;
+  let rawAngularVelocity=0, magnetTarget=null, magnetAngleError=0;
   let keyA=false, keyD=false, filterHeld=false, scratchHeld=false, mouseDownRight=false;
   let debugOverlayVisible=false;
   let debugOverlay=null;
@@ -1893,6 +1908,30 @@
     return "#fff";
   }
   function aligned(angle, extra=0){return distAng(armAngle,angle)<DIAL_ARC_HALF+Math.PI*extra;}
+  function isAimMagnetNote(n){ return !!n && (n.type==="cut"||n.type==="fx"||n.type.startsWith("swing")||n.type.startsWith("scratch")); }
+  function aimStabilizerProfile(){
+    const mode=inputSettings.aimStabilizer;
+    if(mode==="MEDIUM") return {mode, slowTime:.040, slowVel:1.15, fastVel:4.8, magnetEnter:6*Math.PI/180, magnetExit:7*Math.PI/180, magnetStrength:.35, disengageVel:5.0};
+    if(mode==="LOW") return {mode, slowTime:.028, slowVel:.95, fastVel:4.2, magnetEnter:4*Math.PI/180, magnetExit:7*Math.PI/180, magnetStrength:.24, disengageVel:4.6};
+    return {mode, slowTime:0, slowVel:0, fastVel:0, magnetEnter:0, magnetExit:0, magnetStrength:0, disengageVel:4.4};
+  }
+  function updateAimMagnet(baseAngle, velocity){
+    const profile=aimStabilizerProfile();
+    const t=now();
+    if(profile.mode==="OFF" || velocity>profile.disengageVel){ magnetTarget=null; magnetAngleError=0; return baseAngle; }
+    if(magnetTarget && (magnetTarget.done||magnetTarget.missed||magnetTarget!==focusNote||t>magnetTarget.hitTime+HIT_WINDOW)){ magnetTarget=null; }
+    const n=magnetTarget || focusNote;
+    if(!isAimMagnetNote(n) || t<n.spawnTime || Math.abs(t-n.hitTime)>HIT_WINDOW+.10){ magnetTarget=null; magnetAngleError=0; return baseAngle; }
+    const err=norm(n.angle-baseAngle);
+    magnetAngleError=Math.abs(err);
+    if(magnetTarget){
+      const movingAway=Math.sign(velocity)===-Math.sign(err) && Math.abs(velocity)>1.15;
+      if(magnetAngleError>profile.magnetExit || movingAway){ magnetTarget=null; return baseAngle; }
+    }else if(magnetAngleError<=profile.magnetEnter){
+      magnetTarget=n;
+    }else return baseAngle;
+    return norm(baseAngle + err*profile.magnetStrength);
+  }
   function activeHold(n,t){return (n.type==="fx"||n.type.startsWith("slide"))&&t>=n.hitTime&&t<=n.hitTime+n.duration;}
 
   function addFeedback(text,x,y,color){feedback.push({text,x,y,color,life:.28});}
@@ -2121,16 +2160,16 @@
   function updateSwingGesture(n){
     if(!n.swingGestureArmed){
       n.swingGestureArmed=true;
-      n.swingLastAngle=armAngle;
+      n.swingLastAngle=rawTargetAngle;
       n.swingDirectedTravel=0;
       return;
     }
     const dir=n.type==="swingCW"?1:-1;
-    const delta=norm(armAngle-n.swingLastAngle);
+    const delta=norm(rawTargetAngle-n.swingLastAngle);
     const directed=delta*dir;
     if(directed>0) n.swingDirectedTravel+=directed;
     else n.swingDirectedTravel=Math.max(0,n.swingDirectedTravel+directed*.35);
-    n.swingLastAngle=armAngle;
+    n.swingLastAngle=rawTargetAngle;
   }
 
   function checkSwing(n){
@@ -2138,7 +2177,7 @@
     // TRACE 중 남아 있던 이전 프레임 속도만으로 자동 판정되지 않게 한다.
     const dir=n.type==="swingCW"?1:-1;
     const enoughTravel=(n.swingDirectedTravel||0)>=Math.PI*.035; // 약 6.3도
-    return enoughTravel && Math.abs(armVel)>=SWING_FLICK_SPEED && Math.sign(armVel)===dir;
+    return enoughTravel && Math.abs(rawArmVel)>=SWING_FLICK_SPEED && Math.sign(rawArmVel)===dir;
   }
 
   function checkScratch(n, t){
@@ -2147,12 +2186,12 @@
     const dir=n.type==="scratchCW"?1:-1;
     scratchCandidate=!!(scratchHeld&&aligned(n.angle,.026));
     scratchMoveAmount=Math.abs(norm(armAngle-prevArmAngle));
-    scratchSpeed=Math.abs(armVel);
+    scratchSpeed=Math.abs(rawArmVel);
     scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
     if(!scratchHeld){lastScratchResult="READY";return false;}
     if(!aligned(n.angle,.026)){lastScratchResult="MISS";return false;}
     if(!scratchThresholdMet){lastScratchResult="TOO SLOW";return false;}
-    const ok=Math.sign(armVel)===dir;
+    const ok=Math.sign(rawArmVel)===dir;
     lastScratchResult=ok?"HIT":"MISS";
     return ok;
   }
@@ -2269,17 +2308,50 @@
     if(isAutoActive()){
       const diff=norm(targetAngle-armAngle);
       armAngle+=diff*clamp(1-Math.pow(.0001,dt),0,1);
+      rawArmVel=armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001);
     }else if(keyA||keyD){
       targetAngle += (keyD-keyA) * 9.5 * dt;
+      rawTargetAngle=targetAngle; stabilizedTargetAngle=targetAngle; lastValidTargetAngle=targetAngle;
       const diff=norm(targetAngle-armAngle);
       armAngle += diff * clamp(1-Math.pow(.00001,dt),0,1);
+      rawArmVel=armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001);
+      magnetTarget=null; centerDeadzoneActive=false; cursorRadius=hitR;
     }else{
-      targetAngle=Math.atan2(mouseY-cy,mouseX-cx);
-      armAngle=targetAngle;
+      const dx=mouseX-cx, dy=mouseY-cy;
+      cursorRadius=Math.hypot(dx,dy);
+      const enter=Math.max(24, hitR*.18), exit=Math.max(24, hitR*.23);
+      if(centerDeadzoneActive ? cursorRadius<exit : cursorRadius<enter){
+        centerDeadzoneActive=true;
+        rawTargetAngle=lastValidTargetAngle;
+      }else{
+        centerDeadzoneActive=false;
+        rawTargetAngle=Math.atan2(dy,dx);
+        lastValidTargetAngle=rawTargetAngle;
+      }
+      rawAngularVelocity=norm(rawTargetAngle-lastRawAngleForVelocity)/Math.max(dt,.001);
+      lastRawAngleForVelocity=rawTargetAngle;
+      targetAngle=rawTargetAngle;
+      let desired=targetAngle;
+      if(lastPointerSource!=="touch"){
+        desired=updateAimMagnet(desired, rawAngularVelocity);
+        const profile=aimStabilizerProfile();
+        if(profile.mode!=="OFF" && Math.abs(rawAngularVelocity)<profile.fastVel){
+          const slowFactor=clamp((profile.fastVel-Math.abs(rawAngularVelocity))/Math.max(profile.fastVel-profile.slowVel,.001),0,1);
+          const timeConstant=profile.slowTime*slowFactor;
+          if(timeConstant>0){
+            const alpha=1-Math.exp(-dt/timeConstant);
+            stabilizedTargetAngle=norm(stabilizedTargetAngle + norm(desired-stabilizedTargetAngle)*alpha);
+          }else stabilizedTargetAngle=desired;
+        }else stabilizedTargetAngle=desired;
+      }else{
+        magnetTarget=null; stabilizedTargetAngle=desired;
+      }
+      armAngle=stabilizedTargetAngle;
+      rawArmVel=rawAngularVelocity;
+      armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001);
     }
 
     armAngle=norm(armAngle);
-    armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001);
   }
 
   function logAutoProcessing(n){
@@ -2522,6 +2594,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     ctx.save(); ctx.shadowBlur=12*visualScale("effect"); ctx.shadowColor=c; ctx.lineCap="round";
     ctx.strokeStyle="rgba(255,255,255,.22)"; ctx.lineWidth=21; ctx.beginPath(); ctx.arc(0,0,hitR,-DIAL_ARC_VISUAL,DIAL_ARC_VISUAL); ctx.stroke();
     ctx.strokeStyle=c; ctx.lineWidth=13; ctx.beginPath(); ctx.arc(0,0,hitR,-DIAL_ARC_HALF,DIAL_ARC_HALF); ctx.stroke();
+    if(magnetTarget){ ctx.strokeStyle="rgba(255,255,255,.55)"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,hitR+10,-DIAL_ARC_HALF*.62,DIAL_ARC_HALF*.62); ctx.stroke(); }
     ctx.fillStyle=c; ctx.beginPath(); ctx.arc(hitR,0,8,0,TAU); ctx.fill(); ctx.restore();
     ctx.shadowBlur=9*visualScale("effect"); ctx.shadowColor=c; ctx.strokeStyle=c; ctx.lineWidth=5; ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(baseR*.33,0); ctx.lineTo(hitR*.93,0); ctx.stroke();
@@ -3353,6 +3426,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function formatPathBrightness(){ return "PATH BRIGHTNESS " + visualSettings.pathBrightness; }
   function formatEffectIntensity(){ return "EFFECT INTENSITY " + visualSettings.effectIntensity; }
   function formatJudgeGuide(){ return "JUDGE GUIDE " + visualSettings.judgeGuide; }
+  function formatAimStabilizer(){ return "AIM STABILIZER " + inputSettings.aimStabilizer; }
+  function cycleAimStabilizer(){ const idx=AIM_STABILIZER_MODES.indexOf(inputSettings.aimStabilizer); inputSettings.aimStabilizer=AIM_STABILIZER_MODES[(idx+1)%AIM_STABILIZER_MODES.length]; saveInputSettings(); updateButtons(); }
   function cycleVisualSetting(key){ const list=VISUAL_CHOICES[key]; const idx=list.indexOf(visualSettings[key]); visualSettings[key]=list[(idx+1)%list.length]; saveVisualSettings(); updateButtons(); }
   function refreshSettingsUI(){ updateButtons(); }
 
@@ -3407,6 +3482,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(pauseSetPathBrightness) pauseSetPathBrightness.textContent = formatPathBrightness();
     if(pauseSetEffectIntensity) pauseSetEffectIntensity.textContent = formatEffectIntensity();
     if(pauseSetJudgeGuide) pauseSetJudgeGuide.textContent = formatJudgeGuide();
+    if(pauseSetAimStabilizer) pauseSetAimStabilizer.textContent = formatAimStabilizer();
     if(typeof safeRefresh === "function") safeRefresh();
   }
 
@@ -3606,7 +3682,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     chart=runtime.chart;
     score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1;
     setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none";
-    mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=-Math.PI/2;
+    mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=lastRawAngleForVelocity=-Math.PI/2; magnetTarget=null; centerDeadzoneActive=false;
     const leadMs=source==="replay"?3000:(skipCountdown?120:(source==="retry"?650:560));
     tutorialCountdownUntil=performance.now()+leadMs; tutorialState.inputEnabledAt=performance.now()+leadMs+60; audioStartedAt=performance.now()+leadMs; startMs=audioStartedAt; lastMs=performance.now();
     setTutorialHud(runtime);
@@ -3789,7 +3865,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     filterHeld = isAutoActive() || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
     scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
     scratchMoveAmount=Math.abs(norm(armAngle-prevArmAngle));
-    scratchSpeed=Math.abs(armVel);
+    scratchSpeed=Math.abs(rawArmVel);
     scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
     scratchCandidate=!!scratchHeld;
     updateAuto(t);
@@ -3860,7 +3936,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     lastMs=startMs;
     startLayer.style.display="none";
     mouseX=cx; mouseY=cy-hitR;
-    armAngle=targetAngle=prevArmAngle=-Math.PI/2; armVel=0;
+    armAngle=targetAngle=prevArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=lastRawAngleForVelocity=-Math.PI/2; armVel=rawArmVel=rawAngularVelocity=0; magnetTarget=null; centerDeadzoneActive=false;
     filterHeld=false; scratchHeld=false; mouseDownRight=false;
     lastScratchResult="READY";
     updateAutoDebug(0);
@@ -3949,6 +4025,15 @@ endpointCaptured=${n.endpointCaptured===true}`);
         <span>Mouse X/Y</span><strong>${mouseX.toFixed(0)}, ${mouseY.toFixed(0)}</strong>
         <span>Mouse/touch angle</span><strong>${formatAngle(mouseAngle)}</strong>
         <span>Distance from center</span><strong>${mouseDist.toFixed(1)}</strong>
+        <span>rawTargetAngle</span><strong>${formatAngle(rawTargetAngle)}</strong>
+        <span>stabilizedTargetAngle</span><strong>${formatAngle(stabilizedTargetAngle)}</strong>
+        <span>armAngle</span><strong>${formatAngle(armAngle)}</strong>
+        <span>cursorRadius</span><strong>${cursorRadius.toFixed(1)}</strong>
+        <span>centerDeadzone</span><strong>${formatBool(centerDeadzoneActive)}</strong>
+        <span>angularVelocity</span><strong>${formatNum(rawAngularVelocity,2)}</strong>
+        <span>magnetTarget noteId</span><strong>${noteDebugId(magnetTarget)}</strong>
+        <span>magnetAngleError</span><strong>${(magnetAngleError*180/Math.PI).toFixed(1)}°</strong>
+        <span>stabilizer mode</span><strong>${inputSettings.aimStabilizer}</strong>
         <span>Pointer active</span><strong>${formatBool(pointerActive)}</strong>
       </div>
       <div class="debugGrid"><b>AUTO INPUT</b><b></b>
@@ -4005,6 +4090,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(pauseSetPathBrightness) pauseSetPathBrightness.textContent = formatPathBrightness();
     if(pauseSetEffectIntensity) pauseSetEffectIntensity.textContent = formatEffectIntensity();
     if(pauseSetJudgeGuide) pauseSetJudgeGuide.textContent = formatJudgeGuide();
+    if(pauseSetAimStabilizer) pauseSetAimStabilizer.textContent = formatAimStabilizer();
     if(pauseSetAuto){
       pauseSetAuto.textContent = gameState.autoEnabled ? "AUTO PLAY ON" : "AUTO PLAY OFF";
       pauseSetAuto.classList.toggle("on", gameState.autoEnabled);
@@ -4231,6 +4317,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   bindPress(pauseSetPathBrightness,()=>{cycleVisualSetting("pathBrightness");syncPauseSettingsUI();});
   bindPress(pauseSetEffectIntensity,()=>{cycleVisualSetting("effectIntensity");syncPauseSettingsUI();});
   bindPress(pauseSetJudgeGuide,()=>{cycleVisualSetting("judgeGuide");syncPauseSettingsUI();});
+  bindPress(pauseSetAimStabilizer,()=>{cycleAimStabilizer();syncPauseSettingsUI();});
   bindPress(addCutBtn,()=>addEditorNote("cut"));bindPress(addSwingCWBtn,()=>addEditorNote("swingCW"));bindPress(addSwingCCWBtn,()=>addEditorNote("swingCCW"));bindPress(addFxBtn,()=>addEditorNote("fx"));bindPress(addSlideCWBtn,()=>addEditorNote("slideCW"));bindPress(addSlideCCWBtn,()=>addEditorNote("slideCCW"));bindPress(addScratchCWBtn,()=>addEditorNote("scratchCW"));bindPress(addScratchCCWBtn,()=>addEditorNote("scratchCCW"));
   bindPress(seekBackBtn,()=>{song.currentTime=Math.max(0,song.currentTime-1);updateEditorStatus();});
   bindPress(seekFwdBtn,()=>{song.currentTime=Math.min(song.duration||999,song.currentTime+1);updateEditorStatus();});
@@ -4254,6 +4341,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const point=e.touches?.[0] || e;
     if(!Number.isFinite(point.clientX)||!Number.isFinite(point.clientY))return;
     mouseX=point.clientX; mouseY=point.clientY;
+    lastPointerSource=source;
     lastPointerMs=performance.now(); pointerActive=true;
     if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){
       tutorialState.pointerMoved=true;
@@ -4265,9 +4353,9 @@ endpointCaptured=${n.endpointCaptured===true}`);
   window.addEventListener("touchmove",e=>updateGameplayPointerFromEvent(e,"touch"),{passive:true});
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
-  window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
+  window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerSource="pointer"; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
   window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;}});
-  window.addEventListener("touchstart",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;} if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
+  window.addEventListener("touchstart",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerSource="touch";} if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
   window.addEventListener("touchend",e=>{if(!e.touches||e.touches.length<2){mouseDownRight=false;scratchHeld=false;} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
   window.addEventListener("keydown",e=>{
     keys[e.code]=true;
