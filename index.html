@@ -27,6 +27,10 @@
       <button class="safeMenuBtn" id="safeFull" type="button">FULLSCREEN</button>
     </div>
     <div class="safeMenuSub">Z/X CUT·HOLD·SLIDE · RMB SCRATCH · ESC/H SETTINGS</div>
+    <div class="safeVersionRow" aria-label="Version information">
+      <span id="safeVersionText">CIRCLE MIX v-</span>
+      <button class="safeUpdateLogBtn" id="safeUpdateLogBtn" type="button" hidden>UPDATE LOG</button>
+    </div>
   </div>
 </div>
 
@@ -43,6 +47,26 @@
     <footer class="songSelectFooter">
       <div class="songDifficulty" id="songDifficulty"></div>
       <button class="songPlayBtn" id="songPlayBtn" type="button">PLAY</button>
+    </footer>
+  </div>
+</div>
+
+<div class="updateLogOverlay" id="updateLogOverlay" aria-modal="true" role="dialog" aria-labelledby="updateLogTitle" hidden>
+  <div class="updateLogCard">
+    <header class="updateLogHeader">
+      <div>
+        <span class="updateLogEyebrow">CIRCLE MIX</span>
+        <h2 id="updateLogTitle">UPDATE LOG</h2>
+        <p id="updateLogVersion">v- · ----</p>
+      </div>
+      <button class="updateLogCloseIcon" id="updateLogCloseIcon" type="button" aria-label="Close update log">×</button>
+    </header>
+    <div class="updateLogBody" id="updateLogBody" tabindex="0"></div>
+    <footer class="updateLogFooter">
+      <button class="updateLogNav" id="updateLogPrev" type="button">PREVIOUS VERSION</button>
+      <button class="updateLogNav" id="updateLogNext" type="button">NEXT VERSION</button>
+      <button class="updateLogDevOff" id="updateLogDevOff" type="button">DEV MODE OFF</button>
+      <button class="updateLogClose" id="updateLogClose" type="button">CLOSE</button>
     </footer>
   </div>
 </div>
@@ -309,6 +333,8 @@
   </div>
 </div>
 
+<script src="./src/version.js?v=20260718-version-log"></script>
+<script src="./src/changelog.js?v=20260718-version-log"></script>
 <script src="./src/songs.js?v=20260717-tutorial-step10-swing-4"></script>
 <script src="./src/chart.js?v=20260717-tutorial-step10-swing-4"></script>
 <script src="./src/audio.js?v=20260717-tutorial-step10-swing-4"></script>
