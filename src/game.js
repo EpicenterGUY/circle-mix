@@ -120,6 +120,12 @@
   const songs = window.CircleMixSongRegistry || { all:()=>[], localAll:()=>[], refreshLocal:async()=>[], get:()=>null, hasDifficulty:()=>false };
   const chartTools = window.CircleMixChartTools || { validateChart:()=>({ok:true,errors:[]}), calculateStars:()=>1 };
   const initialParams = new URLSearchParams(window.location.search);
+  const versionInfo = window.CircleMixVersion || {version:"0.0.0", buildDate:""};
+  const changelogEntries = Array.isArray(window.CircleMixChangelog) ? [...window.CircleMixChangelog] : [];
+  const devModeFromQuery = initialParams.get("dev") === "1";
+  if(devModeFromQuery){ try{ localStorage.setItem("circleMixDevMode", "true"); }catch(e){} }
+  let circleMixDevMode = devModeFromQuery || (()=>{ try{return localStorage.getItem("circleMixDevMode") === "true";}catch(e){return false;} })();
+  const LAST_SEEN_VERSION_KEY = "circleMixLastSeenVersion";
   let selectedSource = initialParams.get("tab")==="local" ? "local" : "builtin";
   let selectedSongId = selectedSource==="builtin" ? (initialParams.get("song") || "anima") : (initialParams.get("song") || null);
   let selectedDifficultyId = selectedSource==="builtin" ? ((initialParams.get("difficulty") || "tech").toLowerCase()) : (initialParams.get("chart") || null);
@@ -4041,6 +4047,9 @@ settingsOrigin=${settingsOrigin}`);
         <span>endpointCaptured</span><strong>${formatBool(traceNote.endpointCaptured)}</strong><span>fail reason</span><strong>${traceNote.failReason||traceNote.lastTraceReason||"-"}</strong>
       </div>`:"";
     el.innerHTML=`<div class="debugTitle">INPUT DEBUG <span>${gameState.autoEnabled?"AUTO":"MANUAL"}</span></div>
+      <div class="debugGrid"><b>VERSION</b><b></b>
+        <span>CircleMixVersion</span><strong>v${currentVersionString()}</strong><span>buildDate</span><strong>${versionInfo.buildDate || "-"}</strong>
+      </div>
       <div class="debugGrid"><b>REAL INPUT</b><b></b>
         <span>Z</span><strong>${formatBool(keys.KeyZ)}</strong><span>X</span><strong>${formatBool(keys.KeyX)}</strong>
         <span>Space</span><strong>${formatBool(keys.Space)}</strong><span>LMB</span><strong>${formatBool(!!keys.MouseLeft)}</strong>
@@ -4375,12 +4384,97 @@ settingsOrigin=${settingsOrigin}`);
   window.addEventListener("pointermove",e=>updateGameplayPointerFromEvent(e,e.pointerType==="touch"?"touch":"pointer"),{passive:true});
   window.addEventListener("touchmove",e=>updateGameplayPointerFromEvent(e,"touch"),{passive:true});
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
-  function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
+  function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
   window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerSource="pointer"; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
   window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;}});
   window.addEventListener("touchstart",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerSource="touch";} if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
   window.addEventListener("touchend",e=>{if(!e.touches||e.touches.length<2){mouseDownRight=false;scratchHeld=false;} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
+
+  function sortedChangelogEntries(){
+    return [...changelogEntries].sort((a,b)=>String(b.date || b.version || "").localeCompare(String(a.date || a.version || "")));
+  }
+
+  const updateLogState = { index:0, auto:false };
+
+  function currentVersionString(){
+    return versionInfo.version || "0.0.0";
+  }
+
+  function markCurrentVersionSeen(){
+    try{ localStorage.setItem(LAST_SEEN_VERSION_KEY, currentVersionString()); }catch(e){}
+  }
+
+  function isUpdateLogOpen(){
+    const overlay=document.getElementById("updateLogOverlay");
+    return !!(overlay && overlay.classList.contains("show"));
+  }
+
+  function renderUpdateLog(){
+    const entries=sortedChangelogEntries();
+    const entry=entries[updateLogState.index] || entries[0];
+    const versionEl=document.getElementById("updateLogVersion");
+    const body=document.getElementById("updateLogBody");
+    const prev=document.getElementById("updateLogPrev");
+    const next=document.getElementById("updateLogNext");
+    if(!entry || !body || !versionEl) return;
+    versionEl.textContent=`v${entry.version} · ${entry.date || ""}`;
+    body.innerHTML=`<h3 class="updateLogEntryTitle">${entry.title || "Update"}</h3><p class="updateLogSummary">${entry.summary || ""}</p>${(entry.changes || []).map(change=>`<div class="updateLogChange"><strong class="updateLogCategory">[${change.category || "SYSTEM"}]</strong><span class="updateLogText">${change.text || ""}</span></div>`).join("")}`;
+    if(prev) prev.disabled = updateLogState.index >= entries.length - 1;
+    if(next) next.disabled = updateLogState.index <= 0;
+  }
+
+  function openUpdateLog(options={}){
+    if(!circleMixDevMode) return;
+    const overlay=document.getElementById("updateLogOverlay");
+    if(!overlay) return;
+    updateLogState.index = Math.max(0, Math.min(options.index || 0, sortedChangelogEntries().length - 1));
+    updateLogState.auto = !!options.auto;
+    renderUpdateLog();
+    overlay.hidden=false;
+    overlay.classList.add("show");
+    document.body.classList.add("updateLogOpen");
+    const body=document.getElementById("updateLogBody");
+    if(body) body.focus({preventScroll:true});
+  }
+
+  function closeUpdateLog(){
+    const overlay=document.getElementById("updateLogOverlay");
+    if(overlay){ overlay.classList.remove("show"); overlay.hidden=true; }
+    document.body.classList.remove("updateLogOpen");
+    if(updateLogState.auto) markCurrentVersionSeen();
+    updateLogState.auto=false;
+  }
+
+  function disableCircleMixDevMode(){
+    try{ localStorage.removeItem("circleMixDevMode"); }catch(e){}
+    circleMixDevMode=false;
+    const btn=document.getElementById("safeUpdateLogBtn");
+    if(btn) btn.hidden=true;
+    closeUpdateLog();
+  }
+
+  function initVersionAndUpdateLog(){
+    const versionText=document.getElementById("safeVersionText");
+    const updateBtn=document.getElementById("safeUpdateLogBtn");
+    if(versionText) versionText.textContent=`CIRCLE MIX v${currentVersionString()}`;
+    if(updateBtn){ updateBtn.hidden=!circleMixDevMode; safeBind(updateBtn,()=>openUpdateLog({index:0, auto:false})); }
+    safeBind(document.getElementById("updateLogClose"), closeUpdateLog);
+    safeBind(document.getElementById("updateLogCloseIcon"), closeUpdateLog);
+    safeBind(document.getElementById("updateLogDevOff"), disableCircleMixDevMode);
+    safeBind(document.getElementById("updateLogPrev"), ()=>{ updateLogState.index=Math.min(updateLogState.index+1, sortedChangelogEntries().length-1); renderUpdateLog(); });
+    safeBind(document.getElementById("updateLogNext"), ()=>{ updateLogState.index=Math.max(updateLogState.index-1, 0); renderUpdateLog(); });
+    if(circleMixDevMode){
+      let lastSeen="";
+      try{ lastSeen=localStorage.getItem(LAST_SEEN_VERSION_KEY) || ""; }catch(e){}
+      if(currentVersionString() !== lastSeen && activeSceneName() === "title") setTimeout(()=>openUpdateLog({index:0, auto:true}), 120);
+    }
+  }
+
   window.addEventListener("keydown",e=>{
+    if(isUpdateLogOpen()){
+      if(e.code==="Escape"){ e.preventDefault(); closeUpdateLog(); }
+      return;
+    }
     keys[e.code]=true;
     if(e.code==="KeyA")keyA=true;
     if(e.code==="KeyD")keyD=true;
@@ -4787,6 +4881,8 @@ running=${running}`);
   bindPress(pauseSetSfx,()=>{sfxEnabled=!sfxEnabled;refreshSettingsUI();syncPauseSettingsUI();});
   bindPress(pauseSetAuto,()=>{toggleAuto("pause-settings");syncPauseSettingsUI();});
   bindPress(pauseSetFull,requestFullscreenSafe);
+
+  initVersionAndUpdateLog();
 
   safeBind(safeStart,()=>showSongSelect());
   safeBind(safeTutorial,()=>startTutorial());
