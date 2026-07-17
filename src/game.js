@@ -360,7 +360,8 @@
       endAngle:endAngleDeg!==undefined?chartAngleToRad(endAngleDeg):extra.endAngle,
       endAngleDeg,
       hitTime,spawnTime:hitTime-APPROACH,
-      duration:extra.duration||0,done:false,missed:false,hold:0
+      duration:extra.duration||0,done:false,missed:false,hold:0,
+      tutorialStaticTrace:!!extra.tutorialStaticTrace
     };
     if(type.startsWith("slide") || type.startsWith("trace")){
       n.duration=extra.duration||BEAT*(type.startsWith("trace")?1.5:1.7);
@@ -871,7 +872,7 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle, tutorialStaticTrace:n.tutorialStaticTrace }); }
 
   function generateChart(){
     if(useCustomChart){
@@ -1114,7 +1115,7 @@
       ctx.save();ctx.translate(cx,cy);
       const x=Math.cos(a)*hitR,y=Math.sin(a)*hitR;
       ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(x,y,4.5,0,TAU);ctx.fill();
-      ctx.strokeStyle=aligned(a,.055)?"rgba(128,255,219,.98)":"rgba(53,240,197,.92)";
+      ctx.strokeStyle=aligned(a,.055)?"rgba(215,255,247,.98)":"rgba(53,240,197,.92)";
       ctx.lineWidth=2.4;ctx.beginPath();ctx.arc(x,y,11+pulse*2,0,TAU);ctx.stroke();
       ctx.restore();
       return;
@@ -1376,12 +1377,27 @@
     addWave(a,COLORS.miss);
   }
 
+  function updateSwingGesture(n){
+    if(!n.swingGestureArmed){
+      n.swingGestureArmed=true;
+      n.swingLastAngle=armAngle;
+      n.swingDirectedTravel=0;
+      return;
+    }
+    const dir=n.type==="swingCW"?1:-1;
+    const delta=norm(armAngle-n.swingLastAngle);
+    const directed=delta*dir;
+    if(directed>0) n.swingDirectedTravel+=directed;
+    else n.swingDirectedTravel=Math.max(0,n.swingDirectedTravel+directed*.35);
+    n.swingLastAngle=armAngle;
+  }
+
   function checkSwing(n){
-    // SWING = Shift 없이 해당 방향으로 조금만 휙 돌려도 인정.
-    if(Math.abs(armVel)<SWING_FLICK_SPEED)return false;
-    if(n.type==="swingCW")return armVel>0;
-    if(n.type==="swingCCW")return armVel<0;
-    return true;
+    // SWING은 판정 창이 열린 뒤 새로 발생한 짧은 방향 이동만 인정한다.
+    // TRACE 중 남아 있던 이전 프레임 속도만으로 자동 판정되지 않게 한다.
+    const dir=n.type==="swingCW"?1:-1;
+    const enoughTravel=(n.swingDirectedTravel||0)>=Math.PI*.035; // 약 6.3도
+    return enoughTravel && Math.abs(armVel)>=SWING_FLICK_SPEED && Math.sign(armVel)===dir;
   }
 
   function checkScratch(n, t){
@@ -1626,6 +1642,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
       }
 
       if(n.type.startsWith("swing")){
+        if(t>=n.hitTime-.20 && t<=n.hitTime+.26 && !isAutoActive()) updateSwingGesture(n);
         const link=linkedTraceForSwing(n);
         const needsTrace=chart.some(p=>p.type?.startsWith("trace") && p.hitTime+p.duration<=n.hitTime && n.hitTime-(p.hitTime+p.duration)>=TRACE_SWING_LINK_MIN && n.hitTime-(p.hitTime+p.duration)<=TRACE_SWING_LINK_MAX && distAng(traceTargetAngle(p,p.hitTime+p.duration),n.angle)<Math.PI*.12);
         if(needsTrace && !link){ if(t>n.hitTime+.26) miss(n,"WRONG DIRECTION"); continue; }
@@ -2065,7 +2082,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const futureAlpha=clamp((active?.22:.18)*pathScale,.10,.28);
     const pastAlpha=clamp(.10*pathScale,.06,.18);
     const hotAlpha=focus?.98:.88;
-    const fullDelta=Math.abs(d)>.03?d:dir*Math.PI*.26;
+    const fullDelta=n.tutorialStaticTrace?0:(Math.abs(d)>.03?d:dir*Math.PI*.26);
     const region=getTraceJudgementRegion(n,t,traceProfile());
     const activeHalf=region.outerAngularTolerance;
     const innerHalf=region.innerAngularTolerance;
@@ -2101,7 +2118,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     ctx.lineWidth=pointerInside?2.4:2;
     ctx.beginPath();ctx.arc(tx,ty,(pointerInside?10:13)+(focus?pulse*1.5:0),0,TAU);ctx.stroke();
 
-    const arrowCount=focus?2:1;
+    const arrowCount=n.tutorialStaticTrace?0:(focus?2:1);
     for(let i=1;i<=arrowCount;i++){
       const aa=curr+dir*(Math.PI*.055*i);
       const ar=Math.max(hitR-18,r-8);
@@ -2109,9 +2126,9 @@ endpointCaptured=${n.endpointCaptured===true}`);
       ctx.fillStyle=`rgba(53,240,197,${focus?.82:.62})`;
       const size=7; ctx.beginPath();ctx.moveTo(size,0);ctx.lineTo(-size*.55,-size*.55);ctx.lineTo(-size*.25,0);ctx.lineTo(-size*.55,size*.55);ctx.closePath();ctx.fill();ctx.restore();
     }
-    if(!active && n.hitTime-t<.8){
-      ctx.fillStyle="rgba(53,240,197,.82)"; ctx.font="900 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText("TRACE",Math.cos(n.angle)*(r-24),Math.sin(n.angle)*(r-24));
+    if((!active && n.hitTime-t<.8) || n.tutorialStaticTrace){
+      ctx.fillStyle="rgba(53,240,197,.88)"; ctx.font="900 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(n.tutorialStaticTrace?"TRACE TARGET":"TRACE",Math.cos(n.angle)*(r-26),Math.sin(n.angle)*(r-26));
     }
     ctx.restore();
   }
@@ -2129,42 +2146,25 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const color=noteColor(n), dir=n.type==="swingCW"?1:-1;
     const k=progress(n,t);
     const r=lerp(outerR, hitR, k);
-    const span=Math.PI*.52;
-    const center=n.angle + dir*.18*Math.sin(k*Math.PI) + (link ? dir*Math.PI*.08 : 0);
+    const center=n.angle;
+    const span=Math.PI*.24;
+    const startA=center-dir*span*.5;
+    const amount=dir*span;
     const linkDir=link?Math.sign(slideDelta(link)||dir):0;
-    const isReversal=link && linkDir && linkDir!==dir;
+    const isReversal=!!(link && linkDir && linkDir!==dir);
 
+    drawDirectedArcSegments(r,startA,amount,`rgba(255,255,255,${n===focusNote?.22:.12})`,n===focusNote?NOTE_WIDTHS.swing+4:NOTE_WIDTHS.swing,1,color,n===focusNote?12:6);
+    drawDirectedArcSegments(r,startA,amount,color,n===focusNote?NOTE_WIDTHS.swing+1:NOTE_WIDTHS.swing,n===focusNote?.82:.64,color,n===focusNote?14:7);
+
+    const arrowA=startA+amount;
     ctx.save();
-    ctx.translate(cx,cy);
-    ctx.lineCap="round";
-    ctx.shadowBlur=n===focusNote?18:8;
-    ctx.shadowColor=color;
-
-    ctx.strokeStyle=`rgba(255,255,255,${n===focusNote?.24:.12})`;
-    ctx.lineWidth=n===focusNote?NOTE_WIDTHS.swing+4:NOTE_WIDTHS.swing;
-    ctx.beginPath();
-    ctx.arc(0,0,r,center-span*.62,center+span*.62,dir<0);
-    ctx.stroke();
-
-    ctx.strokeStyle=color;
-    ctx.globalAlpha=n===focusNote?.78:.58;
-    ctx.lineWidth=n===focusNote?NOTE_WIDTHS.swing+1:NOTE_WIDTHS.swing;
-    ctx.beginPath();
-    ctx.arc(0,0,r,center-span*.5,center+dir*span,dir<0);
-    ctx.stroke();
-    ctx.globalAlpha=1;
-
-    const arrowA=center+dir*span;
-    ctx.save();
-    ctx.translate(Math.cos(arrowA)*r,Math.sin(arrowA)*r);
-    ctx.rotate(arrowA + (dir>0 ? Math.PI*.62 : -Math.PI*.38));
-    ctx.fillStyle="rgba(255,255,255,.92)";
-    ctx.beginPath();
-    ctx.moveTo(17,0);ctx.lineTo(-9,-9);ctx.lineTo(-5,0);ctx.lineTo(-9,9);ctx.closePath();ctx.fill();
+    ctx.translate(cx+Math.cos(arrowA)*r,cy+Math.sin(arrowA)*r);
+    ctx.rotate(arrowA + (dir>0 ? Math.PI/2 : -Math.PI/2));
+    ctx.fillStyle="rgba(255,255,255,.94)";
+    ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(-8,-8);ctx.lineTo(-4,0);ctx.lineTo(-8,8);ctx.closePath();ctx.fill();
     ctx.restore();
 
     drawRingLabel(isReversal?"REV":(link?"EXIT":(dir>0?"↻":"↺")),center,r+24,isReversal?"rgba(255,114,214,.9)":"rgba(255,255,255,.86)",n===focusNote?18:14);
-    ctx.restore();
     ctx.globalAlpha=1;
   }
 
@@ -2773,8 +2773,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function keyLabel(code){ return ({KeyZ:"Z",KeyX:"X",Space:"SPACE",MouseLeft:"LMB",MouseRight:"RMB"})[code] || code.replace(/^Key/,""); }
   function isMobileInput(){ return isMobileViewport && isMobileViewport(); }
   function tutorialInputFor(kind){
-    if(isMobileInput()) return ({aim:"터치해서 에임 이동",cut:"화면 탭",hold:"화면을 길게 누르기",slide:"누른 채 목표를 따라가기",trace:"누르지 말고 목표를 따라가기",swing:"표시 방향으로 짧고 빠르게 밀기",scratch:"두 손가락을 누른 채 짧게 긁기",mix:"탭 · 홀드 · 추적 · 스와이프"})[kind] || "화면 터치";
-    return ({aim:"마우스 이동 / A·D로 에임 조작",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 왼쪽`,hold:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 오른쪽을 길게 누르기`,slide:`${keyLabel("KeyZ")} 또는 ${keyLabel("KeyX")}를 누른 채 따라가기`,trace:"버튼을 누르지 말고 현재 목표를 따라가기",swing:"표시 방향으로 에임을 짧고 빠르게 움직이기",scratch:"마우스 오른쪽을 누른 채 짧게 긁기",mix:"Z / X / 마우스 입력 + 에임 조작"})[kind] || "입력";
+    if(isMobileInput()) return ({aim:"터치해서 에임 이동",cut:"화면 탭",hold:"화면을 길게 누르기",slide:"누른 채 목표를 따라가기",trace:"누르지 말고 목표를 따라가기",traceSwing:"TRACE 후 표시 방향으로 짧게 밀기",swing:"표시 방향으로 짧고 빠르게 밀기",scratch:"두 손가락을 누른 채 짧게 긁기",mix:"탭 · 홀드 · 추적 · 스와이프"})[kind] || "화면 터치";
+    return ({aim:"마우스 이동 / A·D로 에임 조작",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 왼쪽`,hold:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 오른쪽을 길게 누르기`,slide:`${keyLabel("KeyZ")} 또는 ${keyLabel("KeyX")}를 누른 채 따라가기`,trace:"버튼을 누르지 말고 현재 목표를 따라가기",traceSwing:"TRACE 완료 후 같은 방향으로 에임을 짧게 튕기기",swing:"표시 방향으로 에임을 짧고 빠르게 움직이기",scratch:"마우스 오른쪽을 누른 채 짧게 긁기",mix:"Z / X / 마우스 입력 + 에임 조작"})[kind] || "입력";
   }
   const tutorialSteps=[
     {name:"에임 · 위치 익히기",kind:"aim",phase:"explore",desc:"노란 목표 안으로 에임을 옮겨 판정 위치를 익혀보세요.",targets:[0,2,5],notes:[]},
@@ -2786,14 +2786,14 @@ endpointCaptured=${n.endpointCaptured===true}`);
     {name:"HOLD · 실전 표시",kind:"hold",phase:"standard",desc:"일반 표시 상태에서 HOLD 두 개를 끝까지 유지하세요.",notes:[{type:"fx",beat:4,lane:1,durationBeat:2.5},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
     {name:"SLIDE · 가이드",kind:"slide",phase:"guided",desc:"버튼을 누른 상태와 현재 목표 위치를 따로 확인하며 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4},{type:"slideCCW",beat:10,lane:2,endLane:6,durationBeat:4}]},
     {name:"SLIDE · 흐린 가이드",kind:"slide",phase:"faded",desc:"버튼을 누른 채 흐린 목표를 끝까지 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:3.2},{type:"slideCCW",beat:9,lane:2,endLane:6,durationBeat:3.2}]},
-    {name:"TRACE · 정지 목표",kind:"trace",phase:"explore",desc:"하늘색 활성 호가 실제 TRACE 판정 범위입니다. 버튼 없이 에임을 넣어보세요.",targets:[7],notes:[]},
+    {name:"TRACE · 정지 목표",kind:"trace",phase:"guided",desc:"실제 TRACE 목표가 정지해 있습니다. 버튼을 누르지 말고 활성 호 안에 에임을 유지하세요.",notes:[{type:"traceCW",beat:3.5,lane:7,endLane:7,durationBeat:2.4,signedSweepAngle:0,tutorialStaticTrace:true}]},
     {name:"TRACE · 90° 가이드",kind:"trace",phase:"guided",desc:"밝게 움직이는 현재 목표를 따라 90도 이동하세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:1,durationBeat:3}]},
     {name:"TRACE · 180° 가이드",kind:"trace",phase:"guided",desc:"현재 목표는 밝게, 앞으로 갈 경로는 흐리게 표시됩니다.",notes:[{type:"traceCCW",beat:4,lane:3,endLane:7,durationBeat:3.4}]},
     {name:"TRACE · 180° 흐린 가이드",kind:"trace",phase:"faded",desc:"현재 목표와 짧은 활성 호를 보며 끝까지 따라가세요.",notes:[{type:"traceCW",beat:4,lane:6,endLane:2,durationBeat:2.8}]},
     {name:"TRACE · 실전 표시",kind:"trace",phase:"standard",desc:"일반 플레이와 같은 TRACE 표시로 경로를 따라가세요.",notes:[{type:"traceCCW",beat:4,lane:2,endLane:6,durationBeat:2.5}]},
     {name:"SWING · 가이드",kind:"swing",phase:"guided",desc:"접선 화살표가 가리키는 방향으로 에임을 짧고 빠르게 움직이세요.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
     {name:"SCRATCH · 가이드",kind:"scratch",phase:"guided",desc:"마우스 오른쪽을 누른 채 표시 방향으로 짧게 긁으세요.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
-    {name:"360° TRACE · 고급",kind:"trace",phase:"faded",desc:"원을 한 바퀴 따라간 뒤 같은 방향의 SWING을 처리하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:7.1,lane:0}]},
+    {name:"360° TRACE → SWING",kind:"traceSwing",phase:"faded",desc:"먼저 한 바퀴 TRACE를 완료한 뒤, 표시가 바뀌면 같은 방향으로 짧게 튕기세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:7.2,lane:0}]},
     {name:"종합 연습",kind:"mix",phase:"standard",desc:"상세 가이드 없이 배운 노트를 순서대로 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
   ];
   function buildTutorialChart(step){ return (step.notes||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT; n.spawnTime=n.hitTime-APPROACH; n.done=false; n.missed=false; n.completed=false; n.hold=0; n.tutorialStepToken=tutorialStepToken; return n; }).sort((a,b)=>a.hitTime-b.hitTime); }
@@ -2804,8 +2804,12 @@ endpointCaptured=${n.endpointCaptured===true}`);
     tutorialHud.hidden=false;
     tutorialStepLabel.textContent=`단계 ${tutorialStepIndex+1} / ${tutorialSteps.length}`;
     tutorialTitle.textContent=st.name;
-    tutorialDesc.textContent=st.desc;
-    tutorialInputHint.textContent=(tutorialState.autoSuppressed&&tutorialState.previousAutoEnabled?"튜토리얼에서는 AUTO 비활성 · ":"")+tutorialInputFor(st.kind);
+    const nextPending=chart.find(n=>!n.done&&!n.missed);
+    const pendingKind=nextPending?noteFamily(nextPending.type):st.kind;
+    if(st.kind==="traceSwing" && pendingKind==="swing") tutorialDesc.textContent="TRACE 완료! 같은 방향 화살표에 맞춰 에임을 새로 짧게 튕기세요.";
+    else tutorialDesc.textContent=st.desc;
+    const hintKind=(st.kind==="traceSwing"?pendingKind:(st.kind==="mix"?pendingKind:st.kind));
+    tutorialInputHint.textContent=(tutorialState.autoSuppressed&&tutorialState.previousAutoEnabled?"튜토리얼에서는 AUTO 비활성 · ":"")+tutorialInputFor(hintKind);
     tutorialProgress.textContent=st.targets?`완료 ${st._hit||0} / ${st.targets.length}`:`성공 ${tutorialState.successCount||0} / ${chart.length}`;
     updateButtons();
   }
@@ -2818,6 +2822,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
       delete n.validTrackedTime; delete n.traceQualityTime; delete n.activeTraceDuration; delete n.endpointInsideTime;
       delete n.endpointCaptured; delete n.enteredTrace; delete n.lateTraceStart; delete n.lastTraceRegion; delete n.lastTraceEndpointRegion;
       delete n.coverageRatio; delete n.traceQuality; delete n.failReason; delete n.lastTraceReason; delete n.autoProcessingLogged;
+      delete n.swingGestureArmed; delete n.swingLastAngle; delete n.swingDirectedTravel;
     }
   }
   function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; resetTraceRuntimeState(); feedback=[]; particles=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
