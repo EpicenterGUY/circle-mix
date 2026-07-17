@@ -136,7 +136,7 @@
   let SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04;
   // 사용자가 말한 마지막 음 기준: 약 1:51 지점에서 종료.
   const SONG_END_TIME = 111.450;
-  const CHART_END_BEAT = 342.894; // 초 단위. 채보가 빠르면 +, 늦으면 - 로 조정
+  const CHART_END_BEAT = 342.894; // beat 단위. 채보가 빠르면 +, 늦으면 - 로 조정
   let APPROACH = 0.48;
   const HIT_WINDOW = 0.17;
   const SWING_FLICK_SPEED = 0.78;
@@ -262,12 +262,23 @@
   let pauseSettingsOpen=false;
   let customChartData=[];
   const difficultyCache={normal:null,tech:null};
+  let lastTraceSwingRuntimeLogAt=0, lastTraceSwingRuntimeLogState="";
 
 
   function sourceKey(songData=selectedSong){ return (songData?.source==="local" || selectedSource==="local") ? "local" : "builtin"; }
   function localChartEntries(songData=selectedSong){
     const charts=songData?.charts || {};
-    return Object.keys(charts).filter(id=>charts[id]?.notes?.length).map(id=>({id, chart:charts[id], meta:songData?.difficulties?.[id] || {}}));
+    return Object.keys(charts).filter(id=>charts[id]?.notes?.length).map(id=>({id, chart:charts[id], meta:songData?.difficulties?.[id] || charts[id]?.meta || {}}));
+  }
+  function getActiveDifficultyLabel(songData=selectedSong, difficultyId=selectedDifficultyId || selectedMenuMode){
+    if(!difficultyId) return "UNKNOWN";
+    if(songData?.source==="builtin") return difficultyId==="tech" ? "TECH" : (difficultyId==="normal" ? "NORMAL" : String(difficultyId).toUpperCase());
+    const diffMeta=songData?.difficulties?.[difficultyId];
+    if(diffMeta?.label) return String(diffMeta.label);
+    const chartMeta=songData?.charts?.[difficultyId]?.meta || songData?.charts?.[difficultyId]?.metadata || songData?.charts?.[difficultyId];
+    if(chartMeta?.label) return String(chartMeta.label);
+    if(difficultyId) return String(difficultyId).toUpperCase();
+    return "UNKNOWN";
   }
   function getSelectedChartId(){ return selectedSource==="local" ? selectedDifficultyId : selectedMenuMode; }
   function syncSongUrl(){
@@ -645,7 +656,7 @@
   function difficultyViewForSong(songData, difficultyId){
     if(!songData || !difficultyId) return null;
     const meta=songData.difficulties?.[difficultyId];
-    const label=meta?.label || difficultyId.toUpperCase();
+    const label=getActiveDifficultyLabel(songData,difficultyId);
     if(songData.source==="builtin") return {id:difficultyId, label, stars:getDifficulty(difficultyId)?.stars};
     const chart=songData.charts?.[difficultyId];
     const metaStars=Number(meta?.stars);
@@ -727,14 +738,25 @@
   // Source timing is stored as exact song-time-derived beats for the current 184.6 BPM runtime;
   // songs.js BPM/offset are intentionally left unchanged.
   function isAnimaSnapNoteType(type){ return type==="cut" || type==="fx" || type==="swingCW" || type==="swingCCW" || type==="scratchCW" || type==="scratchCCW"; }
+  function isZeroSweepAnimaSlide(type, angleDeg, endAngleDeg, signedSweepAngle, durationBeat){
+    if(type!=="slideCW" && type!=="slideCCW") return false;
+    if(endAngleDeg===undefined || endAngleDeg===null) return false;
+    if(signedSweepAngle!==undefined && signedSweepAngle!==null) return false;
+    const diff=Math.abs(normDeg(Number(endAngleDeg)-Number(angleDeg)));
+    const shortest=Math.min(diff, 360-diff);
+    return Number.isFinite(shortest) && shortest < 1 && Number(durationBeat) <= 1.5;
+  }
+
   function buildAnimaOsuReferenceChart(rows, divisions){
     return rows.map(([type,beat,angleDeg,endAngleDeg,durationBeat,signedSweepAngle])=>{
-      const snappedStart = isAnimaSnapNoteType(type) ? snapAngleToDivisions(angleDeg, divisions) : angleDeg;
+      const zeroSweepSlide=isZeroSweepAnimaSlide(type, angleDeg, endAngleDeg, signedSweepAngle, durationBeat);
+      const gameType=zeroSweepSlide ? "fx" : type;
+      const snappedStart = isAnimaSnapNoteType(gameType) ? snapAngleToDivisions(angleDeg, divisions) : angleDeg;
       const extra={angleDeg:snappedStart};
-      if(endAngleDeg!==undefined && endAngleDeg!==null) extra.endAngleDeg=endAngleDeg;
+      if(!zeroSweepSlide && endAngleDeg!==undefined && endAngleDeg!==null) extra.endAngleDeg=endAngleDeg;
       if(durationBeat!==undefined && durationBeat!==null) extra.duration=BEAT*durationBeat;
-      if(signedSweepAngle!==undefined && signedSweepAngle!==null) extra.signedSweepAngle=signedSweepAngle;
-      return make(type,beat,0,extra);
+      if(!zeroSweepSlide && signedSweepAngle!==undefined && signedSweepAngle!==null) extra.signedSweepAngle=signedSweepAngle;
+      return make(gameType,beat,0,extra);
     }).sort((a,b)=>a.hitTime-b.hitTime);
   }
 
@@ -2474,7 +2496,16 @@ endpointCaptured=${n.endpointCaptured===true}`);
         const needsTrace=chart.some(p=>p.type?.startsWith("trace") && p.hitTime+p.duration<=n.hitTime && n.hitTime-(p.hitTime+p.duration)>=TRACE_SWING_LINK_MIN && n.hitTime-(p.hitTime+p.duration)<=TRACE_SWING_LINK_MAX && distAng(traceTargetAngle(p,p.hitTime+p.duration),n.angle)<Math.PI*.12);
         if(needsTrace && !link){ if(t>n.hitTime+.26) miss(n,"WRONG DIRECTION"); continue; }
         if(debugMode && n.tutorialTraceSwingRuntime){
-          console.log(`[Tutorial Trace Swing]\nphase=${tutorialState.traceSwingPhase||"-"}\ntracePassed=${tutorialState.successCount>=1}\ntraceCompletedAt=${tutorialState.traceCompletedAt||0}\nswingArmedAt=${n.swingArmedAt||0}\nswingVisible=${tutorialState.swingVisible===true}\nrawArmVel=${rawArmVel.toFixed(3)}\ndirectedTravel=${(n.swingDirectedTravel||0).toFixed(3)}\nfreshInput=${performance.now()>=(n.swingArmedAt||0)}\nresult=${n.done?"PASS":(n.missed?"MISS":"PENDING")}`);
+          const logNow=performance.now();
+          const phase=tutorialState.traceSwingPhase||"-";
+          const resultState=n.done?"DONE":(n.missed?"MISS":"PENDING");
+          const logState=`${phase}:${resultState}`;
+          const important=new Set(["TRACE_ACTIVE","TRACE_COMPLETE","SWING_ARMING","SWING_ACTIVE","DONE","MISS"]).has(phase) || resultState==="DONE" || resultState==="MISS";
+          if((important && logState!==lastTraceSwingRuntimeLogState) || logNow-lastTraceSwingRuntimeLogAt>=250){
+            lastTraceSwingRuntimeLogAt=logNow;
+            lastTraceSwingRuntimeLogState=logState;
+            console.log(`[Tutorial Trace Swing]\nphase=${phase}\ntracePassed=${tutorialState.successCount>=1}\ntraceCompletedAt=${tutorialState.traceCompletedAt||0}\nswingArmedAt=${n.swingArmedAt||0}\nswingVisible=${tutorialState.swingVisible===true}\nrawArmVel=${rawArmVel.toFixed(3)}\ndirectedTravel=${(n.swingDirectedTravel||0).toFixed(3)}\nfreshInput=${performance.now()>=(n.swingArmedAt||0)}\nresult=${resultState}`);
+          }
         }
         if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(isAutoActive()||checkSwing(n))){
           if(isAutoActive())logAutoProcessing(n);
@@ -3488,10 +3519,11 @@ endpointCaptured=${n.endpointCaptured===true}`);
       mapBox.textContent = st ? `STEP ${tutorialStepIndex+1} / ${tutorialSteps.length}` : "STEP";
       if(difficultyBox) difficultyBox.textContent = st?.name || "";
     }else{
-      const hudModeLabel = (mapMode==="tech"?"TECH":"NORMAL") + " " + formatDifficulty(mapMode);
+      const difficultyLabel=getActiveDifficultyLabel(selectedSong,mapMode);
+      const hudModeLabel = difficultyLabel + " " + formatDifficulty(mapMode);
       mapBox.textContent=((selectedSong?.title || "") + " · " + hudModeLabel).trim();
       if(hudSongTitle) hudSongTitle.textContent = "";
-      if(difficultyBox) difficultyBox.textContent=(mapMode==="tech"?"TECH ":"NORMAL ") + formatDifficulty(mapMode);
+      if(difficultyBox) difficultyBox.textContent=difficultyLabel + " " + formatDifficulty(mapMode);
     }
     autoToggle.textContent=gameState.autoEnabled?"AUTO ON":"AUTO OFF";
     autoToggle.classList.toggle("on",gameState.autoEnabled);
@@ -3552,6 +3584,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     return {
       songTitle:selectedSong?.title || "UNKNOWN",
       difficulty:mapMode,
+      difficultyLabel:getActiveDifficultyLabel(selectedSong,mapMode),
       starLevel:formatDifficulty(mapMode),
       stars:difficulty?.stars,
       finalScore:stats.score,
@@ -3780,7 +3813,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function showResult(result, recordInfo){
     score=result.finalScore;
-    if(resultSongTitle) resultSongTitle.textContent=`${result.songTitle} / ${result.difficulty.toUpperCase()} / ${result.starLevel}`;
+    if(resultSongTitle) resultSongTitle.textContent=`${result.songTitle} / ${result.difficultyLabel || getActiveDifficultyLabel(selectedSong,result.difficulty)} / ${result.starLevel}`;
     if(resultRank){ resultRank.textContent=""; setTimeout(()=>{ if(resultOverlay?.classList.contains("show")) resultRank.textContent=result.rank; }, 280); }
     if(resultAccuracy) resultAccuracy.textContent=(result.accuracyRatio*100).toFixed(2)+"%";
     if(resultPerfect) resultPerfect.textContent=result.perfectCount;
@@ -3788,7 +3821,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(resultMiss) resultMiss.textContent=result.missCount;
     if(resultMaxCombo) resultMaxCombo.textContent=result.maxCombo;
     if(resultTotalNotes) resultTotalNotes.textContent=result.totalNotes;
-    if(resultMapLevel) resultMapLevel.textContent=(result.difficulty==="tech"?"TECH ":"NORMAL ")+result.starLevel;
+    if(resultMapLevel) resultMapLevel.textContent=`${result.difficultyLabel || getActiveDifficultyLabel(selectedSong,result.difficulty)} ${result.starLevel}`;
     if(resultPower) resultPower.textContent=result.autoPlay ? "AUTO — NO POWER" : (result.power !== null ? `POWER ${result.power}` : "POWER ---");
     if(resultAuto) resultAuto.textContent=result.autoPlay ? "AUTO PLAY RESULT" : "PLAYER RESULT";
     if(resultNewRecord) resultNewRecord.textContent=recordInfo?.newPowerRecord ? "NEW POWER RECORD" : (recordInfo?.newRecord ? "NEW RECORD" : "");
@@ -3983,6 +4016,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
 source=${activePlaySource}
 songId=${selectedSong?.id || "-"}
 difficulty=${activeChartId || selectedDifficultyId || selectedMenuMode}
+difficultyLabel=${getActiveDifficultyLabel(selectedSong, activeChartId || selectedDifficultyId || selectedMenuMode)}
 chartLength=${chart.length}
 scene=${activeSceneName()}
 settingsOrigin=${settingsOrigin}`);
@@ -4429,9 +4463,12 @@ settingsOrigin=${settingsOrigin}`);
       tutorialState.lastSource=source;
     }
   }
-  window.addEventListener("mousemove",e=>updateGameplayPointerFromEvent(e,"pointer"),{passive:true});
-  window.addEventListener("pointermove",e=>updateGameplayPointerFromEvent(e,e.pointerType==="touch"?"touch":"pointer"),{passive:true});
-  window.addEventListener("touchmove",e=>updateGameplayPointerFromEvent(e,"touch"),{passive:true});
+  if(window.PointerEvent){
+    window.addEventListener("pointermove",e=>updateGameplayPointerFromEvent(e,e.pointerType==="touch"?"touch":"pointer"),{passive:true});
+  }else{
+    window.addEventListener("mousemove",e=>updateGameplayPointerFromEvent(e,"pointer"),{passive:true});
+    window.addEventListener("touchmove",e=>updateGameplayPointerFromEvent(e,"touch"),{passive:true});
+  }
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
   window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerSource="pointer"; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
@@ -4528,7 +4565,7 @@ settingsOrigin=${settingsOrigin}`);
     if(e.code==="KeyA")keyA=true;
     if(e.code==="KeyD")keyD=true;
     if(e.code==="Space"||e.code==="KeyZ"||e.code==="KeyX"){e.preventDefault(); tutorialState.activeInput="keyboard"; tutorialState.lastSource="keyboard"; if(!e.repeat)onCut();}
-    if((e.code==="KeyD"||e.code==="F3")&&!e.repeat){e.preventDefault();toggleDebugOverlay();}
+    if(e.code==="F3"&&!e.repeat){e.preventDefault();toggleDebugOverlay();}
     if(e.code==="KeyO"&&!e.repeat){toggleAuto("keyboard");}
     if(e.code==="KeyP"&&!e.repeat){ ensureAudioCtx(); applyMusicVolume(); if(song.paused) song.play().catch(()=>{}); else song.pause(); }
     if(e.code==="KeyS"&&!e.repeat){ sfxEnabled=!sfxEnabled; updateButtons(); }
@@ -4636,6 +4673,11 @@ settingsOrigin=${settingsOrigin}`);
     return true;
   }
 
+  function escapeHtml(value){
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
+  }
+  function escapeAttribute(value){ return escapeHtml(value); }
+
   function renderSongSelect(){
     if(!songCarousel || !songDifficulty) return;
     selectedSource = songTab==="local" ? "local" : "builtin";
@@ -4660,11 +4702,15 @@ settingsOrigin=${settingsOrigin}`);
     songCarousel.innerHTML = tabHtml + (list.length ? list.map(songData => {
       const active = songData.id === selectedSongId;
       const chartEntries = songData.source==="local" ? localChartEntries(songData) : Object.keys(songData.difficulties||{}).map(id=>({id}));
-      const diffs=chartEntries.map(({id})=>{ const diff=difficultyViewForSong(songData,id); return `${diff?.label || id.toUpperCase()} ${formatStarValue(diff?.stars)}`; }).join(" · ");
-      const manage=songData.source==="local" ? `<div class="songManage"><button data-action="rename" data-song-id="${songData.id}">EDIT META</button><button data-action="clone" data-song-id="${songData.id}">CLONE</button><button data-action="delete" data-song-id="${songData.id}">DELETE</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : "";
-      return `<div class="songCard${active ? " active" : ""}" data-song-id="${songData.id}">
-        <button class="songCardPick" type="button" data-song-id="${songData.id}"><div class="songJacket" aria-hidden="true"><span>${songData.title}</span></div>
-        <div class="songMeta"><span>${songData.artist || "UNKNOWN"}</span><strong>${songData.title}</strong><em>${songData.bpm || "--"} BPM</em><small>${diffs || "NO CHART"}</small></div></button>${manage}
+      const diffs=chartEntries.map(({id})=>{ const diff=difficultyViewForSong(songData,id); return `${escapeHtml(diff?.label || id.toUpperCase())} ${escapeHtml(formatStarValue(diff?.stars))}`; }).join(" · ");
+      const songIdAttr=escapeAttribute(songData.id);
+      const songTitle=escapeHtml(songData.title || "UNKNOWN");
+      const artist=escapeHtml(songData.artist || "UNKNOWN");
+      const bpm=escapeHtml(songData.bpm || "--");
+      const manage=songData.source==="local" ? `<div class="songManage"><button data-action="rename" data-song-id="${songIdAttr}">EDIT META</button><button data-action="clone" data-song-id="${songIdAttr}">CLONE</button><button data-action="delete" data-song-id="${songIdAttr}">DELETE</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : "";
+      return `<div class="songCard${active ? " active" : ""}" data-song-id="${songIdAttr}">
+        <button class="songCardPick" type="button" data-song-id="${songIdAttr}"><div class="songJacket" aria-hidden="true"><span>${songTitle}</span></div>
+        <div class="songMeta"><span>${artist}</span><strong>${songTitle}</strong><em>${bpm} BPM</em><small>${diffs || "NO CHART"}</small></div></button>${manage}
       </div>`;
     }).join("") : `<div class="localEmpty"><p>로컬 라이브러리가 비어 있습니다. 에디터에서 곡을 만들어주세요.</p><button class="songPlayBtn" id="openEditorFromEmpty" type="button">OPEN EDITOR</button></div>`);
     for(const tab of songCarousel.querySelectorAll(".songTab")){ bindPress(tab,async()=>{ songTab=tab.dataset.tab; selectedSource=songTab==="local"?"local":"builtin"; if(selectedSource==="local"){ selectedSongId=null; selectedDifficultyId=null; selectedSong=null; }else{ selectedSongId="anima"; selectedDifficultyId="tech"; } await songs.refreshLocal(); renderSongSelect(); }); }
@@ -4682,12 +4728,12 @@ settingsOrigin=${settingsOrigin}`);
       const entries = selectedSource==="local" ? localChartEntries(selectedSong) : Object.keys(selectedSong?.difficulties||{}).filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff=>({id:diff, meta:selectedSong.difficulties[diff]}));
       if(selectedSource==="local" && !entries.length) diffHtml = `<div class="songDiffEmpty">선택한 로컬 곡에 저장된 채보가 없습니다.</div>`;
       else diffHtml = entries.map(({id,meta,chart}) => {
-        const label = meta?.label || id.toUpperCase();
+        const label = getActiveDifficultyLabel(selectedSong,id);
         const best = getBestRecord(id, selectedSong);
         const diff=difficultyViewForSong(selectedSong,id);
         const stars = formatStarValue(diff?.stars);
         const bestHtml = best ? `<small>BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")}<br>BEST POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"}<br>BEST RANK ${best.bestRank || "---"}<br>BEST ACCURACY ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}</small>` : `<small>BEST SCORE ---<br>BEST POWER ---<br>BEST RANK ---<br>BEST ACCURACY ---</small>`;
-        return `<button class="songDiffBtn${selectedDifficultyId===id ? " on" : ""}" type="button" data-difficulty="${id}">${label} <span>${stars}</span>${bestHtml}</button>`;
+        return `<button class="songDiffBtn${selectedDifficultyId===id ? " on" : ""}" type="button" data-difficulty="${escapeAttribute(id)}">${escapeHtml(label)} <span>${escapeHtml(stars)}</span>${bestHtml}</button>`;
       }).join("");
     }
     songDifficulty.innerHTML = diffHtml + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>`;
@@ -4769,6 +4815,7 @@ settingsOrigin=${settingsOrigin}`);
 source=${activePlaySource}
 songId=${selectedSong?.id || "-"}
 difficulty=${activeChartId || selectedDifficultyId}
+difficultyLabel=${getActiveDifficultyLabel(selectedSong, activeChartId || selectedDifficultyId)}
 chartLength=${chart.length}
 sceneBefore= ${sceneBefore}
 sceneAfter= ${activeSceneName()}
@@ -4790,18 +4837,28 @@ running=${running}`);
 
   function safeBind(el,fn){
     if(!el)return;
-    let last=0;
-    const run=e=>{
-      safeInputEvent(e);
+    let last=0, suppressClickUntil=0;
+    const invoke=e=>{
       const m=performance.now();
       if(m-last<180)return;
       last=m;
-      try{fn();}catch(err){console.error(err);alert("ERROR: "+err.message);}
+      try{fn(e);}catch(err){console.error(err);alert("ERROR: "+err.message);}
     };
-    el.addEventListener("pointerdown",safeInputEvent,{passive:false});
-    el.addEventListener("pointerup",run,{passive:false});
-    el.addEventListener("touchend",run,{passive:false});
-    el.addEventListener("click",run,{passive:false});
+    const press=e=>safeInputEvent(e);
+    const release=e=>{ safeInputEvent(e); suppressClickUntil=performance.now()+420; invoke(e); };
+    const click=e=>{
+      if(e.detail && performance.now()<suppressClickUntil){ safeInputEvent(e); return; }
+      safeInputEvent(e); invoke(e);
+    };
+    if(window.PointerEvent){
+      el.addEventListener("pointerdown",press,{passive:false});
+      el.addEventListener("pointerup",release,{passive:false});
+      el.addEventListener("pointercancel",safeInputEvent,{passive:false});
+    }else{
+      el.addEventListener("touchstart",press,{passive:false});
+      el.addEventListener("touchend",release,{passive:false});
+    }
+    el.addEventListener("click",click,{passive:false});
   }
 
   function safeSetState(state, reason="unspecified"){
