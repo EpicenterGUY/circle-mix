@@ -777,3 +777,75 @@ body.tutorialIntro .tutorialCountdown{
   body.tutorialMode .tutorialActions{position:absolute;right:8px;top:4px;margin:0;}
   body.tutorialMode .tutorialActions .btn{padding:5px 8px;font-size:10px;}
 }
+
+
+/* Tutorial UI v3: centered playfield, clean overlay, reliable full button hitboxes. */
+body.tutorialMode .rhythmHud{display:none !important;}
+body.tutorialMode .tutorialHud{
+  background:rgba(5,13,28,.90);
+  border-color:rgba(92,255,251,.42);
+  box-shadow:0 14px 40px rgba(0,0,0,.34),0 0 22px rgba(92,255,251,.10);
+  backdrop-filter:blur(8px);
+}
+body.tutorialSidePanel .tutorialHud{
+  left:auto;
+  right:20px;
+  top:20px;
+  bottom:auto;
+  width:300px;
+  transform:none;
+}
+body.tutorialTopPanel .tutorialHud{
+  left:50%;
+  right:auto;
+  top:auto;
+  bottom:10px;
+  width:min(720px,calc(100vw - 24px));
+  transform:translateX(-50%);
+}
+body.tutorialTopPanel .tutorialCountdown{
+  top:-42px;
+  bottom:auto;
+}
+body.tutorialMode:not(.tutorialSidePanel):not(.tutorialTopPanel) .tutorialHud{
+  top:auto;
+  bottom:10px;
+}
+body.tutorialMode .tutorialActions{
+  position:relative;
+  z-index:5;
+  pointer-events:auto;
+  gap:10px;
+}
+body.tutorialMode #tutorialSkipStep,
+body.tutorialMode #tutorialExit{
+  min-height:38px;
+  padding:9px 13px;
+  pointer-events:auto;
+  touch-action:manipulation;
+}
+body.tutorialMode #tutorialSkipStep{
+  border-color:rgba(255,243,106,.44);
+  color:#fff36a;
+  background:rgba(255,243,106,.10);
+}
+@media(max-width:1179px) and (orientation:landscape){
+  body.tutorialMode .tutorialHud{
+    display:grid;
+    grid-template-columns:auto 1fr auto;
+    grid-template-areas:
+      "top title actions"
+      "top desc actions"
+      "hint hint actions";
+    align-items:center;
+    column-gap:10px;
+    padding:7px 10px;
+  }
+  body.tutorialMode .tutorialTop{grid-area:top;display:block;min-width:72px;}
+  body.tutorialMode .tutorialTop span{display:block;margin-top:2px;font-size:10px;}
+  body.tutorialMode .tutorialHud h2{grid-area:title;display:block;margin:0;font-size:15px;}
+  body.tutorialMode .tutorialHud p{grid-area:desc;display:block;margin:1px 0 0;font-size:11px;}
+  body.tutorialMode .tutorialHud em{grid-area:hint;display:block;margin-top:2px;font-size:9px;}
+  body.tutorialMode .tutorialActions{grid-area:actions;margin:0;align-self:stretch;position:relative;right:auto;top:auto;}
+  body.tutorialMode .tutorialActions .btn{height:100%;min-height:36px;padding:6px 9px;}
+}

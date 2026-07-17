@@ -265,27 +265,36 @@
     canvas.style.height = H + "px";
     ctx.setTransform(dpr,0,0,dpr,0,0);
 
-    const hudHeight = 60;
-    const horizontalPadding = W <= 820 ? 14 : 24;
-    const bottomPadding = W <= 820 ? 16 : 24;
-    let topPadding = hudHeight + 14;
-    let leftPadding = horizontalPadding;
-    let rightPadding = horizontalPadding;
-    const tutorialPanelGap = 24;
-    const tutorialPanelWidth = 280;
-    const tutorialTopPanelHeight = 74;
-    const tutorialSidePanel = tutorialMode && W >= 980 && H >= 560;
-    const tutorialTopPanel = tutorialMode && !tutorialSidePanel && W > H;
-    document.body.classList.toggle("tutorialSidePanel", tutorialSidePanel);
-    document.body.classList.toggle("tutorialTopPanel", tutorialTopPanel);
-    if(tutorialSidePanel) rightPadding += tutorialPanelWidth + tutorialPanelGap;
-    if(tutorialTopPanel) topPadding += tutorialTopPanelHeight + 16;
-    const availableWidth = Math.max(220, W - leftPadding - rightPadding);
-    const availableHeight = Math.max(220, H - topPadding - bottomPadding);
-    const playfieldSize = Math.min(availableWidth, availableHeight);
     const outerGlowSize = 26;
     const outerLineWidth = 2;
     const safeMargin = Math.max(32, outerGlowSize + outerLineWidth);
+    const tutorialSidePanel = tutorialMode && W >= 1180 && H >= 620;
+    const tutorialTopPanel = tutorialMode && !tutorialSidePanel && W > H;
+    document.body.classList.toggle("tutorialSidePanel", tutorialSidePanel);
+    document.body.classList.toggle("tutorialTopPanel", tutorialTopPanel);
+
+    // The tutorial playfield must stay in the true center of the screen.
+    // The HUD is an overlay and never reserves asymmetric canvas space.
+    if(tutorialMode){
+      const tutorialMargin = tutorialTopPanel ? 78 : 54;
+      const playfieldSize = Math.min(W,H);
+      cx = W * .5;
+      cy = H * .5;
+      outerR = Math.max(96, playfieldSize * .5 - Math.max(safeMargin,tutorialMargin));
+      baseR = outerR / 1.86;
+      hitR = baseR;
+      return;
+    }
+
+    const hudHeight = 60;
+    const horizontalPadding = W <= 820 ? 14 : 24;
+    const bottomPadding = W <= 820 ? 16 : 24;
+    const topPadding = hudHeight + 14;
+    const leftPadding = horizontalPadding;
+    const rightPadding = horizontalPadding;
+    const availableWidth = Math.max(220, W - leftPadding - rightPadding);
+    const availableHeight = Math.max(220, H - topPadding - bottomPadding);
+    const playfieldSize = Math.min(availableWidth, availableHeight);
 
     cx = leftPadding + availableWidth * .5;
     cy = topPadding + availableHeight * .5;
@@ -1056,11 +1065,9 @@
     const edge=inside && (region.angleError>region.angularTolerance*.72 || region.radiusError>region.radialTolerance*.72);
     const guideColor=edge?`rgba(255,225,90,${a+.12})`:(inside?`rgba(128,255,219,${a+.10})`:`rgba(53,240,197,${a})`);
     if(family==="trace"){
-      const d=slideDelta(n), curr=region.targetAngle, end=n.angle+d;
-      if(t>=n.hitTime) drawDirectedArcSegments(hitR,n.angle,curr-n.angle,`rgba(20,80,78,${.18*dim})`,Math.max(4,NOTE_WIDTHS.trace+2),1);
-      drawDirectedArcSegments(hitR,curr,end-curr,`rgba(53,240,197,${.10*dim})`,Math.max(4,NOTE_WIDTHS.trace+2),1);
-      drawJudgementBand(region,guideColor,1);
-      ctx.save();ctx.translate(cx,cy);ctx.fillStyle=`rgba(255,255,255,${.72*dim})`;ctx.beginPath();ctx.arc(Math.cos(curr)*hitR,Math.sin(curr)*hitR,5,0,TAU);ctx.fill();ctx.strokeStyle=inside?"rgba(128,255,219,.95)":"rgba(53,240,197,.55)";ctx.lineWidth=2;ctx.beginPath();ctx.arc(Math.cos(curr)*hitR,Math.sin(curr)*hitR,13+(edge?Math.sin(t*24)*2:0),0,TAU);ctx.stroke();ctx.restore();
+      // drawTrace() already renders the real path, target and both judgement
+      // zones. Rendering another TRACE guide here caused doubled arcs and dots.
+      return;
     }else if(family==="slide"){
       const d=slideDelta(n), curr=region.targetAngle, end=n.angle+d;
       drawDirectedArcSegments(hitR,curr,end-curr,`rgba(255,225,90,${.18*dim})`,NOTE_WIDTHS.slide+4,1);
@@ -1082,8 +1089,50 @@
   }
 
   function drawJudgeGuides(t){
-    const candidates=chart.filter(n=>!n.done&&!n.missed&&t>=n.spawnTime-.05&&t<=n.hitTime+(n.duration||0)+.25).sort((a,b)=>a.hitTime-b.hitTime).slice(0,2);
+    const limit=tutorialMode?1:2;
+    const candidates=chart.filter(n=>!n.done&&!n.missed&&t>=n.spawnTime-.05&&t<=n.hitTime+(n.duration||0)+.25).sort((a,b)=>a.hitTime-b.hitTime).slice(0,limit);
     candidates.forEach((n,i)=>drawJudgeGuideForNote(n,t,i));
+  }
+
+  function drawTutorialExploreTarget(t){
+    if(!tutorialMode || tutorialState.transitioning)return;
+    const st=tutorialSteps[tutorialStepIndex];
+    if(!st?.targets || st.phase!=="explore")return;
+    const target=st.targets[st._hit||0];
+    if(target===undefined)return;
+    const a=laneAngle(target);
+    const pulse=.5+.5*Math.sin(t*5.5);
+
+    if(st.kind==="trace"){
+      const profile=traceProfile();
+      const outerHalf=profile.outerAngularToleranceDeg*Math.PI/180;
+      const innerHalf=profile.innerAngularToleranceDeg*Math.PI/180;
+      const outerRad=Math.max(profile.outerRadialTolerancePx,hitR*profile.outerRadialToleranceRatio);
+      const innerRad=Math.max(profile.innerRadialTolerancePx,hitR*profile.innerRadialToleranceRatio);
+      drawDirectedArcSegments(hitR,a-outerHalf,outerHalf*2,`rgba(53,240,197,${.24+pulse*.08})`,Math.max(NOTE_WIDTHS.trace+8,outerRad*2),1,null,0);
+      drawDirectedArcSegments(hitR,a-innerHalf,innerHalf*2,`rgba(255,255,255,${.38+pulse*.10})`,Math.max(NOTE_WIDTHS.trace+6,innerRad*2),1,COLORS.trace,4);
+      ctx.save();ctx.translate(cx,cy);
+      const x=Math.cos(a)*hitR,y=Math.sin(a)*hitR;
+      ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(x,y,4.5,0,TAU);ctx.fill();
+      ctx.strokeStyle=aligned(a,.055)?"rgba(128,255,219,.98)":"rgba(53,240,197,.92)";
+      ctx.lineWidth=2.4;ctx.beginPath();ctx.arc(x,y,11+pulse*2,0,TAU);ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    if(st.kind==="cut"){
+      drawArcNote(a,hitR,Math.PI*.06,COLORS.cut,NOTE_WIDTHS.cut+4,.96);
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(a);ctx.strokeStyle="rgba(3,7,17,.82)";ctx.lineWidth=2.4;ctx.beginPath();ctx.moveTo(hitR-7,-7);ctx.lineTo(hitR+7,7);ctx.stroke();ctx.restore();
+      drawRingLabel("CUT",a,hitR,"#fff",11);
+      return;
+    }
+
+    // AIM uses a simple target only; no particles are emitted every frame.
+    ctx.save();ctx.translate(cx,cy);
+    const x=Math.cos(a)*hitR,y=Math.sin(a)*hitR;
+    ctx.fillStyle="rgba(255,243,106,.92)";ctx.beginPath();ctx.arc(x,y,6,0,TAU);ctx.fill();
+    ctx.strokeStyle="rgba(255,243,106,.68)";ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,15+pulse*3,0,TAU);ctx.stroke();
+    ctx.restore();
   }
 
   function progress(n,t){return clamp((t-n.spawnTime)/(n.hitTime-n.spawnTime),0,1);}
@@ -1300,6 +1349,20 @@
     return "MOVE CLOSER TO THE PATH";
   }
 
+  function tutorialFailureText(reason){
+    return ({
+      "TOO EARLY":"너무 빨랐어요",
+      "TOO LATE":"너무 늦었어요",
+      "MOVE CLOSER TO THE PATH":"판정 호에 에임을 맞추세요",
+      "FOLLOW THE CURRENT TARGET":"현재 목표를 따라가세요",
+      "HOLD THE BUTTON":"버튼을 계속 누르세요",
+      "RELEASED EARLY":"버튼을 너무 일찍 놓았어요",
+      "WRONG DIRECTION":"표시된 방향으로 움직이세요",
+      "STAY ON THE PATH LONGER":"경로를 더 오래 따라가세요",
+      "REACH THE END POINT":"끝 지점까지 따라가세요"
+    })[reason] || "다시 시도하세요";
+  }
+
   function miss(n,reason){
     if(n.done||n.missed)return;
     n.missed=true; n.failReason=reason || inferMissReason(n, now()); combo=0; judgedCount++; missCount++;
@@ -1308,7 +1371,7 @@
     if(n.type?.startsWith("trace")) a=resolveTraceMotion(n).finalAngle;
     const isScratch=n.type&&n.type.startsWith("scratch");
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
-    addFeedback(tutorialMode ? n.failReason : "MISS",p.x,p.y-18,COLORS.miss);
+    addFeedback(tutorialMode ? tutorialFailureText(n.failReason) : "MISS",p.x,p.y-18,COLORS.miss);
     addParticles(p.x,p.y,COLORS.miss,isScratch?14:8,.65);
     addWave(a,COLORS.miss);
   }
@@ -1645,6 +1708,29 @@ endpointCaptured=${n.endpointCaptured===true}`);
     edge.addColorStop(.74,"rgba(141,107,255,.07)");
     edge.addColorStop(1,"rgba(0,0,0,.22)");
     ctx.fillStyle=edge; ctx.fillRect(0,0,W,H);
+
+    if(tutorialMode){
+      // A quiet tutorial background: one play ring, one outer boundary and
+      // small lane ticks. The normal decorative grid/radials are intentionally
+      // hidden so the note and judgement guide do not overlap visual noise.
+      ctx.save();ctx.translate(cx,cy);
+      const center=ctx.createRadialGradient(0,0,baseR*.06,0,0,baseR*.78);
+      center.addColorStop(0,"rgba(0,0,0,.97)");
+      center.addColorStop(.7,"rgba(2,7,17,.88)");
+      center.addColorStop(1,"rgba(3,8,18,.28)");
+      ctx.fillStyle=center;ctx.beginPath();ctx.arc(0,0,baseR*.80,0,TAU);ctx.fill();
+      ctx.strokeStyle="rgba(92,255,251,.24)";ctx.lineWidth=4;ctx.beginPath();ctx.arc(0,0,hitR,0,TAU);ctx.stroke();
+      ctx.strokeStyle="rgba(141,107,255,.10)";ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(0,0,outerR,0,TAU);ctx.stroke();
+      for(let i=0;i<8;i++){
+        const a=laneAngle(i);
+        ctx.strokeStyle=i%2===0?"rgba(255,255,255,.14)":"rgba(255,255,255,.08)";
+        ctx.lineWidth=i%2===0?2:1.5;
+        ctx.beginPath();ctx.moveTo(Math.cos(a)*(hitR-10),Math.sin(a)*(hitR-10));ctx.lineTo(Math.cos(a)*(hitR+10),Math.sin(a)*(hitR+10));ctx.stroke();
+      }
+      ctx.fillStyle="#030711";ctx.beginPath();ctx.arc(0,0,baseR*.34,0,TAU);ctx.fill();
+      ctx.restore();
+      return;
+    }
 
     ctx.save();
     ctx.globalAlpha=visualSettings.noteContrast==="HIGH"?.22:.34;
@@ -2687,32 +2773,42 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function keyLabel(code){ return ({KeyZ:"Z",KeyX:"X",Space:"SPACE",MouseLeft:"LMB",MouseRight:"RMB"})[code] || code.replace(/^Key/,""); }
   function isMobileInput(){ return isMobileViewport && isMobileViewport(); }
   function tutorialInputFor(kind){
-    if(isMobileInput()) return ({aim:"TOUCH / DRAG",cut:"TAP",hold:"TOUCH AND HOLD",slide:"HOLD AND FOLLOW",trace:"FOLLOW WITHOUT PRESSING",swing:"SHORT FAST SWIPE",scratch:"TWO-FINGER HOLD + SHORT SWIPE",mix:"TAP / HOLD / FOLLOW / SWIPE"})[kind] || "TOUCH";
-    return ({aim:"MOUSE / A-D AIM",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / LMB`,hold:`HOLD ${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / RMB`,slide:`HOLD ${keyLabel("KeyZ")} / ${keyLabel("KeyX")} AND FOLLOW`,trace:"DO NOT PRESS — FOLLOW THE PATH",swing:"FLICK POINTER CW / CCW",scratch:"RMB + SHORT SCRATCH GESTURE",mix:"Z / X / LMB / RMB + AIM"})[kind] || "INPUT";
+    if(isMobileInput()) return ({aim:"터치해서 에임 이동",cut:"화면 탭",hold:"화면을 길게 누르기",slide:"누른 채 목표를 따라가기",trace:"누르지 말고 목표를 따라가기",swing:"표시 방향으로 짧고 빠르게 밀기",scratch:"두 손가락을 누른 채 짧게 긁기",mix:"탭 · 홀드 · 추적 · 스와이프"})[kind] || "화면 터치";
+    return ({aim:"마우스 이동 / A·D로 에임 조작",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 왼쪽`,hold:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 오른쪽을 길게 누르기`,slide:`${keyLabel("KeyZ")} 또는 ${keyLabel("KeyX")}를 누른 채 따라가기`,trace:"버튼을 누르지 말고 현재 목표를 따라가기",swing:"표시 방향으로 에임을 짧고 빠르게 움직이기",scratch:"마우스 오른쪽을 누른 채 짧게 긁기",mix:"Z / X / 마우스 입력 + 에임 조작"})[kind] || "입력";
   }
   const tutorialSteps=[
-    {name:"AIM · EXPLORE",kind:"aim",phase:"explore",desc:"표시가 판정 영역과 겹칠 때 입력하세요. Move into the mint target zone.",targets:[0,2,5],notes:[]},
-    {name:"CUT · EXPLORE",kind:"cut",phase:"explore",desc:"정지한 CUT의 실제 각도/반지름 판정 영역을 확인하세요.",notes:[{type:"cut",beat:999,lane:0}],targets:[0]},
-    {name:"CUT · GUIDED",kind:"cut",phase:"guided",desc:"Slow CUT with the full real judge guide. Succeed twice.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:6,lane:2}]},
-    {name:"CUT · FADED",kind:"cut",phase:"faded",desc:"Guide is faded; use the normal note shape.",notes:[{type:"cut",beat:4,lane:5},{type:"cut",beat:5.5,lane:7}]},
-    {name:"CUT · STANDARD",kind:"cut",phase:"standard",desc:"No detailed guide. Clear two normal CUTs.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5.5,lane:2}]},
-    {name:"HOLD · GUIDED",kind:"hold",phase:"guided",desc:"Outer arc means position; filled core means button held.",notes:[{type:"fx",beat:4,lane:1,durationBeat:3},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
-    {name:"HOLD · STANDARD",kind:"hold",phase:"standard",desc:"Hold in normal display twice.",notes:[{type:"fx",beat:4,lane:1,durationBeat:2.5},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
-    {name:"SLIDE · GUIDED",kind:"slide",phase:"guided",desc:"Button hold and current target position are shown separately.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4},{type:"slideCCW",beat:10,lane:2,endLane:6,durationBeat:4}]},
-    {name:"SLIDE · FADED",kind:"slide",phase:"faded",desc:"Follow the target with a dim guide.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:3.2},{type:"slideCCW",beat:9,lane:2,endLane:6,durationBeat:3.2}]},
-    {name:"TRACE · STILL TARGET",kind:"trace",phase:"explore",desc:"현재 목표점 주변의 짧은 호만 실제 TRACE 판정 범위입니다.",targets:[7],notes:[{type:"traceCW",beat:999,lane:7,endLane:7,durationBeat:2}]},
-    {name:"TRACE · 90° GUIDED",kind:"trace",phase:"guided",desc:"Slow 90 degree TRACE with full active judge band.",notes:[{type:"traceCW",beat:4,lane:7,endLane:1,durationBeat:3}]},
-    {name:"TRACE · 180° GUIDED",kind:"trace",phase:"guided",desc:"Current target is bright; future path is dim.",notes:[{type:"traceCCW",beat:4,lane:3,endLane:7,durationBeat:3.4}]},
-    {name:"TRACE · 180° FADED",kind:"trace",phase:"faded",desc:"Only the target and short active arc remain.",notes:[{type:"traceCW",beat:4,lane:6,endLane:2,durationBeat:2.8}]},
-    {name:"TRACE · STANDARD",kind:"trace",phase:"standard",desc:"Normal TRACE display without the detailed band.",notes:[{type:"traceCCW",beat:4,lane:2,endLane:6,durationBeat:2.5}]},
-    {name:"SWING · GUIDED",kind:"swing",phase:"guided",desc:"Tangent arrows and the direction cone show the allowed motion.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
-    {name:"SCRATCH · GUIDED",kind:"scratch",phase:"guided",desc:"RMB/two-finger hold plus a short direction-change gesture.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
-    {name:"360 TRACE · ADVANCED",kind:"trace",phase:"faded",desc:"Optional advanced practice after basic TRACE: one full circle then SWING.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:7.1,lane:0}]},
-    {name:"MIX TEST",kind:"mix",phase:"standard",desc:"Final mix test uses normal note designs without detailed judge bands.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
+    {name:"에임 · 위치 익히기",kind:"aim",phase:"explore",desc:"노란 목표 안으로 에임을 옮겨 판정 위치를 익혀보세요.",targets:[0,2,5],notes:[]},
+    {name:"CUT · 판정 범위",kind:"cut",phase:"explore",desc:"청록색 CUT 영역에 에임을 맞춘 뒤 CUT 입력을 해보세요.",notes:[],targets:[0]},
+    {name:"CUT · 가이드",kind:"cut",phase:"guided",desc:"실제 판정 범위를 보며 느린 CUT 두 개를 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:6,lane:2}]},
+    {name:"CUT · 흐린 가이드",kind:"cut",phase:"faded",desc:"흐려진 가이드를 참고해 일반 노트 모양에 맞춰 입력하세요.",notes:[{type:"cut",beat:4,lane:5},{type:"cut",beat:5.5,lane:7}]},
+    {name:"CUT · 실전 표시",kind:"cut",phase:"standard",desc:"상세 가이드 없이 일반 CUT 두 개를 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5.5,lane:2}]},
+    {name:"HOLD · 가이드",kind:"hold",phase:"guided",desc:"바깥 호는 위치, 채워지는 중심은 버튼 유지 상태를 뜻합니다.",notes:[{type:"fx",beat:4,lane:1,durationBeat:3},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
+    {name:"HOLD · 실전 표시",kind:"hold",phase:"standard",desc:"일반 표시 상태에서 HOLD 두 개를 끝까지 유지하세요.",notes:[{type:"fx",beat:4,lane:1,durationBeat:2.5},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
+    {name:"SLIDE · 가이드",kind:"slide",phase:"guided",desc:"버튼을 누른 상태와 현재 목표 위치를 따로 확인하며 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4},{type:"slideCCW",beat:10,lane:2,endLane:6,durationBeat:4}]},
+    {name:"SLIDE · 흐린 가이드",kind:"slide",phase:"faded",desc:"버튼을 누른 채 흐린 목표를 끝까지 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:3.2},{type:"slideCCW",beat:9,lane:2,endLane:6,durationBeat:3.2}]},
+    {name:"TRACE · 정지 목표",kind:"trace",phase:"explore",desc:"하늘색 활성 호가 실제 TRACE 판정 범위입니다. 버튼 없이 에임을 넣어보세요.",targets:[7],notes:[]},
+    {name:"TRACE · 90° 가이드",kind:"trace",phase:"guided",desc:"밝게 움직이는 현재 목표를 따라 90도 이동하세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:1,durationBeat:3}]},
+    {name:"TRACE · 180° 가이드",kind:"trace",phase:"guided",desc:"현재 목표는 밝게, 앞으로 갈 경로는 흐리게 표시됩니다.",notes:[{type:"traceCCW",beat:4,lane:3,endLane:7,durationBeat:3.4}]},
+    {name:"TRACE · 180° 흐린 가이드",kind:"trace",phase:"faded",desc:"현재 목표와 짧은 활성 호를 보며 끝까지 따라가세요.",notes:[{type:"traceCW",beat:4,lane:6,endLane:2,durationBeat:2.8}]},
+    {name:"TRACE · 실전 표시",kind:"trace",phase:"standard",desc:"일반 플레이와 같은 TRACE 표시로 경로를 따라가세요.",notes:[{type:"traceCCW",beat:4,lane:2,endLane:6,durationBeat:2.5}]},
+    {name:"SWING · 가이드",kind:"swing",phase:"guided",desc:"접선 화살표가 가리키는 방향으로 에임을 짧고 빠르게 움직이세요.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
+    {name:"SCRATCH · 가이드",kind:"scratch",phase:"guided",desc:"마우스 오른쪽을 누른 채 표시 방향으로 짧게 긁으세요.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
+    {name:"360° TRACE · 고급",kind:"trace",phase:"faded",desc:"원을 한 바퀴 따라간 뒤 같은 방향의 SWING을 처리하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:7.1,lane:0}]},
+    {name:"종합 연습",kind:"mix",phase:"standard",desc:"상세 가이드 없이 배운 노트를 순서대로 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
   ];
   function buildTutorialChart(step){ return (step.notes||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT; n.spawnTime=n.hitTime-APPROACH; n.done=false; n.missed=false; n.completed=false; n.hold=0; n.tutorialStepToken=tutorialStepToken; return n; }).sort((a,b)=>a.hitTime-b.hitTime); }
   function showTutorialPrompt(){ if(localStorage.getItem(TUTORIAL_COMPLETED_KEY)==="true"||localStorage.getItem(TUTORIAL_PROMPT_KEY)==="true")return; if(tutorialPrompt)tutorialPrompt.hidden=false; }
-  function setTutorialHud(){ const st=tutorialSteps[tutorialStepIndex]; if(!st)return; tutorialHud.hidden=false; tutorialStepLabel.textContent=`STEP ${tutorialStepIndex+1} / ${tutorialSteps.length}`; tutorialTitle.textContent=st.name; tutorialDesc.textContent=st.desc; tutorialInputHint.textContent=(tutorialState.autoSuppressed&&tutorialState.previousAutoEnabled?"AUTO DISABLED IN TUTORIAL · ":"")+tutorialInputFor(st.kind); tutorialProgress.textContent=st.targets?`${st._hit||0} / ${st.targets.length}`:`${tutorialState.successCount||0} / ${chart.length}`; updateButtons(); }
+  function setTutorialHud(){
+    const st=tutorialSteps[tutorialStepIndex];
+    if(!st)return;
+    tutorialHud.hidden=false;
+    tutorialStepLabel.textContent=`단계 ${tutorialStepIndex+1} / ${tutorialSteps.length}`;
+    tutorialTitle.textContent=st.name;
+    tutorialDesc.textContent=st.desc;
+    tutorialInputHint.textContent=(tutorialState.autoSuppressed&&tutorialState.previousAutoEnabled?"튜토리얼에서는 AUTO 비활성 · ":"")+tutorialInputFor(st.kind);
+    tutorialProgress.textContent=st.targets?`완료 ${st._hit||0} / ${st.targets.length}`:`성공 ${tutorialState.successCount||0} / ${chart.length}`;
+    updateButtons();
+  }
   function beep(freq=660,dur=.07){ ensureAudioCtx(); const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=freq; o.type="square"; g.gain.value=.035*(sfxEnabled ? clamp(sfxVolume,0,4) : 0); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur); }
   function clearTutorialTimers(){ for(const id of tutorialState.timers) clearTimeout(id); tutorialState.timers=[]; for(const id of tutorialState.rafIds) cancelAnimationFrame(id); tutorialState.rafIds=[]; }
   function tutorialSetTimeout(fn,delay){ const token=tutorialStepToken, session=tutorialSessionId; const id=setTimeout(()=>{ if(!tutorialMode || token!==tutorialStepToken || session!==tutorialSessionId) return; fn(); },delay); tutorialState.timers.push(id); return id; }
@@ -2771,12 +2867,69 @@ endpointCaptured=${n.endpointCaptured===true}`);
     tutorialState.transitioning=true;
     tutorialState.phaseCompleted=true;
     logTutorialAdvance(reason,extra);
-    tutorialSetTimeout(()=>{ if(tutorialStepIndex>=tutorialSteps.length-1) completeTutorial(); else startTutorialStep(tutorialStepIndex+1); }, reason==="SKIP_BUTTON"?140:450);
+    const isSkip=reason==="SKIP_BUTTON";
+    tutorialSetTimeout(()=>{
+      if(tutorialStepIndex>=tutorialSteps.length-1) completeTutorial();
+      else startTutorialStep(tutorialStepIndex+1,{startMode:isSkip?"skip":"next"});
+    },isSkip?0:240);
   }
-  function startTutorialStep(idx=tutorialStepIndex){ clearTutorialTimers(); tutorialStepToken++; tutorialStepIndex=clamp(idx,0,tutorialSteps.length-1); const st=tutorialSteps[tutorialStepIndex]; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=true; tutorialState.autoSuppressed=true; document.body.classList.add("tutorialMode","tutorialIntro"); resize(); resetTutorialRuntimeState(); abortingRun=false; resultShown=false; completionPending=false; paused=false; chart=buildTutorialChart(st); score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; st._hit=0; st._done=false; running=true; setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none"; mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=-Math.PI/2; tutorialCountdownUntil=performance.now()+3200; tutorialState.inputEnabledAt=performance.now()+3350; ["3","2","1","START"].forEach((txt,i)=>tutorialSetTimeout(()=>{ tutorialCountdown.textContent=txt; beep(520+i*110,.06); if(txt==="START")tutorialSetTimeout(()=>{ tutorialCountdown.textContent=""; document.body.classList.remove("tutorialIntro"); resize(); tutorialState.transitioning=false; },520);},i*750)); audioStartedAt=performance.now()+3000; startMs=audioStartedAt; lastMs=performance.now(); setTutorialHud(); if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(frame); }
-  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; tutorialStepIndex=0; startTutorialStep(0); }
-  function nextTutorialStep(){ advanceTutorialPhase("SKIP_BUTTON",{source:"button",fn:"nextTutorialStep"}); }
-  function restartTutorialStep(){ startTutorialStep(tutorialStepIndex); }
+  function startTutorialStep(idx=tutorialStepIndex,{startMode="initial"}={}){
+    clearTutorialTimers();
+    tutorialStepToken++;
+    tutorialStepIndex=clamp(idx,0,tutorialSteps.length-1);
+    const st=tutorialSteps[tutorialStepIndex];
+    cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
+    tutorialMode=true;
+    tutorialState.autoSuppressed=true;
+    tutorialState.transitioning=true;
+    document.body.classList.add("tutorialMode","tutorialIntro");
+    resize();
+    resetTutorialRuntimeState();
+    abortingRun=false; resultShown=false; completionPending=false; paused=false;
+    chart=buildTutorialChart(st);
+    score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0;
+    maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1;
+    feedback=[];particles=[];waves=[];ringBursts=[];scratchBursts=[];
+    st._hit=0;st._done=false;running=true;
+    setCleanGameplay(true);safeSetState("game");startLayer.style.display="none";
+    mouseX=cx;mouseY=cy-hitR;armAngle=targetAngle=prevArmAngle=-Math.PI/2;
+
+    const initial=startMode==="initial";
+    const leadMs=initial?3000:(startMode==="skip"?220:(startMode==="restart"?650:560));
+    tutorialCountdownUntil=performance.now()+leadMs;
+    tutorialState.inputEnabledAt=performance.now()+leadMs+60;
+    audioStartedAt=performance.now()+leadMs;
+    startMs=audioStartedAt;lastMs=performance.now();
+    setTutorialHud();
+
+    if(initial){
+      ["3","2","1","시작"].forEach((txt,i)=>tutorialSetTimeout(()=>{
+        tutorialCountdown.textContent=txt;
+        beep(520+i*110,.06);
+      },i*720));
+    }else{
+      tutorialCountdown.textContent=startMode==="skip"?"다음 단계":"준비";
+    }
+    tutorialSetTimeout(()=>{
+      tutorialCountdown.textContent="";
+      document.body.classList.remove("tutorialIntro");
+      resize();
+      tutorialState.transitioning=false;
+    },leadMs);
+
+    if(raf)cancelAnimationFrame(raf);
+    raf=requestAnimationFrame(frame);
+  }
+  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; tutorialStepIndex=0; startTutorialStep(0,{startMode:"initial"}); }
+  function nextTutorialStep(){
+    if(!tutorialMode)return;
+    logTutorialAdvance("SKIP_BUTTON",{source:"button",fn:"nextTutorialStep"});
+    tutorialState.transitioning=true;
+    clearTutorialTimers();
+    if(tutorialStepIndex>=tutorialSteps.length-1) completeTutorial();
+    else startTutorialStep(tutorialStepIndex+1,{startMode:"skip"});
+  }
+  function restartTutorialStep(){ startTutorialStep(tutorialStepIndex,{startMode:"restart"}); }
   function restoreTutorialAuto(){ gameState.autoEnabled=!!tutorialState.previousAutoEnabled; tutorialState.autoSuppressed=false; updateButtons(); safeRefresh&&safeRefresh(); }
   function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
   function completeTutorial(){ clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none"; }
@@ -2790,7 +2943,6 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const target=st.targets[st._hit||0];
     if(target===undefined)return;
     const a=laneAngle(target);
-    addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.perfect,1,.12);
     const inside=tutorialState.pointerMoved && aligned(a,.055);
     if(inside){
       if(!tutorialState.exploreInsideSince) tutorialState.exploreInsideSince=performance.now();
@@ -2803,7 +2955,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
       tutorialState.exploreInsideSince=0;
     }
   }
-  function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialState.failCount++; tutorialAttempts++; addFeedback("TRY AGAIN",cx,cy-baseR*.42,COLORS.miss); tutorialSetTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
+  function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialState.failCount++; tutorialAttempts++; addFeedback("다시 시도",cx,cy-baseR*.42,COLORS.miss); tutorialSetTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
 
   function showResult(result, recordInfo){
     score=result.finalScore;
@@ -2924,15 +3076,19 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
     drawBackground(t);
 
-    // 먼저 착지 예정 위치와 접근 라인을 그림.
-    // 실제 노트보다 옅게 보여서 채보 방향을 먼저 읽을 수 있음.
-    chart.forEach(n=>drawLandingGhost(n,t));
-    chart.forEach(n=>drawApproachRail(n,t));
+    // Tutorial uses only the note and its real guide. Landing ghosts, approach
+    // rails and the focus halo are normal-play reading aids and caused several
+    // translucent shapes to overlap in the lesson screen.
+    if(!tutorialMode){
+      chart.forEach(n=>drawLandingGhost(n,t));
+      chart.forEach(n=>drawApproachRail(n,t));
+    }
     drawJudgeGuides(t);
+    drawTutorialExploreTarget(t);
 
     chart.forEach(n=>{if(n.type.startsWith("trace"))drawNote(n,t);});
     chart.forEach(n=>{if(!n.type.startsWith("trace"))drawNote(n,t);});
-    drawFocusHalo(focusNote,t);
+    if(!tutorialMode)drawFocusHalo(focusNote,t);
     drawArm();
     drawEffects(dt);
     updateDebugOverlay(t);
@@ -3288,6 +3444,29 @@ endpointCaptured=${n.endpointCaptured===true}`);
       el.addEventListener("touchstart",block,{passive:false});
       el.addEventListener("touchend",h,{passive:false});
       el.addEventListener("click",h,{passive:false});
+    }
+  }
+
+  function bindImmediatePress(el,fn){
+    if(!el)return;
+    let last=0;
+    let pointerRunAt=-Infinity;
+    const run=e=>{
+      if(e){if(e.cancelable)e.preventDefault();e.stopPropagation();}
+      const m=performance.now();
+      if(m-last<120)return;
+      last=m;
+      fn(e);
+    };
+    if(window.PointerEvent){
+      el.addEventListener("pointerdown",e=>{pointerRunAt=performance.now();run(e);},{passive:false});
+      el.addEventListener("click",e=>{
+        if(performance.now()-pointerRunAt<600){if(e.cancelable)e.preventDefault();e.stopPropagation();return;}
+        run(e);
+      },{passive:false});
+    }else{
+      el.addEventListener("touchstart",run,{passive:false});
+      el.addEventListener("click",run,{passive:false});
     }
   }
 
@@ -3698,7 +3877,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   safeBind(safeExit,exitToMenu);
   bindPress(tutorialPromptStart,startTutorial);
   bindPress(tutorialPromptSkip,()=>{localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); tutorialPrompt.hidden=true;});
-  bindPress(tutorialSkipStep,nextTutorialStep);
+  bindImmediatePress(tutorialSkipStep,nextTutorialStep);
   bindPress(tutorialExit,()=>exitTutorial(true));
   bindPress(tutorialPlayNow,()=>{tutorialComplete.hidden=true; showSongSelect();});
   bindPress(tutorialBackTitle,()=>{tutorialComplete.hidden=true; showTitleMenu();});
