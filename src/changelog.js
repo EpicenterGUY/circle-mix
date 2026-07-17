@@ -7,6 +7,19 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.7.2",
+    date: "2026-07-17",
+    title: "Input, Local Labels & ANiMA Slide Fixes",
+    summary: "정적 리뷰에서 확인된 입력 중복, LOCAL 라벨, ANiMA 동일각 SLIDE 문제를 수정했습니다.",
+    changes: [
+      { category: "INPUT", text: "D키는 에임 전용으로 유지하고 F3만 디버그 오버레이를 토글하도록 수정" },
+      { category: "CHART", text: "ANiMA osu! reference의 동일 시작/종료각 SLIDE를 HOLD로 안전 변환" },
+      { category: "LOCAL", text: "LOCAL 난이도 라벨 출처를 공통화하고 곡 선택 사용자 메타데이터 HTML 안전 처리" },
+      { category: "FIX", text: "모바일 탭과 포인터 이동 이벤트 중복 실행 방지" },
+      { category: "DEBUG", text: "튜토리얼 TRACE→SWING 런타임 로그 출력 빈도 제한" }
+    ]
+  },
+  {
     version: "0.7.1",
     date: "2026-07-18",
     title: "Tutorial TRACE Stability",
