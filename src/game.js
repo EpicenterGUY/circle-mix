@@ -210,7 +210,7 @@
   let running=false, startMs=0, lastMs=0, raf=0;
   let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
   let tutorialSessionId=0, tutorialStepToken=0, tutorialAttemptId=0;
-  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0};
+  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
@@ -410,7 +410,8 @@
       endAngleDeg,
       hitTime,spawnTime:hitTime-APPROACH,
       duration:extra.duration||0,done:false,missed:false,hold:0,
-      tutorialStaticTrace:!!extra.tutorialStaticTrace
+      tutorialStaticTrace:!!extra.tutorialStaticTrace,
+      tutorialModeType:extra.tutorialModeType || (extra.tutorialStaticTrace ? "staticTrace" : undefined)
     };
     if(type.startsWith("slide") || type.startsWith("trace")){
       n.duration=extra.duration||BEAT*(type.startsWith("trace")?1.5:1.7);
@@ -1635,7 +1636,7 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle, tutorialStaticTrace:n.tutorialStaticTrace }); }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle, tutorialStaticTrace:n.tutorialStaticTrace, tutorialModeType:n.tutorialModeType }); }
 
   function generateChart(){
     if(useCustomChart){
@@ -2081,7 +2082,7 @@
 
   function judge(n,label,color,event={}){
     if(n.done||n.missed)return;
-    const judgeEvent={source:event.source||tutorialState.activeInput||"system", judgement:label, noteId:noteDebugId(n), reason:event.reason||"USER_JUDGEMENT", stepToken:tutorialStepToken, sessionId:tutorialSessionId};
+    const judgeEvent={source:event.source||tutorialState.activeInput||"system", judgement:label, noteId:noteDebugId(n), noteType:n.type, reason:event.reason||"USER_JUDGEMENT", stepToken:tutorialStepToken, sessionId:tutorialSessionId};
     n.done=true;
     playHitSound(n.type,label);
     actualHitValue += noteWeight(n) * judgeValue(label);
@@ -2165,6 +2166,7 @@
   }
 
   function updateSwingGesture(n){
+    if(n.tutorialTraceSwingRuntime && performance.now() < (n.swingArmedAt||0)) return;
     if(!n.swingGestureArmed){
       n.swingGestureArmed=true;
       n.swingLastAngle=rawTargetAngle;
@@ -2184,7 +2186,8 @@
     // TRACE 중 남아 있던 이전 프레임 속도만으로 자동 판정되지 않게 한다.
     const dir=n.type==="swingCW"?1:-1;
     const enoughTravel=(n.swingDirectedTravel||0)>=Math.PI*.035; // 약 6.3도
-    return enoughTravel && Math.abs(rawArmVel)>=SWING_FLICK_SPEED && Math.sign(rawArmVel)===dir;
+    const freshInput=!n.tutorialTraceSwingRuntime || performance.now()>=(n.swingArmedAt||0);
+    return freshInput && enoughTravel && Math.abs(rawArmVel)>=SWING_FLICK_SPEED && Math.sign(rawArmVel)===dir;
   }
 
   function checkScratch(n, t){
@@ -2430,6 +2433,9 @@
           n.completed=passed;
           if(debugMode || tutorialMode){
             n.failReason=traceFailureFeedback(n,needed);
+            if(debugMode && n.tutorialStaticTrace){
+              console.log(`[Tutorial Static Trace]\nphase=${t<=end?"ACTIVE":"RESULT"}\nangle=${(a*180/Math.PI).toFixed(1)}\ninside=${!!n.lastTraceRegion?.inside}\nvalidTrackedTime=${(n.validTrackedTime||0).toFixed(3)}\nactiveDuration=${(n.activeTraceDuration||0).toFixed(3)}\nquality=${quality.toFixed(3)}\nbuttonHeld=${!!(filterHeld||keyA||keyD||keys.MouseLeft)}\nresult=${passed?"PASS":"MISS"}`);
+            }
             console.log(`[Trace Result]
 coverage=${coverage.toFixed(2)}
 endpoint=${n.endpointCaptured===true}
@@ -2462,10 +2468,14 @@ endpointCaptured=${n.endpointCaptured===true}`);
       }
 
       if(n.type.startsWith("swing")){
+        if(n.tutorialTraceSwingRuntime && t<n.spawnTime) continue;
         if(t>=n.hitTime-.20 && t<=n.hitTime+.26 && !isAutoActive()) updateSwingGesture(n);
         const link=linkedTraceForSwing(n);
         const needsTrace=chart.some(p=>p.type?.startsWith("trace") && p.hitTime+p.duration<=n.hitTime && n.hitTime-(p.hitTime+p.duration)>=TRACE_SWING_LINK_MIN && n.hitTime-(p.hitTime+p.duration)<=TRACE_SWING_LINK_MAX && distAng(traceTargetAngle(p,p.hitTime+p.duration),n.angle)<Math.PI*.12);
         if(needsTrace && !link){ if(t>n.hitTime+.26) miss(n,"WRONG DIRECTION"); continue; }
+        if(debugMode && n.tutorialTraceSwingRuntime){
+          console.log(`[Tutorial Trace Swing]\nphase=${tutorialState.traceSwingPhase||"-"}\ntracePassed=${tutorialState.successCount>=1}\ntraceCompletedAt=${tutorialState.traceCompletedAt||0}\nswingArmedAt=${n.swingArmedAt||0}\nswingVisible=${tutorialState.swingVisible===true}\nrawArmVel=${rawArmVel.toFixed(3)}\ndirectedTravel=${(n.swingDirectedTravel||0).toFixed(3)}\nfreshInput=${performance.now()>=(n.swingArmedAt||0)}\nresult=${n.done?"PASS":(n.missed?"MISS":"PENDING")}`);
+        }
         if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(isAutoActive()||checkSwing(n))){
           if(isAutoActive())logAutoProcessing(n);
           judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n),{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
@@ -2896,12 +2906,14 @@ endpointCaptured=${n.endpointCaptured===true}`);
     ctx.lineCap="round";
     ctx.shadowBlur=4*visualScale("effect");
     ctx.shadowColor=COLORS.trace;
-    ctx.lineWidth=2;
-    ctx.strokeStyle=`rgba(53,240,197,${focus?.9:.72})`;
-    ctx.beginPath();ctx.arc(Math.cos(motion.startAngle)*r,Math.sin(motion.startAngle)*r,7,0,TAU);ctx.stroke();
-    ctx.strokeStyle=`rgba(255,225,90,${focus?.98:.86})`;
-    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,5,0,TAU);ctx.stroke();
-    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,10,0,TAU);ctx.stroke();
+    if(!n.tutorialStaticTrace){
+      ctx.lineWidth=2;
+      ctx.strokeStyle=`rgba(53,240,197,${focus?.9:.72})`;
+      ctx.beginPath();ctx.arc(Math.cos(motion.startAngle)*r,Math.sin(motion.startAngle)*r,7,0,TAU);ctx.stroke();
+      ctx.strokeStyle=`rgba(255,225,90,${focus?.98:.86})`;
+      ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,5,0,TAU);ctx.stroke();
+      ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,10,0,TAU);ctx.stroke();
+    }
 
     const tx=Math.cos(curr)*r, ty=Math.sin(curr)*r;
     const pointerInside=insideTraceTarget(n,t).inside;
@@ -2919,9 +2931,13 @@ endpointCaptured=${n.endpointCaptured===true}`);
       ctx.fillStyle=`rgba(53,240,197,${focus?.82:.62})`;
       const size=7; ctx.beginPath();ctx.moveTo(size,0);ctx.lineTo(-size*.55,-size*.55);ctx.lineTo(-size*.25,0);ctx.lineTo(-size*.55,size*.55);ctx.closePath();ctx.fill();ctx.restore();
     }
+    if(n.tutorialStaticTrace && active){
+      const staticProgress=clamp((n.traceQualityTime||0)/Math.max(dur,.001),0,1);
+      drawDirectedArcSegments(r+18,curr-activeHalf,activeHalf*2*staticProgress,`rgba(255,255,255,.72)`,4,1,null,0);
+    }
     if((!active && n.hitTime-t<.8) || n.tutorialStaticTrace){
       ctx.fillStyle="rgba(53,240,197,.88)"; ctx.font="900 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText(n.tutorialStaticTrace?"TRACE TARGET":"TRACE",Math.cos(n.angle)*(r-26),Math.sin(n.angle)*(r-26));
+      ctx.fillText(n.tutorialStaticTrace?"STATIC TRACE":"TRACE",Math.cos(n.angle)*(r-26),Math.sin(n.angle)*(r-26));
     }
     ctx.restore();
   }
@@ -3582,14 +3598,14 @@ endpointCaptured=${n.endpointCaptured===true}`);
     {name:"HOLD · 실전 표시",kind:"hold",phase:"standard",desc:"일반 표시 상태에서 HOLD 두 개를 끝까지 유지하세요.",notes:[{type:"fx",beat:4,lane:1,durationBeat:2.5},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
     {name:"SLIDE · 가이드",kind:"slide",phase:"guided",desc:"버튼을 누른 상태와 현재 목표 위치를 따로 확인하며 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4},{type:"slideCCW",beat:10,lane:2,endLane:6,durationBeat:4}]},
     {name:"SLIDE · 흐린 가이드",kind:"slide",phase:"faded",desc:"버튼을 누른 채 흐린 목표를 끝까지 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:3.2},{type:"slideCCW",beat:9,lane:2,endLane:6,durationBeat:3.2}]},
-    {name:"TRACE · 정지 목표",kind:"trace",phase:"guided",desc:"실제 TRACE 목표가 정지해 있습니다. 버튼을 누르지 말고 활성 호 안에 에임을 유지하세요.",notes:[{type:"traceCW",beat:3.5,lane:7,endLane:7,durationBeat:2.4,signedSweepAngle:0,tutorialStaticTrace:true}]},
+    {name:"TRACE · 정지 목표",kind:"trace",phase:"guided",desc:"실제 TRACE 활성 호가 정지해 있습니다. 버튼을 누르지 말고 판정 호 안에 에임을 유지하세요.",notes:[{type:"traceCW",beat:3.5,lane:7,endLane:7,durationBeat:2.4,signedSweepAngle:0,tutorialStaticTrace:true,tutorialModeType:"staticTrace"}]},
     {name:"TRACE · 90° 가이드",kind:"trace",phase:"guided",desc:"밝게 움직이는 현재 목표를 따라 90도 이동하세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:1,durationBeat:3}]},
     {name:"TRACE · 180° 가이드",kind:"trace",phase:"guided",desc:"현재 목표는 밝게, 앞으로 갈 경로는 흐리게 표시됩니다.",notes:[{type:"traceCCW",beat:4,lane:3,endLane:7,durationBeat:3.4}]},
     {name:"TRACE · 180° 흐린 가이드",kind:"trace",phase:"faded",desc:"현재 목표와 짧은 활성 호를 보며 끝까지 따라가세요.",notes:[{type:"traceCW",beat:4,lane:6,endLane:2,durationBeat:2.8}]},
     {name:"TRACE · 실전 표시",kind:"trace",phase:"standard",desc:"일반 플레이와 같은 TRACE 표시로 경로를 따라가세요.",notes:[{type:"traceCCW",beat:4,lane:2,endLane:6,durationBeat:2.5}]},
     {name:"SWING · 가이드",kind:"swing",phase:"guided",desc:"접선 화살표가 가리키는 방향으로 에임을 짧고 빠르게 움직이세요.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
     {name:"SCRATCH · 가이드",kind:"scratch",phase:"guided",desc:"마우스 오른쪽을 누른 채 표시 방향으로 짧게 긁으세요.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
-    {name:"360° TRACE → SWING",kind:"traceSwing",phase:"faded",desc:"먼저 한 바퀴 TRACE를 완료한 뒤, 표시가 바뀌면 같은 방향으로 짧게 튕기세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360},{type:"swingCW",beat:7.2,lane:0}]},
+    {name:"360° TRACE → SWING",kind:"traceSwing",phase:"TRACE_ACTIVE",desc:"버튼을 누르지 말고 목표를 따라 한 바퀴 회전하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360}]},
     {name:"종합 연습",kind:"mix",phase:"standard",desc:"상세 가이드 없이 배운 노트를 순서대로 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
   ];
   function buildTutorialStepRuntime(idx){
@@ -3597,6 +3613,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const step=tutorialSteps[nextIndex];
     if(!step) return {valid:false,error:"MISSING_STEP",index:nextIndex};
     const nextToken=tutorialStepToken + 1;
+    if(step.kind==="traceSwing") tutorialState.traceSwingPhase="TRACE_ACTIVE";
     const notes=(step.notes||[]).map(localNoteToGame).map(n=>{
       n.hitTime=n.beat*BEAT;
       n.spawnTime=n.hitTime-APPROACH;
@@ -3618,13 +3635,36 @@ endpointCaptured=${n.endpointCaptured===true}`);
     tutorialTitle.textContent=st.name;
     const nextPending=displayChart.find(n=>!n.done&&!n.missed);
     const pendingKind=nextPending?noteFamily(nextPending.type):st.kind;
-    if(st.kind==="traceSwing" && pendingKind==="swing") tutorialDesc.textContent="TRACE 완료! 같은 방향 화살표에 맞춰 에임을 새로 짧게 튕기세요.";
+    if(st.kind==="traceSwing" && (tutorialState.traceSwingPhase==="SWING_ARMING" || tutorialState.traceSwingPhase==="SWING_ACTIVE" || pendingKind==="swing")) tutorialDesc.textContent="이제 같은 방향으로 에임을 새로 짧게 튕기세요.";
+    else if(st.kind==="traceSwing") tutorialDesc.textContent="버튼을 누르지 말고 목표를 따라 한 바퀴 회전하세요.";
     else tutorialDesc.textContent=st.desc;
     const hintKind=(st.kind==="traceSwing"?pendingKind:(st.kind==="mix"?pendingKind:st.kind));
     tutorialInputHint.textContent=(tutorialState.autoSuppressed&&tutorialState.previousAutoEnabled?"튜토리얼에서는 AUTO 비활성 · ":"")+tutorialInputFor(hintKind);
-    tutorialProgress.textContent=st.targets?`완료 ${st._hit||0} / ${st.targets.length}`:`성공 ${tutorialState.successCount||0} / ${displayChart.length}`;
+    const requiredTotal=st.kind==="traceSwing"?2:displayChart.length;
+    tutorialProgress.textContent=st.targets?`완료 ${st._hit||0} / ${st.targets.length}`:`성공 ${tutorialState.successCount||0} / ${requiredTotal}`;
     updateButtons();
   }
+
+  function resetTraceSwingCarryover(){
+    rawArmVel=0; armVel=0; rawAngularVelocity=0; lastRawAngleForVelocity=rawTargetAngle; prevArmAngle=armAngle; magnetTarget=null;
+    for(const n of chart){ delete n.swingGestureArmed; delete n.swingDirectedTravel; n.swingLastAngle=rawTargetAngle; }
+  }
+  function spawnTutorialTraceSwingNote(){
+    const st=tutorialSteps[tutorialStepIndex];
+    if(!tutorialMode || st?.kind!=="traceSwing") return;
+    const tutorialNow=now();
+    const activationTime=tutorialNow+.45;
+    const hitTime=tutorialNow+.85;
+    const n=make("swingCW", hitTime/BEAT, 0, {angleDeg:0});
+    n.hitTime=hitTime; n.spawnTime=activationTime; n.done=false; n.missed=false; n.tutorialStepToken=tutorialStepToken; n.tutorialTraceSwingRuntime=true;
+    n.swingArmedAt=performance.now()+450; n.swingGestureArmed=false; n.swingDirectedTravel=0; n.swingLastAngle=rawTargetAngle;
+    chart=chart.filter(x=>!x.type?.startsWith("swing"));
+    chart.push(n); chart.sort((a,b)=>a.hitTime-b.hitTime);
+    tutorialState.traceSwingPhase="SWING_ARMING"; tutorialState.swingArmedAt=n.swingArmedAt; tutorialState.swingVisible=false;
+    setTutorialHud();
+    tutorialSetTimeout(()=>{ tutorialState.traceSwingPhase="SWING_ACTIVE"; tutorialState.swingVisible=true; resetTraceSwingCarryover(); setTutorialHud(); },450);
+  }
+
   function beep(freq=660,dur=.07){ ensureAudioCtx(); const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=freq; o.type="square"; g.gain.value=.035*(sfxEnabled ? clamp(sfxVolume,0,4) : 0); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur); }
   function clearTutorialTimers(){ for(const id of tutorialState.timers) clearTimeout(id); tutorialState.timers=[]; for(const id of tutorialState.rafIds) cancelAnimationFrame(id); tutorialState.rafIds=[]; }
   function tutorialSetTimeout(fn,delay){ const token=tutorialStepToken, session=tutorialSessionId, attempt=tutorialAttemptId; const id=setTimeout(()=>{ if(!tutorialMode || token!==tutorialStepToken || session!==tutorialSessionId || attempt!==tutorialAttemptId) return; fn(); },delay); tutorialState.timers.push(id); return id; }
@@ -3637,7 +3677,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
       delete n.swingGestureArmed; delete n.swingLastAngle; delete n.swingDirectedTravel;
     }
   }
-  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
   function logTutorialAdvance(reason,extra={}){ if(!debugMode)return; const st=tutorialSteps[tutorialStepIndex]; console.log(`[Tutorial Advance]\nstep=${st?.kind||"-"}\nphase=${st?.phase||"-"}\nreason=${reason}\nsource=${extra.source||tutorialState.lastSource||"-"}\nsuccessCount=${tutorialState.successCount}\nsessionId=${tutorialSessionId}\nstepToken=${tutorialStepToken}\nattemptId=${tutorialAttemptId}\nfunction=${extra.fn||"-"}\ntimer=${!!extra.timer}\nnoteId=${extra.noteId||"-"}\npreviousStepToken=${extra.previousStepToken??tutorialStepToken}\ncurrentStepToken=${tutorialStepToken}`); }
   function tutorialHandleJudgement(ev){
     if(!tutorialMode || tutorialState.transitioning) return;
@@ -3653,7 +3693,15 @@ endpointCaptured=${n.endpointCaptured===true}`);
     tutorialState.validUserInputCount++;
     tutorialState.successCount++;
     tutorialState.successStreak++;
-    const required=Math.max(1,chart.length);
+    const st=tutorialSteps[tutorialStepIndex];
+    if(st?.kind==="traceSwing" && ev.noteType && String(ev.noteType).startsWith("trace")){
+      tutorialState.traceSwingPhase="TRACE_COMPLETE"; tutorialState.traceCompletedAt=performance.now();
+      resetTraceSwingCarryover(); addFeedback("TRACE 완료",cx,cy-baseR*.34,COLORS.trace); setTutorialHud();
+      spawnTutorialTraceSwingNote();
+      return;
+    }
+    if(st?.kind==="traceSwing" && ev.noteType && String(ev.noteType).startsWith("swing")) tutorialState.traceSwingPhase="DONE";
+    const required=st?.kind==="traceSwing"?2:Math.max(1,chart.length);
     if(tutorialState.successCount>=required) requestTutorialTransition(tutorialStepIndex+1,{source:"success", reason:"USER_JUDGEMENT", extra:ev});
   }
   function tutorialCompleteExploreTarget(reason,source="pointer"){
@@ -3682,6 +3730,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     tutorialStepIndex=runtime.index;
     const st=runtime.step; st._hit=0; st._done=false;
     resetTutorialRuntimeState();
+    if(runtime.step.kind==="traceSwing") tutorialState.traceSwingPhase="TRACE_ACTIVE";
     cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
     tutorialMode=true; tutorialState.autoSuppressed=true; tutorialState.transitioning=true;
     document.body.classList.add("tutorialMode","tutorialIntro"); resize();
