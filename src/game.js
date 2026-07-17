@@ -976,9 +976,12 @@
       radial:Math.max(profile.outerRadialTolerancePx ?? profile.radialTolerancePx, hitR*(profile.outerRadialToleranceRatio ?? profile.radialToleranceRatio)) };
   }
   function pointerPolar(){
-    if(isAutoActive() || keyA || keyD) return {angle:armAngle, radius:hitR};
-    const dx=mouseX-cx, dy=mouseY-cy;
-    return {angle:Math.atan2(dy,dx), radius:Math.hypot(dx,dy)};
+    // The playable controller is the rendered dial arm: it only has an angle
+    // and is always located on the judgement ring. The physical browser cursor
+    // may sit far inside/outside that ring, but drawArm() projects it onto hitR.
+    // Judging the raw cursor radius while rendering the projected arm made a
+    // player look perfectly aligned yet fail TRACE with MOVE CLOSER TO THE RING.
+    return {angle:armAngle, radius:hitR};
   }
   function insideTraceTarget(n,t){
     const region=getTraceJudgementRegion(n,t,traceProfile());
@@ -1466,9 +1469,9 @@
   }
 
   function traceFailureFeedback(n,needed){
-    const r=n.lastTraceRegion;
-    if(!n.enteredTrace) return "MOVE CLOSER TO THE RING";
-    if(r && r.radiusError > r.radialTolerance) return "MOVE CLOSER TO THE RING";
+    // CIRCLE MIX's dial input is angular-only. Radial distance belongs to the
+    // projected visual arm and must never be used as a hidden failure reason.
+    if(!n.enteredTrace) return "FOLLOW THE CURRENT TARGET";
     if((n.traceQuality||0) < needed) return "STAY ON THE PATH LONGER";
     return "FOLLOW THE CURRENT TARGET";
   }
