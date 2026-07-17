@@ -14,6 +14,7 @@ window.CircleMixChangelog = [
     changes: [
       { category: "INPUT", text: "D키는 에임 전용으로 유지하고 F3만 디버그 오버레이를 토글하도록 수정" },
       { category: "CHART", text: "ANiMA osu! reference의 동일 시작/종료각 SLIDE를 HOLD로 안전 변환" },
+      { category: "FIX", text: "START 후 곡 선택 난이도 계산에서 정의되지 않은 각도 함수 참조로 중단되던 오류 수정" },
       { category: "LOCAL", text: "LOCAL 난이도 라벨 출처를 공통화하고 곡 선택 사용자 메타데이터 HTML 안전 처리" },
       { category: "FIX", text: "모바일 탭과 포인터 이동 이벤트 중복 실행 방지" },
       { category: "DEBUG", text: "튜토리얼 TRACE→SWING 런타임 로그 출력 빈도 제한" }
