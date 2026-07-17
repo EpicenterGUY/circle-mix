@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.7.1",
+    date: "2026-07-18",
+    title: "Tutorial TRACE Stability",
+    summary: "튜토리얼 10단계 고정 TRACE와 17단계 TRACE 후 SWING 전환을 안정화했습니다.",
+    changes: [
+      { category: "TUTORIAL", text: "10단계 고정 TRACE 표시 및 공통 TRACE 판정 기반 유지 판정 수정" },
+      { category: "TUTORIAL", text: "17단계 360° TRACE 완료 후 SWING을 새로 생성하도록 하위 phase 분리" },
+      { category: "FIX", text: "튜토리얼 TRACE 움직임이 SWING 판정에 남던 오류 수정" }
+    ]
+  },
+  {
     version: "0.7.0",
     date: "2026-07-18",
     title: "Version & Update Log",
