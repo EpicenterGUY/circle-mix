@@ -849,3 +849,5 @@ body.tutorialMode #tutorialSkipStep{
   body.tutorialMode .tutorialActions{grid-area:actions;margin:0;align-self:stretch;position:relative;right:auto;top:auto;}
   body.tutorialMode .tutorialActions .btn{height:100%;min-height:36px;padding:6px 9px;}
 }
+.songPlayBtn:disabled{opacity:.42;filter:saturate(.45);cursor:not-allowed;box-shadow:none}
+.songDiffEmpty{padding:14px 18px;border:1px dashed rgba(92,255,251,.28);border-radius:16px;color:#b9c8d8;background:rgba(255,255,255,.06);font-weight:800;text-align:center}

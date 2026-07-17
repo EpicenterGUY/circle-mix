@@ -118,7 +118,11 @@
   const TAU = Math.PI * 2;
   const songs = window.CircleMixSongRegistry || { all:()=>[], localAll:()=>[], refreshLocal:async()=>[], get:()=>null, hasDifficulty:()=>false };
   const chartTools = window.CircleMixChartTools || { validateChart:()=>({ok:true,errors:[]}), calculateStars:()=>1 };
-  let selectedSong = songs.get(new URLSearchParams(window.location.search).get("song") || "anima");
+  const initialParams = new URLSearchParams(window.location.search);
+  let selectedSource = initialParams.get("tab")==="local" ? "local" : "builtin";
+  let selectedSongId = selectedSource==="builtin" ? (initialParams.get("song") || "anima") : (initialParams.get("song") || null);
+  let selectedDifficultyId = selectedSource==="builtin" ? ((initialParams.get("difficulty") || "tech").toLowerCase()) : (initialParams.get("chart") || null);
+  let selectedSong = selectedSource==="builtin" ? songs.get(selectedSongId || "anima") : null;
   let BPM = selectedSong?.bpm || 184.6;
   let BEAT = 60 / BPM;
   const CHART_STRETCH = 1.00;
@@ -221,11 +225,13 @@
   let sfxVolume=1.80;
   let musicVolume=0.90;
   let editorMode=false, selectedLane=0, selectedEditorAngle=0, editorAngleSnap=8, useCustomChart=false;
-  const initialDifficultyParam = new URLSearchParams(window.location.search).get("difficulty");
-  let selectedMenuMode=(initialDifficultyParam || "tech").toLowerCase();
-  let songTab=(new URLSearchParams(window.location.search).get("tab") || "built-in").toLowerCase();
+  const initialDifficultyParam = initialParams.get("difficulty");
+  let selectedMenuMode=(selectedDifficultyId || initialDifficultyParam || "tech").toLowerCase();
+  let songTab=selectedSource==="local" ? "local" : "built-in";
   let activeLocalBlobUrl=null;
-  if(!initialDifficultyParam && selectedMenuMode!=="normal" && selectedMenuMode!=="tech") selectedMenuMode="tech";
+  let activePlaySource="builtin";
+  let activeChartId=null;
+  if(selectedSource==="builtin" && !initialDifficultyParam && selectedMenuMode!=="normal" && selectedMenuMode!=="tech") selectedMenuMode="tech";
   let paused=false;
   let completionPending=false, completionTimer=0, resultShown=false, abortingRun=false;
   let settingsVisible=false;
@@ -234,10 +240,33 @@
   let customChartData=[];
   const difficultyCache={normal:null,tech:null};
 
-  function resolveSelectedSong(songId){
-    selectedSong = songs.get(songId || selectedSong?.id || "anima");
-    if(!selectedSong) selectedSong = {id:"anima", title:"ANiMA", artist:"xi", bpm:184.6, offset:-0.04, difficulties:{normal:{label:"NORMAL"}, tech:{label:"TECH"}}};
-    BPM = selectedSong.bpm || 184.6;
+
+  function sourceKey(songData=selectedSong){ return (songData?.source==="local" || selectedSource==="local") ? "local" : "builtin"; }
+  function localChartEntries(songData=selectedSong){
+    const charts=songData?.charts || {};
+    return Object.keys(charts).filter(id=>charts[id]?.notes?.length).map(id=>({id, chart:charts[id], meta:songData?.difficulties?.[id] || {}}));
+  }
+  function getSelectedChartId(){ return selectedSource==="local" ? selectedDifficultyId : selectedMenuMode; }
+  function syncSongUrl(){
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", selectedSource==="local" ? "local" : "builtin");
+    url.searchParams.delete("song"); url.searchParams.delete("difficulty"); url.searchParams.delete("chart");
+    if(selectedSource==="builtin"){
+      if(selectedSongId) url.searchParams.set("song", selectedSongId);
+      if(selectedDifficultyId || selectedMenuMode) url.searchParams.set("difficulty", selectedDifficultyId || selectedMenuMode);
+    }else{
+      if(selectedSongId) url.searchParams.set("song", selectedSongId);
+      if(selectedDifficultyId) url.searchParams.set("chart", selectedDifficultyId);
+    }
+    window.history.replaceState({}, "", url);
+  }
+
+  function resolveSelectedSong(songId, source=selectedSource){
+    selectedSource = source==="local" ? "local" : "builtin";
+    selectedSongId = songId || (selectedSource==="builtin" ? "anima" : null);
+    selectedSong = selectedSource==="local" ? songs.localAll().find(s=>s.id===selectedSongId) : songs.get(selectedSongId || "anima");
+    if(!selectedSong && selectedSource==="builtin") selectedSong = {id:"anima", source:"builtin", title:"ANiMA", artist:"xi", bpm:184.6, offset:-0.04, difficulties:{normal:{label:"NORMAL"}, tech:{label:"TECH"}}};
+    BPM = selectedSong?.bpm || 184.6;
     BEAT = 60 / BPM;
     difficultyCache.normal = null;
     difficultyCache.tech = null;
@@ -263,6 +292,7 @@
     canvas.height = Math.floor(H * dpr);
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
+    ctx.setTransform(1,0,0,1,0,0);
     ctx.setTransform(dpr,0,0,dpr,0,0);
 
     const outerGlowSize = 26;
@@ -286,18 +316,10 @@
       return;
     }
 
-    const hudHeight = 60;
-    const horizontalPadding = W <= 820 ? 14 : 24;
-    const bottomPadding = W <= 820 ? 16 : 24;
-    const topPadding = hudHeight + 14;
-    const leftPadding = horizontalPadding;
-    const rightPadding = horizontalPadding;
-    const availableWidth = Math.max(220, W - leftPadding - rightPadding);
-    const availableHeight = Math.max(220, H - topPadding - bottomPadding);
-    const playfieldSize = Math.min(availableWidth, availableHeight);
+    const playfieldSize = Math.min(W,H);
 
-    cx = leftPadding + availableWidth * .5;
-    cy = topPadding + availableHeight * .5;
+    cx = W * .5;
+    cy = H * .5;
     outerR = Math.max(96, playfieldSize * .5 - safeMargin);
     baseR = outerR / 1.86;
     hitR = baseR;
@@ -435,7 +457,7 @@
   }
 
   const RECORD_STORAGE_KEY = "circleMix.bestRecords.v1";
-  function songRecordId(songData=selectedSong){ const source=songData?.source==="local" ? "local" : "built-in"; return `${source}:${songData?.id || "unknown"}`; }
+  function songRecordId(songData=selectedSong){ const source=songData?.source==="local" ? "local" : "builtin"; return `${source}:${songData?.id || "unknown"}`; }
   function recordKey(diff=mapMode, songData=selectedSong){ return `${songRecordId(songData)}:${diff}`; }
   function readRecords(){ try{ return JSON.parse(localStorage.getItem(RECORD_STORAGE_KEY) || "{}"); }catch(e){ return {}; } }
   function writeRecords(records){ try{ localStorage.setItem(RECORD_STORAGE_KEY, JSON.stringify(records)); }catch(e){ console.warn("record save failed", e); } }
@@ -1749,57 +1771,26 @@ endpointCaptured=${n.endpointCaptured===true}`);
       return;
     }
 
-    ctx.save();
-    ctx.globalAlpha=visualSettings.noteContrast==="HIGH"?.22:.34;
-    ctx.lineWidth=1;
-    const grid=58;
-    for(let x=((t*8)%grid)-grid;x<W+grid;x+=grid){
-      ctx.strokeStyle="rgba(92,255,251,.052)";
-      ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();
-    }
-    for(let y=((t*5)%grid)-grid;y<H+grid;y+=grid){
-      ctx.strokeStyle="rgba(141,107,255,.046)";
-      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
-    }
-    ctx.restore();
-
-    ctx.save();
-    ctx.globalCompositeOperation="screen";
-    for(let i=0;i<44;i++){
-      const seed=i*97.13;
-      const px=((Math.sin(seed)*43758.5453)%1+1)%1*W;
-      const py=(((Math.sin(seed*1.7)*24634.6345)%1+1)%1*H + t*(10+i%5*3))%(H+80)-40;
-      const pulse=.35+.35*Math.sin(t*.9+i);
-      ctx.fillStyle=`rgba(${i%3===0?141:92},${i%3===0?107:255},255,${.055+pulse*.055})`;
-      ctx.beginPath();ctx.arc(px,py,1.1+(i%4)*.35,0,TAU);ctx.fill();
-    }
-    ctx.restore();
-
     ctx.save(); ctx.translate(cx,cy);
-    for(let r=baseR*.55;r<baseR*1.72;r+=baseR*.18){
-      const cyan=(Math.round(r/baseR*10)%2)===0;
-      ctx.strokeStyle=`rgba(${cyan?92:141},${cyan?255:107},${cyan?251:255},${r<hitR?.095:.052})`;
-      ctx.lineWidth=r<hitR?1.4:1; ctx.beginPath(); ctx.arc(0,0,r+Math.sin(t*1.25+r)*2.4,0,TAU); ctx.stroke();
-    }
-    for(let i=0;i<40;i++){
-      const a=i/40*TAU+t*.026, r1=baseR*.50, r2=baseR*(1.12+Math.sin(t*.9+i)*.012);
-      ctx.strokeStyle=`rgba(255,255,255,${i%5===0?.105:.026})`; ctx.lineWidth=i%5===0?1.35:1;
-      ctx.beginPath(); ctx.moveTo(Math.cos(a)*r1,Math.sin(a)*r1); ctx.lineTo(Math.cos(a)*r2,Math.sin(a)*r2); ctx.stroke();
-    }
-    const center=ctx.createRadialGradient(0,0,baseR*.08,0,0,baseR*.70);
-    center.addColorStop(0,"rgba(0,0,0,.96)"); center.addColorStop(.56,"rgba(2,6,15,.90)"); center.addColorStop(.82,"rgba(3,8,18,.48)"); center.addColorStop(1,"rgba(3,8,18,.18)");
-    ctx.fillStyle=center; ctx.beginPath(); ctx.arc(0,0,baseR*.78,0,TAU); ctx.fill();
+    const center=ctx.createRadialGradient(0,0,baseR*.08,0,0,baseR*.62);
+    center.addColorStop(0,"rgba(0,0,0,.97)");
+    center.addColorStop(.64,"rgba(2,6,15,.91)");
+    center.addColorStop(1,"rgba(3,8,18,.18)");
+    ctx.fillStyle=center; ctx.beginPath(); ctx.arc(0,0,baseR*.64,0,TAU); ctx.fill();
 
-    ctx.strokeStyle=visualSettings.noteContrast==="HIGH"?"rgba(120,145,170,.11)":"rgba(160,185,210,.16)"; ctx.lineWidth=6; ctx.beginPath(); ctx.arc(0,0,hitR,0,TAU); ctx.stroke();
-    ctx.strokeStyle=visualSettings.noteContrast==="HIGH"?"rgba(80,145,170,.12)":"rgba(80,170,190,.18)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,outerR,0,TAU); ctx.stroke();
+    // Clean default playfield: one clear judgement ring, one faint helper ring,
+    // and eight short direction ticks. Dense radials, moving grids, labels and
+    // oversized decorative circles are removed so notes and TRACE paths stay first.
+    ctx.strokeStyle="rgba(92,255,251,.34)"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,hitR,0,TAU); ctx.stroke();
+    ctx.strokeStyle="rgba(141,107,255,.075)"; ctx.lineWidth=1.25; ctx.beginPath(); ctx.arc(0,0,baseR*.62,0,TAU); ctx.stroke();
     for(let i=0;i<8;i++){
       const a=laneAngle(i);
-      ctx.strokeStyle=i%2===0?"rgba(150,170,190,.09)":"rgba(150,170,190,.045)";
-      ctx.lineWidth=i%2===0?3:2; ctx.beginPath(); ctx.moveTo(Math.cos(a)*(hitR-14),Math.sin(a)*(hitR-14)); ctx.lineTo(Math.cos(a)*(hitR+14),Math.sin(a)*(hitR+14)); ctx.stroke();
-      ctx.fillStyle="rgba(160,180,200,.16)"; ctx.font="800 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText(String(i+1),Math.cos(a)*(hitR+30),Math.sin(a)*(hitR+30));
+      ctx.strokeStyle=i%2===0?"rgba(210,230,245,.17)":"rgba(210,230,245,.10)";
+      ctx.lineWidth=i%2===0?2:1.5;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a)*(hitR-11),Math.sin(a)*(hitR-11)); ctx.lineTo(Math.cos(a)*(hitR+11),Math.sin(a)*(hitR+11)); ctx.stroke();
     }
-    ctx.fillStyle="#030711"; ctx.beginPath(); ctx.arc(0,0,baseR*.35,0,TAU); ctx.fill();
-    ctx.strokeStyle="rgba(80,145,170,.12)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,baseR*.28,0,TAU); ctx.stroke();
+    ctx.fillStyle="#030711"; ctx.beginPath(); ctx.arc(0,0,baseR*.30,0,TAU); ctx.fill();
+    ctx.strokeStyle="rgba(92,255,251,.10)"; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(0,0,baseR*.30,0,TAU); ctx.stroke();
     ctx.restore();
   }
 
@@ -3110,7 +3101,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     raf=requestAnimationFrame(frame);
   }
 
-  async function prepareSelectedAudio(){ if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; } SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04; if(selectedSong?.source==="local"){ const rec=await window.CircleMixLocalSongs.get(selectedSong.id); if(!rec?.audioBlob) throw new Error("로컬 오디오 Blob을 찾을 수 없습니다."); Object.assign(selectedSong, rec); activeLocalBlobUrl=URL.createObjectURL(rec.audioBlob); song.src=activeLocalBlobUrl; try{ song.load(); }catch(e){} } }
+  async function prepareSelectedAudio(){ if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; } SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04; if(activePlaySource==="local"){ if(!selectedSong?.audioBlob) throw new Error("로컬 오디오 Blob을 찾을 수 없습니다."); activeLocalBlobUrl=URL.createObjectURL(selectedSong.audioBlob); song.src=activeLocalBlobUrl; try{ song.load(); }catch(e){} } }
 
   async function start(mode="play"){
     if(raf)cancelAnimationFrame(raf);
@@ -3665,43 +3656,98 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function renderSongSelect(){
     if(!songCarousel || !songDifficulty) return;
-    const tabHtml = `<div class="songTabs"><button class="songTab ${songTab!=="local"?"on":""}" data-tab="built-in" type="button">BUILT-IN</button><button class="songTab ${songTab==="local"?"on":""}" data-tab="local" type="button">LOCAL</button></div>`;
-    const list = songTab==="local" ? songs.localAll() : songs.all();
-    if(list.length && (!selectedSong || !list.some(s=>s.id===selectedSong.id))) resolveSelectedSong(list[0].id);
+    selectedSource = songTab==="local" ? "local" : "builtin";
+    const tabHtml = `<div class="songTabs"><button class="songTab ${selectedSource!=="local"?"on":""}" data-tab="built-in" type="button">BUILT-IN</button><button class="songTab ${selectedSource==="local"?"on":""}" data-tab="local" type="button">LOCAL</button></div>`;
+    const list = selectedSource==="local" ? songs.localAll() : songs.all();
+    if(selectedSource==="builtin"){
+      if(!selectedSongId || !list.some(s=>s.id===selectedSongId)) selectedSongId="anima";
+      resolveSelectedSong(selectedSongId,"builtin");
+      if(!songs.hasDifficulty(selectedSong, selectedDifficultyId || selectedMenuMode)) selectedDifficultyId=Object.keys(selectedSong?.difficulties||{})[0] || null;
+      selectedMenuMode=selectedDifficultyId || "tech";
+      mapMode=selectedMenuMode;
+    }else{
+      if(selectedSongId && !list.some(s=>s.id===selectedSongId)){ selectedSongId=null; selectedDifficultyId=null; selectedSong=null; }
+      if(selectedSongId) resolveSelectedSong(selectedSongId,"local"); else selectedSong=null;
+      const localCharts=localChartEntries(selectedSong);
+      if(selectedDifficultyId && !localCharts.some(c=>c.id===selectedDifficultyId)) selectedDifficultyId=null;
+      if(localCharts.length===1 && !selectedDifficultyId) selectedDifficultyId=localCharts[0].id;
+      selectedMenuMode=selectedDifficultyId || "";
+      mapMode=selectedMenuMode;
+    }
+    syncSongUrl();
     songCarousel.innerHTML = tabHtml + (list.length ? list.map(songData => {
-      const active = songData.id === selectedSong?.id;
-      const diffs=Object.entries(songData.difficulties||{}).map(([k,d])=>`${d.label||k} ${(d.stars||chartTools.calculateStars(songData.charts?.[k]||{})).toFixed ? (d.stars||chartTools.calculateStars(songData.charts?.[k]||{})).toFixed(1) : d.stars}★`).join(" · ");
+      const active = songData.id === selectedSongId;
+      const chartEntries = songData.source==="local" ? localChartEntries(songData) : Object.entries(songData.difficulties||{}).map(([id,meta])=>({id,meta,chart:songData.charts?.[id]}));
+      const diffs=chartEntries.map(({id,meta,chart})=>`${meta?.label||id.toUpperCase()} ${Number(meta?.stars || chartTools.calculateStars(chart||{})).toFixed(1)}★`).join(" · ");
       const manage=songData.source==="local" ? `<div class="songManage"><button data-action="rename" data-song-id="${songData.id}">EDIT META</button><button data-action="clone" data-song-id="${songData.id}">CLONE</button><button data-action="delete" data-song-id="${songData.id}">DELETE</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : "";
       return `<div class="songCard${active ? " active" : ""}" data-song-id="${songData.id}">
         <button class="songCardPick" type="button" data-song-id="${songData.id}"><div class="songJacket" aria-hidden="true"><span>${songData.title}</span></div>
-        <div class="songMeta"><span>${songData.artist || "UNKNOWN"}</span><strong>${songData.title}</strong><em>${songData.bpm || "--"} BPM</em><small>${diffs}</small></div></button>${manage}
+        <div class="songMeta"><span>${songData.artist || "UNKNOWN"}</span><strong>${songData.title}</strong><em>${songData.bpm || "--"} BPM</em><small>${diffs || "NO CHART"}</small></div></button>${manage}
       </div>`;
-    }).join("") : `<div class="localEmpty"><p>에디터에서 곡을 만들어 추가해보세요</p><button class="songPlayBtn" id="openEditorFromEmpty" type="button">OPEN EDITOR</button></div>`);
-    for(const tab of songCarousel.querySelectorAll(".songTab")){ bindPress(tab,async()=>{ songTab=tab.dataset.tab; await songs.refreshLocal(); renderSongSelect(); }); }
+    }).join("") : `<div class="localEmpty"><p>로컬 라이브러리가 비어 있습니다. 에디터에서 곡을 만들어주세요.</p><button class="songPlayBtn" id="openEditorFromEmpty" type="button">OPEN EDITOR</button></div>`);
+    for(const tab of songCarousel.querySelectorAll(".songTab")){ bindPress(tab,async()=>{ songTab=tab.dataset.tab; selectedSource=songTab==="local"?"local":"builtin"; if(selectedSource==="local"){ selectedSongId=null; selectedDifficultyId=null; selectedSong=null; }else{ selectedSongId="anima"; selectedDifficultyId="tech"; } await songs.refreshLocal(); renderSongSelect(); }); }
     const emptyBtn=document.getElementById("openEditorFromEmpty"); if(emptyBtn) bindPress(emptyBtn,()=>{ location.href="./editor.html"; });
     for(const card of songCarousel.querySelectorAll(".songCardPick")){
-      bindPress(card,()=>{ resolveSelectedSong(card.dataset.songId); renderSongSelect(); });
+      bindPress(card,()=>{ resolveSelectedSong(card.dataset.songId, selectedSource); selectedDifficultyId=null; renderSongSelect(); });
     }
     for(const btn of songCarousel.querySelectorAll(".songManage button")){
-      bindPress(btn,async()=>{ const id=btn.dataset.songId, action=btn.dataset.action; const rec=await window.CircleMixLocalSongs.get(id); if(!rec)return; if(action==="delete"){ if(confirm(`${rec.title}을(를) 삭제할까요? 오디오와 모든 채보도 함께 삭제됩니다.`)){ await window.CircleMixLocalSongs.delete(id); await songs.refreshLocal(); selectedSong=null; renderSongSelect(); } } if(action==="clone"){ const copy={...rec,id:rec.id+"-copy",title:rec.title+" Copy",updatedAt:new Date().toISOString()}; await window.CircleMixLocalSongs.put(copy); await songs.refreshLocal(); resolveSelectedSong(copy.id); renderSongSelect(); } if(action==="rename"){ const title=prompt("곡명",rec.title); if(title===null)return; const artist=prompt("아티스트",rec.artist||""); if(artist===null)return; await window.CircleMixLocalSongs.put({...rec,title:title.trim()||rec.title,artist:artist.trim()||rec.artist,updatedAt:new Date().toISOString()}); await songs.refreshLocal(); renderSongSelect(); } });
+      bindPress(btn,async()=>{ const id=btn.dataset.songId, action=btn.dataset.action; const rec=await window.CircleMixLocalSongs.get(id); if(!rec)return; if(action==="delete"){ if(confirm(`${rec.title}을(를) 삭제할까요? 오디오와 모든 채보도 함께 삭제됩니다.`)){ await window.CircleMixLocalSongs.delete(id); await songs.refreshLocal(); selectedSongId=null; selectedDifficultyId=null; selectedSong=null; renderSongSelect(); } } if(action==="clone"){ const copy={...rec,id:rec.id+"-copy",title:rec.title+" Copy",updatedAt:new Date().toISOString()}; await window.CircleMixLocalSongs.put(copy); await songs.refreshLocal(); resolveSelectedSong(copy.id,"local"); renderSongSelect(); } if(action==="rename"){ const title=prompt("곡명",rec.title); if(title===null)return; const artist=prompt("아티스트",rec.artist||""); if(artist===null)return; await window.CircleMixLocalSongs.put({...rec,title:title.trim()||rec.title,artist:artist.trim()||rec.artist,updatedAt:new Date().toISOString()}); await songs.refreshLocal(); renderSongSelect(); } });
     }
-    const diffKeys=Object.keys(selectedSong?.difficulties||{});
-    songDifficulty.innerHTML = diffKeys.filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff => {
-      const label = selectedSong.difficulties[diff].label || diff.toUpperCase();
-      const best = getBestRecord(diff, selectedSong);
-      const bestHtml = best ? `<small>BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")}<br>BEST POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"}<br>BEST RANK ${best.bestRank || "---"}<br>BEST ACCURACY ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}</small>` : `<small>BEST SCORE ---<br>BEST POWER ---<br>BEST RANK ---<br>BEST ACCURACY ---</small>`;
-      return `<button class="songDiffBtn${selectedMenuMode===diff ? " on" : ""}" type="button" data-difficulty="${diff}">${label} <span>${formatDifficulty(diff)}</span>${bestHtml}</button>`;
-    }).join("") + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>`;
+    let diffHtml="";
+    if(selectedSource==="local" && !selectedSong){
+      diffHtml = `<div class="songDiffEmpty">로컬 곡을 선택하거나 에디터에서 곡을 만들어주세요.</div>`;
+    }else{
+      const entries = selectedSource==="local" ? localChartEntries(selectedSong) : Object.keys(selectedSong?.difficulties||{}).filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff=>({id:diff, meta:selectedSong.difficulties[diff]}));
+      if(selectedSource==="local" && !entries.length) diffHtml = `<div class="songDiffEmpty">선택한 로컬 곡에 저장된 채보가 없습니다.</div>`;
+      else diffHtml = entries.map(({id,meta,chart}) => {
+        const label = meta?.label || id.toUpperCase();
+        const best = getBestRecord(id, selectedSong);
+        const stars = selectedSource==="local" ? Number(meta?.stars || chartTools.calculateStars(chart||{})).toFixed(1)+"★" : formatDifficulty(id);
+        const bestHtml = best ? `<small>BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")}<br>BEST POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"}<br>BEST RANK ${best.bestRank || "---"}<br>BEST ACCURACY ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}</small>` : `<small>BEST SCORE ---<br>BEST POWER ---<br>BEST RANK ---<br>BEST ACCURACY ---</small>`;
+        return `<button class="songDiffBtn${selectedDifficultyId===id ? " on" : ""}" type="button" data-difficulty="${id}">${label} <span>${stars}</span>${bestHtml}</button>`;
+      }).join("");
+    }
+    songDifficulty.innerHTML = diffHtml + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>`;
     for(const btn of songDifficulty.querySelectorAll(".songDiffBtn[data-difficulty]")){
-      bindPress(btn,()=>{ selectedMenuMode = btn.dataset.difficulty; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });
+      bindPress(btn,()=>{ selectedDifficultyId = btn.dataset.difficulty; selectedMenuMode = selectedDifficultyId; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });
     }
     const songAutoBtn=songDifficulty.querySelector("[data-auto-play]");
     bindPress(songAutoBtn,()=>{ toggleAuto("song-select"); renderSongSelect(); });
+    if(songPlayBtn) songPlayBtn.disabled = !buildPlayRequest();
+  }
+
+  function buildPlayRequest(){
+    if(selectedSource==="builtin"){
+      if(!selectedSongId || !selectedDifficultyId) return null;
+      const songData=songs.all().find(s=>s.id===selectedSongId);
+      if(!songData || !songs.hasDifficulty(songData, selectedDifficultyId)) return null;
+      return {source:"builtin", songId:selectedSongId, difficultyId:selectedDifficultyId, chartId:selectedDifficultyId};
+    }
+    if(!selectedSongId || !selectedDifficultyId) return null;
+    const songData=songs.localAll().find(s=>s.id===selectedSongId);
+    if(!songData || !songData.charts?.[selectedDifficultyId]) return null;
+    return {source:"local", songId:selectedSongId, chartId:selectedDifficultyId, difficultyId:selectedDifficultyId};
+  }
+
+  async function resolvePlayRequest(req){
+    if(!req) throw new Error("실행할 로컬 곡과 채보를 선택해주세요.");
+    if(req.source==="builtin"){
+      const songData=songs.all().find(s=>s.id===req.songId);
+      if(!songData || !songs.hasDifficulty(songData, req.difficultyId)) throw new Error("실행할 내장 곡과 난이도를 선택해주세요.");
+      return {source:"builtin", song:songData, chartId:req.difficultyId, difficultyId:req.difficultyId};
+    }
+    const rec=await window.CircleMixLocalSongs.get(req.songId);
+    if(!rec || !rec.charts?.[req.chartId]) throw new Error("실행할 로컬 곡과 채보를 선택해주세요.");
+    return {source:"local", song:rec, chart:rec.charts[req.chartId], chartId:req.chartId, difficultyId:req.chartId};
   }
 
   async function showSongSelect(){
     await songs.refreshLocal();
-    resolveSelectedSong(new URLSearchParams(window.location.search).get("song") || selectedSong?.id || "anima");
+    const params=new URLSearchParams(window.location.search);
+    selectedSource=params.get("tab")==="local" ? "local" : "builtin";
+    songTab=selectedSource==="local" ? "local" : "built-in";
+    selectedSongId=selectedSource==="local" ? (params.get("song") || null) : (params.get("song") || selectedSongId || "anima");
+    selectedDifficultyId=selectedSource==="local" ? (params.get("chart") || null) : ((params.get("difficulty") || selectedDifficultyId || "tech").toLowerCase());
     renderSongSelect();
     safeSetState("songSelect");
     document.body.classList.remove("safeClean");
@@ -3718,16 +3764,21 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   async function startSelectedSong(e){
     if(e && isMobileViewport()) await requestFullscreenEnter();
-    if(!selectedSong) resolveSelectedSong("anima");
-    if(!songs.hasDifficulty(selectedSong, selectedMenuMode)) selectedMenuMode=Object.keys(selectedSong?.difficulties||{})[0] || "tech";
-    mapMode = selectedMenuMode;
+    const req=buildPlayRequest();
+    if(!req){ alert("실행할 로컬 곡과 채보를 선택해주세요."); renderSongSelect(); return false; }
+    let resolved;
+    try{ resolved=await resolvePlayRequest(req); }catch(err){ alert(err.message); renderSongSelect(); return false; }
+    selectedSource=resolved.source;
+    activePlaySource=resolved.source;
+    activeChartId=resolved.chartId;
+    selectedSong=resolved.song;
+    selectedSongId=resolved.song.id;
+    selectedDifficultyId=resolved.difficultyId;
+    selectedMenuMode=resolved.difficultyId;
+    mapMode=resolved.difficultyId;
     if(songSelect) songSelect.hidden = true;
-    const url = new URL(window.location.href);
-    url.searchParams.set("song", selectedSong.id);
-    url.searchParams.set("tab", selectedSong.source==="local" ? "local" : "built-in");
-    url.searchParams.set("difficulty", mapMode);
-    window.history.replaceState({}, "", url);
-    start("play");
+    syncSongUrl();
+    return start("play");
   }
 
   function safeInputEvent(e){
