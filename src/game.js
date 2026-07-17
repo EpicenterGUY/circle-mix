@@ -648,8 +648,17 @@
     return Number.isFinite(value) ? value.toFixed(1)+"★" : "—";
   }
 
+  function getDifficultySafe(mode=mapMode){
+    try{
+      return getDifficulty(mode);
+    }catch(error){
+      console.error("[Difficulty Calculation Failed]", error);
+      return null;
+    }
+  }
+
   function formatDifficulty(mode=mapMode){
-    const d=getDifficulty(mode);
+    const d=getDifficultySafe(mode);
     return d ? formatStarValue(d.stars) : "—";
   }
 
@@ -657,10 +666,18 @@
     if(!songData || !difficultyId) return null;
     const meta=songData.difficulties?.[difficultyId];
     const label=getActiveDifficultyLabel(songData,difficultyId);
-    if(songData.source==="builtin") return {id:difficultyId, label, stars:getDifficulty(difficultyId)?.stars};
+    if(songData.source==="builtin") return {id:difficultyId, label, stars:getDifficultySafe(difficultyId)?.stars};
     const chart=songData.charts?.[difficultyId];
     const metaStars=Number(meta?.stars);
-    const stars=Number.isFinite(metaStars) ? metaStars : (chart ? chartTools.calculateStars(chart) : undefined);
+    let stars=metaStars;
+    if(!Number.isFinite(stars) && chart){
+      try{
+        stars=chartTools.calculateStars(chart);
+      }catch(error){
+        console.error("[Difficulty Calculation Failed]", error);
+        stars=undefined;
+      }
+    }
     return {id:difficultyId, label, stars};
   }
 
@@ -742,7 +759,7 @@
     if(type!=="slideCW" && type!=="slideCCW") return false;
     if(endAngleDeg===undefined || endAngleDeg===null) return false;
     if(signedSweepAngle!==undefined && signedSweepAngle!==null) return false;
-    const diff=Math.abs(normDeg(Number(endAngleDeg)-Number(angleDeg)));
+    const diff=normalizeAngleDeg(Number(endAngleDeg)-Number(angleDeg));
     const shortest=Math.min(diff, 360-diff);
     return Number.isFinite(shortest) && shortest < 1 && Number(durationBeat) <= 1.5;
   }
