@@ -251,6 +251,7 @@
   let completionPending=false, completionTimer=0, resultShown=false, abortingRun=false;
   let settingsVisible=false;
   let settingsOrigin="title";
+  let playSessionToken=0;
   let fullscreenInterrupted=false;
   let pauseSettingsOpen=false;
   let customChartData=[];
@@ -3833,15 +3834,15 @@ endpointCaptured=${n.endpointCaptured===true}`);
     settingsVisible=false;
     document.body.classList.remove("showSettings");
     if(origin==="gameplay"){
-      safeSetState("game");
+      safeSetState("game", "settings resume gameplay");
       if(paused) resumeGame();
       else originalToggleSettings(false);
     }else if(origin==="songSelect"){
-      safeSetState("songSelect");
+      safeSetState("songSelect", "settings resume songSelect");
       if(songSelect) songSelect.hidden=false;
       originalToggleSettings(false);
     }else{
-      safeSetState("title");
+      safeSetState("title", "settings resume title");
       originalToggleSettings(false);
     }
     safeRefresh();
@@ -3910,7 +3911,9 @@ endpointCaptured=${n.endpointCaptured===true}`);
   async function start(mode="play"){
     if(raf)cancelAnimationFrame(raf);
     ensureAudioCtx();
+    const startToken = ++playSessionToken;
     try{ await prepareSelectedAudio(); }catch(err){ alert(err.message); return false; }
+    if(startToken !== playSessionToken) return false;
     cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     paused=false;
     abortingRun=false; completionPending=false; resultShown=false;
@@ -3921,13 +3924,21 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(editorPanel)editorPanel.classList.toggle("show",editorMode);
     useCustomChart=(selectedMenuMode==="custom" && customChartData.length>0);
     chart=generateChart();
-    if(!chart.length){ alert("채보가 비어 있어 플레이를 시작할 수 없습니다."); endGame(true); return false; }
+    if(debugMode) console.log(`[Start Chart]
+source=${activePlaySource}
+songId=${selectedSong?.id || "-"}
+difficulty=${activeChartId || selectedDifficultyId || selectedMenuMode}
+chartLength=${chart.length}
+scene=${activeSceneName()}
+settingsOrigin=${settingsOrigin}`);
+    if(!chart.length){ alert("채보가 비어 있어 플레이를 시작할 수 없습니다. 선택한 곡/난이도의 chartLength=0 입니다."); if(debugMode) console.warn("[Start Failed] empty chart", {source:activePlaySource, songId:selectedSong?.id, difficulty:activeChartId || selectedDifficultyId || selectedMenuMode}); endGame(true); return false; }
     resetTraceRuntimeState();
     score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0; actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0);
     feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
     running=true;
+    closeSettingsOverlayOnly();
+    safeSetState("game", "start runtime init");
     setCleanGameplay(true);
-    toggleSettings(false);
     song.pause();
     try{ song.currentTime=0; }catch(e){}
     if(song.ended){ try{ song.load(); song.currentTime=0; }catch(e){} }
@@ -3945,15 +3956,27 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
     applyMusicVolume();
 
+    const keepGameScene = () => {
+      if(startToken !== playSessionToken) return false;
+      closeSettingsOverlayOnly();
+      safeSetState("game", "start async guard");
+      if(songSelect) songSelect.hidden = true;
+      if(safeMenu) safeMenu.style.display = "none";
+      return true;
+    };
     song.play().then(()=>{
+      if(!keepGameScene()) return;
       if(raf) cancelAnimationFrame(raf);
       raf=requestAnimationFrame(frame);
     }).catch(err=>{
       console.warn("audio play failed", err);
       // 재생 실패해도 화면은 돌리되, 사용자가 P나 에디터 PLAY로 다시 재생 가능.
+      if(!keepGameScene()) return;
       if(raf) cancelAnimationFrame(raf);
       raf=requestAnimationFrame(frame);
     });
+    keepGameScene();
+    return true;
   }
 
   function restartIfRunning(){ if(running)start(); else updateButtons(); }
@@ -4575,7 +4598,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function showTitleMenu(){
     cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     if(songSelect) songSelect.hidden = true;
-    safeSetState("title");
+    safeSetState("title", "showTitleMenu");
     safeRefresh();
   }
 
@@ -4584,7 +4607,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const req=buildPlayRequest();
     if(!req){ alert("실행할 로컬 곡과 채보를 선택해주세요."); renderSongSelect(); return false; }
     let resolved;
-    try{ resolved=await resolvePlayRequest(req); }catch(err){ alert(err.message); renderSongSelect(); return false; }
+    try{ resolved=await resolvePlayRequest(req); }catch(err){ alert(err.message); if(debugMode) console.warn("[Start Failed] resolvePlayRequest", {request:req, message:err.message}); renderSongSelect(); return false; }
+    const sceneBefore=activeSceneName();
     selectedSource=resolved.source;
     activePlaySource=resolved.source;
     activeChartId=resolved.chartId;
@@ -4594,8 +4618,25 @@ endpointCaptured=${n.endpointCaptured===true}`);
     selectedMenuMode=resolved.difficultyId;
     mapMode=resolved.difficultyId;
     if(songSelect) songSelect.hidden = true;
+    closeSettingsOverlayOnly();
+    safeSetState("game", "startSelectedSong");
     syncSongUrl();
-    return start("play");
+    const ok = await start("play");
+    if(debugMode) console.log(`[Start Selected Song]
+source=${activePlaySource}
+songId=${selectedSong?.id || "-"}
+difficulty=${activeChartId || selectedDifficultyId}
+chartLength=${chart.length}
+sceneBefore= ${sceneBefore}
+sceneAfter= ${activeSceneName()}
+settingsOrigin=${settingsOrigin}
+running=${running}`);
+    if(ok && activeSceneName()!=="game"){
+      console.warn("[Start Selected Song] scene corrected to game", {scene:activeSceneName(), settingsOrigin});
+      safeSetState("game", "startSelectedSong final correction");
+      if(songSelect) songSelect.hidden = true;
+    }
+    return ok;
   }
 
   function safeInputEvent(e){
@@ -4620,7 +4661,12 @@ endpointCaptured=${n.endpointCaptured===true}`);
     el.addEventListener("click",run,{passive:false});
   }
 
-  function safeSetState(state){
+  function safeSetState(state, reason="unspecified"){
+    const previous=activeSceneName();
+    if(debugMode && previous==="game" && state==="title") console.warn(`[Scene Change] game -> title
+reason=${reason}
+settingsOrigin=${settingsOrigin}
+running=${running}`);
     document.body.classList.toggle("safeTitle", state==="title");
     document.body.classList.toggle("safeSettings", state==="settings");
     document.body.classList.toggle("safeGame", state==="game");
@@ -4632,13 +4678,27 @@ endpointCaptured=${n.endpointCaptured===true}`);
     settingsVisible=state==="settings";
   }
 
+  function closeSettingsOverlayOnly(){
+    settingsVisible=false;
+    document.body.classList.remove("showSettings");
+    if(quickSettingsBtn) quickSettingsBtn.classList.remove("on");
+    if(safeOverlay) safeOverlay.classList.remove("show");
+    if(pauseSettingsOverlay) pauseSettingsOverlay.classList.remove("show");
+    document.body.classList.remove("pauseSettingsOpen");
+    pauseSettingsOpen=false;
+  }
+
   function safeSetMenuVisible(v){
-    safeSetState(v?"title":(settingsVisible?"settings":"game"));
+    safeSetState(v?"title":(settingsVisible?"settings":"game"), "safeSetMenuVisible");
   }
 
   function safeSetOverlay(v){
-    if(v) settingsOrigin=currentSettingsOrigin();
-    safeSetState(v?"settings":(settingsOrigin==="songSelect"?"songSelect":(settingsOrigin==="gameplay"?"game":"title")));
+    if(v){
+      settingsOrigin=currentSettingsOrigin();
+      safeSetState("settings", "safeSetOverlay(open)");
+    }else{
+      closeSettingsOverlayOnly();
+    }
   }
 
   function safeRefresh(){
@@ -4665,7 +4725,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   start=function(mode="play"){
     if(isMobilePortraitPlayBlocked()){
       pendingMobileStartMode = mode;
-      safeSetState("game");
+      safeSetState("game", "start wrapper mobile rotate");
       document.body.classList.add("safeClean");
       setRotateOverlay(true);
       try{ song.pause(); }catch(e){}
@@ -4673,7 +4733,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     }
     pendingMobileStartMode = null;
     setRotateOverlay(false);
-    safeSetState("game");
+    safeSetState("game", "start wrapper");
     document.body.classList.add("safeClean");
     return originalStart(mode);
   };
@@ -4683,7 +4743,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     originalEndGame(stopAudio);
     document.body.classList.remove("safeClean");
     if(resultOverlay && resultOverlay.classList.contains("show")){
-      safeSetState("game");
+      safeSetState("game", "endGame result overlay");
     }else{
       safeSetOverlay(false);
       safeSetMenuVisible(true);
@@ -4708,9 +4768,12 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(paused){
       if(settingsVisible) openPauseSettings();
       else closePauseSettings();
+    }else if(settingsVisible){
+      safeSetOverlay(true);
+      originalToggleSettings(true);
     }else{
-      safeSetOverlay(settingsVisible);
-      originalToggleSettings(settingsVisible);
+      closeSettingsOverlayOnly();
+      originalToggleSettings(false);
     }
     safeRefresh();
   };
@@ -4776,7 +4839,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   });
   document.addEventListener("fullscreenerror",()=>{ if(fullscreenRetryBtn && isMobileViewport()) fullscreenRetryBtn.hidden=false; });
 
-  safeSetState("title");
+  safeSetState("title", "initial load");
   safeRefresh();
   showTutorialPrompt();
 
