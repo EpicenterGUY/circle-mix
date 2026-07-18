@@ -38,8 +38,16 @@
   const musicUp = document.getElementById("musicUp");
   const musicValue = document.getElementById("musicValue");
   const difficultyBox = document.getElementById("difficultyBox");
-  const debugMode = new URLSearchParams(window.location.search).get("debug")==="1";
+  const debugParams = new URLSearchParams(window.location.search);
+  const debugMode = debugParams.get("debug")==="1";
+  const mobileDebug = debugParams.get("pwaDebug")==="1" || debugParams.get("mobileDebug")==="1";
+  const audioDebugStats = {play:0,pause:0,load:0,currentTimeSet:0,previewStart:0,previewStop:0};
+  let mobileAudioDebugPanel=null, mobileAudioDebugLastPaint=0;
   document.body.classList.toggle("debugMode", debugMode);
+  function setSongCurrentTime(value, source="unknown"){ audioDebugStats.currentTimeSet++; if(mobileDebug) console.log(`[AudioDebug] currentTime=${value} source=${source}`); song.currentTime=value; }
+  function playSong(source="unknown"){ audioDebugStats.play++; if(mobileDebug) console.log(`[AudioDebug] play source=${source}`); return song.play(); }
+  function pauseSong(source="unknown"){ audioDebugStats.pause++; if(mobileDebug) console.log(`[AudioDebug] pause source=${source}`); return song.pause(); }
+  function loadSong(source="unknown"){ audioDebugStats.load++; if(mobileDebug) console.log(`[AudioDebug] load source=${source}`); return song.load(); }
   const modeNormalStar = document.getElementById("modeNormalStar");
   const modeTechStar = document.getElementById("modeTechStar");
   const modeNormalBtn = document.getElementById("modeNormalBtn");
@@ -292,6 +300,8 @@
   let activeLocalBlobUrl=null;
   let previewTimer=0;
   let previewActive=false;
+  let previewSessionId=0;
+  let previewMetadataHandler=null;
   let activePlaySource="builtin";
   let activeChartId=null;
   let paused=false;
@@ -300,6 +310,10 @@
   let settingsOrigin="title";
   let playSessionToken=0;
   let fullscreenInterrupted=false;
+  let fullscreenTransitioning=false;
+  let stableResizeTimer=0;
+  let gameplayScrollLocked=false;
+  let gameplayScrollX=0, gameplayScrollY=0;
   let pauseSettingsOpen=false;
   let customChartData=[];
   const difficultyCache={};
@@ -335,13 +349,25 @@
     return "UNKNOWN";
   }
   function getSelectedChartId(){ return selectedSource==="local" ? selectedDifficultyId : selectedMenuMode; }
-  function stopSongPreview(){
-    previewActive=false;
+  function clearPreviewTimer(){
     if(previewTimer){ clearTimeout(previewTimer); previewTimer=0; }
-    try{ song.pause(); song.currentTime=0; }catch(e){}
   }
 
-  function loadPreviewAudio(songData){
+  function canRunSongPreview(sessionId=previewSessionId){
+    return sessionId===previewSessionId && !running && !paused && !resultOverlay?.classList.contains("show") && songSelect && !songSelect.hidden && selectedSong;
+  }
+
+  function stopSongPreview(){
+    previewSessionId++;
+    audioDebugStats.previewStop++;
+    previewActive=false;
+    clearPreviewTimer();
+    if(previewMetadataHandler){ song.removeEventListener("loadedmetadata", previewMetadataHandler); previewMetadataHandler=null; }
+    try{ pauseSong("preview-stop"); }catch(e){}
+  }
+
+  function loadPreviewAudio(songData, sessionId=previewSessionId){
+    if(!canRunSongPreview(sessionId)) return false;
     if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
     if(songData?.source==="local"){
       if(!songData.audioBlob) return false;
@@ -351,26 +377,33 @@
     }else if(songData?.audio){
       song.src=songData.audio;
     }
-    try{ song.load(); }catch(e){}
+    try{ loadSong("preview-load"); }catch(e){}
     applyMusicVolume();
     return true;
   }
 
   function startSongPreview(){
-    if(running || !songSelect || songSelect.hidden || !selectedSong) return;
+    if(running || paused || !songSelect || songSelect.hidden || !selectedSong || resultOverlay?.classList.contains("show")) return;
     stopSongPreview();
-    if(!loadPreviewAudio(selectedSong)) return;
+    const sessionId=++previewSessionId;
+    audioDebugStats.previewStart++;
+    previewActive=true;
+    if(!loadPreviewAudio(selectedSong, sessionId)){ previewActive=false; return; }
     const previewStart=Number(selectedSong.previewStart)||0;
     const previewDuration=Math.max(1, Number(selectedSong.previewDuration)||15);
-    previewActive=true;
     const play=()=>{
-      if(!previewActive || running) return;
-      try{ song.currentTime=previewStart; }catch(e){}
-      song.play().catch(()=>{});
-      previewTimer=setTimeout(()=>{ if(previewActive) startSongPreview(); }, previewDuration*1000);
+      if(!canRunSongPreview(sessionId) || !previewActive) return;
+      try{ setSongCurrentTime(previewStart, "preview-start"); }catch(e){}
+      const playPromise=playSong("preview-start");
+      if(playPromise?.catch) playPromise.catch(()=>{}).finally(()=>{ if(!canRunSongPreview(sessionId)) return; });
+      clearPreviewTimer();
+      previewTimer=setTimeout(()=>{ if(canRunSongPreview(sessionId) && previewActive) startSongPreview(); }, previewDuration*1000);
     };
     if(Number.isFinite(song.duration) || song.readyState>=1) play();
-    else song.addEventListener("loadedmetadata", play, {once:true});
+    else{
+      previewMetadataHandler=()=>{ previewMetadataHandler=null; play(); };
+      song.addEventListener("loadedmetadata", previewMetadataHandler, {once:true});
+    }
   }
 
   function syncSongUrl(){
@@ -425,14 +458,15 @@
     document.body.classList.toggle("mobileQualityAutoDegraded", mobile&&getMobileQuality()==="AUTO"&&(SESSION_QUALITY.autoDprCap<1.5||SESSION_QUALITY.effectMode==="PERFORMANCE"));
   }
 
-  function resize(){
+  function resize(forcedSize=null){
     const dpr = getRenderDpr();
     currentRenderDpr = dpr;
     syncMobilePerformanceClass();
     const rectSource = document.fullscreenElement ? (gameRoot || document.documentElement) : null;
     const rect = rectSource ? rectSource.getBoundingClientRect() : null;
-    W=Math.floor(rect && rect.width ? rect.width : window.innerWidth);
-    H=Math.floor(rect && rect.height ? rect.height : window.innerHeight);
+    const viewport = forcedSize || getViewportSize();
+    W=Math.floor(rect && rect.width ? rect.width : viewport.width);
+    H=Math.floor(rect && rect.height ? rect.height : viewport.height);
     if(W<=0 || H<=0){
       if(!resizeRetryPending){
         resizeRetryPending=true;
@@ -3634,7 +3668,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function cycleVisualSetting(key){ const list=VISUAL_CHOICES[key]; const idx=list.indexOf(visualSettings[key]); visualSettings[key]=list[(idx+1)%list.length]; saveVisualSettings(); updateButtons(); }
   function refreshSettingsUI(){ updateButtons(); }
 
-  function setAutoMode(enabled, source="unknown"){
+  function setAutoPlayEnabled(enabled, source="unknown"){
     const next=!!enabled;
     if(gameState.autoEnabled===next){
       updateButtons();
@@ -3643,14 +3677,14 @@ endpointCaptured=${n.endpointCaptured===true}`);
       return;
     }
     gameState.autoEnabled=next;
-    console.log(`[Auto] source=${source} enabled=${gameState.autoEnabled}`);
+    if(mobileDebug || debugMode) console.log(`[Auto] source=${source} enabled=${gameState.autoEnabled}`);
     updateButtons();
     safeRefresh();
     updateDebugOverlay(now());
   }
 
   function toggleAuto(source="unknown"){
-    setAutoMode(!gameState.autoEnabled, source);
+    setAutoPlayEnabled(!gameState.autoEnabled, source);
   }
 
   function formatMobileQuality(){ return "MOBILE QUALITY " + getMobileQuality(); }
@@ -3725,6 +3759,28 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(resultOverlay) resultOverlay.classList.remove("show","newRecord");
   }
 
+
+  function updateAppHeight(){
+    const h=Math.max(1, Math.floor(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || H || 1));
+    document.documentElement.style.setProperty("--app-height", `${h}px`);
+  }
+  function setGameplayScrollLocked(locked){
+    if(locked===gameplayScrollLocked) return;
+    gameplayScrollLocked=locked;
+    if(locked){
+      gameplayScrollX=window.scrollX||0; gameplayScrollY=window.scrollY||0; updateAppHeight(); window.scrollTo(0,0);
+      document.documentElement.classList.add("gameplayScrollLocked"); document.body.classList.add("gameplayScrollLocked");
+    }else{
+      document.documentElement.classList.remove("gameplayScrollLocked"); document.body.classList.remove("gameplayScrollLocked");
+      window.scrollTo(gameplayScrollX||0, gameplayScrollY||0);
+    }
+  }
+  function handleGameplayTouchMove(e){
+    if(!gameplayScrollLocked) return;
+    const target=e.target;
+    if(target===canvas || target===gameRoot || gameRoot.contains(target)){ if(e.cancelable) e.preventDefault(); }
+  }
+
   function cleanupPlaySession({stopAudio=true, hideResultOverlay=true, abort=true}={}){
     if(abort) abortingRun=true;
     completionPending=false;
@@ -3742,9 +3798,10 @@ endpointCaptured=${n.endpointCaptured===true}`);
     document.body.classList.remove("pausedInputBlocked", "pauseSettingsOpen", "showSettings");
     settingsVisible=false;
     setPauseMessage("");
-    if(stopAudio){ stopSongPreview(); try{ song.pause(); }catch(e){} }
+    if(stopAudio){ stopSongPreview(); try{ pauseSong("pause"); }catch(e){} }
     if(hideResultOverlay) hideResult();
     setCleanGameplay(false);
+    setGameplayScrollLocked(false);
   }
 
   function finalizeRemainingMisses(){
@@ -3946,7 +4003,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
     tutorialMode=true; tutorialState.autoSuppressed=true; tutorialState.transitioning=true;
     document.body.classList.add("tutorialMode","tutorialIntro"); resize();
-    abortingRun=false; resultShown=false; completionPending=false; paused=false; running=true; notifyPwaGameplay();
+    abortingRun=false; resultShown=false; completionPending=false; paused=false; running=true; setGameplayScrollLocked(true); notifyPwaGameplay();
     chart=runtime.chart;
     score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1;
     setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none";
@@ -3963,7 +4020,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
   function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
-  function restoreTutorialAuto(){ gameState.autoEnabled=!!tutorialState.previousAutoEnabled; tutorialState.autoSuppressed=false; updateButtons(); safeRefresh&&safeRefresh(); }
+  function restoreTutorialAuto(){ tutorialState.autoSuppressed=false; setAutoPlayEnabled(!!tutorialState.previousAutoEnabled, "tutorial-restore"); }
   function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
   function completeTutorial(){ clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none"; }
   function updateTutorialAim(){
@@ -4048,7 +4105,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(!running) return;
     if(!paused){
       paused=true;
-      song.pause();
+      pauseSong("pause");
       notifyPwaGameplay();
       if(raf){cancelAnimationFrame(raf);raf=0;}
     }
@@ -4072,7 +4129,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     lastMs=performance.now();
     ensureAudioCtx();
     applyMusicVolume();
-    song.play().catch(()=>{});
+    playSong("play").catch(()=>{});
     raf=requestAnimationFrame(frame);
   }
 
@@ -4151,7 +4208,23 @@ endpointCaptured=${n.endpointCaptured===true}`);
     el.style.cssText="position:fixed;right:8px;bottom:8px;z-index:130000;background:rgba(0,0,0,.72);color:#8dfaff;font:11px/1.35 monospace;padding:8px;border:1px solid rgba(92,255,251,.45);border-radius:8px;pointer-events:none;white-space:pre";
     document.body.appendChild(el); perfStats.el=el;
   }
-  function updatePerfStats(ms,t){
+  function updateMobileAudioDebug(){
+    if(!mobileDebug) return;
+    const data={...audioDebugStats, previewSessionId, running, paused, autoPlay:gameState.autoEnabled, selectedSongId, selectedDifficultyId};
+    window.CircleMixMobileDebug=data;
+    const t=performance.now();
+    if(t-mobileAudioDebugLastPaint<250) return;
+    mobileAudioDebugLastPaint=t;
+    if(!mobileAudioDebugPanel){
+      mobileAudioDebugPanel=document.createElement("pre");
+      mobileAudioDebugPanel.id="mobileAudioDebugPanel";
+      mobileAudioDebugPanel.style.cssText="position:fixed;left:8px;top:8px;z-index:140000;max-width:min(92vw,520px);margin:0;padding:8px;border:1px solid #5cfffb;background:rgba(0,0,0,.78);color:#dffcff;font:11px/1.35 monospace;white-space:pre-wrap;pointer-events:none";
+      document.body.appendChild(mobileAudioDebugPanel);
+    }
+    mobileAudioDebugPanel.textContent=JSON.stringify(data,null,2);
+  }
+
+  function updatePerfStats(ms,t){ updateMobileAudioDebug();
     const ft=Math.max(0,ms-(perfStats.lastMs||ms)); perfStats.lastMs=ms;
     perfStats.samples++; perfStats.totalFrame+=ft; if(ft>perfStats.maxFrame) perfStats.maxFrame=ft; if(ft>=24) perfStats.longFrames++;
     if(!autoQualityStats.windowAt) autoQualityStats.windowAt=ms;
@@ -4237,7 +4310,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   async function prepareSelectedAudio(){
     stopSongPreview();
-    try{ song.pause(); song.currentTime=0; }catch(e){}
+    try{ pauseSong("reset"); setSongCurrentTime(0,"reset"); }catch(e){}
     if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
     BPM = selectedSong?.bpm || 184.6; BEAT = 60 / BPM; SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04;
     if(activePlaySource==="local"){
@@ -4248,7 +4321,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     }else if(selectedSong?.audio){
       song.src=selectedSong.audio;
     }
-    try{ song.load(); }catch(e){}
+    try{ loadSong("load"); }catch(e){}
     applyMusicVolume();
   }
 
@@ -4286,13 +4359,14 @@ settingsOrigin=${settingsOrigin}`);
     score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0; actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0);
     feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
     running=true;
+    setGameplayScrollLocked(true);
     notifyPwaGameplay();
     closeSettingsOverlayOnly();
     safeSetState("game", "start runtime init");
     setCleanGameplay(true);
-    song.pause();
-    try{ song.currentTime=0; }catch(e){}
-    if(song.ended){ try{ song.load(); song.currentTime=0; }catch(e){} }
+    pauseSong("pause");
+    try{ setSongCurrentTime(0,"reset"); }catch(e){}
+    if(song.ended){ try{ loadSong("load"); setSongCurrentTime(0,"reset"); }catch(e){} }
     startMs=performance.now();
     audioStartedAt=startMs;
     lastMs=startMs;
@@ -4315,7 +4389,7 @@ settingsOrigin=${settingsOrigin}`);
       if(safeMenu) safeMenu.style.display = "none";
       return true;
     };
-    song.play().then(()=>{
+    playSong("start-game").then(()=>{
       if(!keepGameScene()) return;
       if(raf) cancelAnimationFrame(raf);
       raf=requestAnimationFrame(frame);
@@ -4521,38 +4595,58 @@ settingsOrigin=${settingsOrigin}`);
     console.log(`[Fullscreen] canvas rect: ${Math.round(canvasRect.width)} x ${Math.round(canvasRect.height)}`);
   }
 
-  async function requestFullscreenEnter(){
+  function isStandaloneDisplay(){ return window.matchMedia?.("(display-mode: standalone)").matches || window.matchMedia?.("(display-mode: fullscreen)").matches || navigator.standalone===true; }
+  function getViewportSize(){
+    const fsEl=document.fullscreenElement || document.webkitFullscreenElement;
+    const rect=fsEl ? (gameRoot || fsEl).getBoundingClientRect() : null;
+    const vv=window.visualViewport;
+    const width=Math.floor((rect&&rect.width) || vv?.width || document.documentElement.clientWidth || window.innerWidth || W || 1);
+    const height=Math.floor((rect&&rect.height) || vv?.height || document.documentElement.clientHeight || window.innerHeight || H || 1);
+    return {width,height};
+  }
+  function scheduleStableViewportResize(reason="viewport", attempt=0){
+    updateAppHeight();
+    if(stableResizeTimer){ clearTimeout(stableResizeTimer); stableResizeTimer=0; }
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const size=getViewportSize();
+      if(size.width>0 && size.height>0){ resize(size); logFullscreenSnapshot(`[Viewport] ${reason}`); return; }
+      if(attempt<5) stableResizeTimer=setTimeout(()=>scheduleStableViewportResize(reason, attempt+1), 60);
+    }));
+  }
+  async function requestGameFullscreen(){
+    if(isStandaloneDisplay()){ scheduleStableViewportResize("standalone"); return true; }
+    if(fullscreenTransitioning) return false;
     const target=fullscreenTarget || document.documentElement;
-    console.log(`[Fullscreen] target: ${target.id || target.tagName.toLowerCase()}`);
-    if(document.fullscreenElement){
-      await lockLandscapeSafe();
-      logFullscreenSnapshot();
-      return true;
-    }
+    if(document.fullscreenElement || document.webkitFullscreenElement){ scheduleStableViewportResize("already-fullscreen"); return true; }
     if(!target.requestFullscreen) return false;
-    console.log("[Fullscreen] request start");
+    fullscreenTransitioning=true;
     try{
       await target.requestFullscreen({navigationUI:"hide"});
       await lockLandscapeSafe();
       if(fullscreenRetryBtn) fullscreenRetryBtn.hidden=true;
-      fullscreenInterrupted=false;
-      setPauseMessage("");
-      resize();
-      console.log("[Fullscreen] request success");
-      return true;
+      fullscreenInterrupted=false; setPauseMessage(""); scheduleStableViewportResize("request-success"); return true;
     }catch(e){
       console.log("[Fullscreen] request failed", e);
       if(fullscreenRetryBtn && isMobileViewport()) fullscreenRetryBtn.hidden=false;
-      return false;
-    }
+      scheduleStableViewportResize("request-failed"); return false;
+    }finally{ fullscreenTransitioning=false; }
   }
-
-  function requestFullscreenSafe(){
-    if(document.fullscreenElement){
-      if(document.exitFullscreen) document.exitFullscreen().catch(()=>{});
-      return;
-    }
-    requestFullscreenEnter();
+  async function exitGameFullscreen(){
+    if(isStandaloneDisplay()){ scheduleStableViewportResize("standalone-exit"); return true; }
+    if(fullscreenTransitioning) return false;
+    if(!document.fullscreenElement || !document.exitFullscreen) return true;
+    fullscreenTransitioning=true;
+    try{ await document.exitFullscreen(); return true; }catch(e){ console.log("[Fullscreen] exit failed", e); return false; }
+    finally{ fullscreenTransitioning=false; scheduleStableViewportResize("exit"); }
+  }
+  async function requestFullscreenEnter(){ return requestGameFullscreen(); }
+  function requestFullscreenSafe(){ if(document.fullscreenElement || document.webkitFullscreenElement) exitGameFullscreen(); else requestGameFullscreen(); }
+  function handleFullscreenChange(){
+    releaseMobilePointers(); keys.MouseLeft=false; scratchHeld=false; filterHeld=false; mouseDownRight=false; fullscreenInterrupted=false; fullscreenTransitioning=false;
+    const inFullscreen=!!(document.fullscreenElement || document.webkitFullscreenElement) || isStandaloneDisplay();
+    if(fullscreenRetryBtn) fullscreenRetryBtn.hidden=inFullscreen || !isMobileViewport();
+    if(!inFullscreen){ try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){} }
+    scheduleStableViewportResize("fullscreenchange");
   }
   function beatNow(){return Math.max(0, now()/(BEAT*CHART_STRETCH));}
   function updateEditorStatus(){
@@ -4720,7 +4814,7 @@ settingsOrigin=${settingsOrigin}`);
   bindPress(addCutBtn,()=>addEditorNote("cut"));bindPress(addSwingCWBtn,()=>addEditorNote("swingCW"));bindPress(addSwingCCWBtn,()=>addEditorNote("swingCCW"));bindPress(addFxBtn,()=>addEditorNote("fx"));bindPress(addSlideCWBtn,()=>addEditorNote("slideCW"));bindPress(addSlideCCWBtn,()=>addEditorNote("slideCCW"));bindPress(addScratchCWBtn,()=>addEditorNote("scratchCW"));bindPress(addScratchCCWBtn,()=>addEditorNote("scratchCCW"));
   bindPress(seekBackBtn,()=>{song.currentTime=Math.max(0,song.currentTime-1);updateEditorStatus();});
   bindPress(seekFwdBtn,()=>{song.currentTime=Math.min(song.duration||999,song.currentTime+1);updateEditorStatus();});
-  bindPress(playPauseBtn,()=>{ensureAudioCtx();applyMusicVolume();if(song.paused)song.play().catch(()=>{});else song.pause();updateEditorStatus();});
+  bindPress(playPauseBtn,()=>{ensureAudioCtx();applyMusicVolume();if(song.paused)playSong("play").catch(()=>{});else pauseSong("pause");updateEditorStatus();});
   bindPress(deleteLastBtn,()=>{customChartData.pop();rebuildCustomChart();});
   bindPress(exportBtn,exportChart);bindPress(importBtn,importChart);
   bindPress(clearChartBtn,()=>{customChartData=[];useCustomChart=false;rebuildCustomChart();});
@@ -4876,7 +4970,7 @@ settingsOrigin=${settingsOrigin}`);
     if(e.code==="Space"||e.code==="KeyZ"||e.code==="KeyX"){e.preventDefault(); tutorialState.activeInput="keyboard"; tutorialState.lastSource="keyboard"; if(!e.repeat)onCut();}
     if(e.code==="F3"&&!e.repeat){e.preventDefault();toggleDebugOverlay();}
     if(e.code==="KeyO"&&!e.repeat){toggleAuto("keyboard");}
-    if(e.code==="KeyP"&&!e.repeat){ ensureAudioCtx(); applyMusicVolume(); if(song.paused) song.play().catch(()=>{}); else song.pause(); }
+    if(e.code==="KeyP"&&!e.repeat){ ensureAudioCtx(); applyMusicVolume(); if(song.paused) playSong("play").catch(()=>{}); else pauseSong("pause"); }
     if(e.code==="KeyS"&&!e.repeat){ sfxEnabled=!sfxEnabled; updateButtons(); }
     if(e.code==="Minus"&&!e.repeat){ changeSfx(-0.20); }
     if(e.code==="Equal"&&!e.repeat){ changeSfx(+0.20); }
@@ -4962,7 +5056,7 @@ settingsOrigin=${settingsOrigin}`);
       if(running && !paused){
         orientationPaused = true;
         paused = true;
-        try{ song.pause(); }catch(e){}
+        try{ pauseSong("pause"); }catch(e){}
         if(raf){ cancelAnimationFrame(raf); raf = 0; }
       }
       if(running || pendingMobileStartMode) setRotateOverlay(true);
@@ -5023,10 +5117,10 @@ settingsOrigin=${settingsOrigin}`);
         <div class="songMeta"><span>${artist}</span><strong>${songTitle}</strong><em>${bpm} BPM</em><small>${diffs || "NO CHART"}</small></div></button>${manage}
       </div>`;
     }).join("") : `<div class="localEmpty"><p>로컬 라이브러리가 비어 있습니다. 에디터에서 곡을 만들어주세요.</p><button class="songPlayBtn" id="openEditorFromEmpty" type="button">OPEN EDITOR</button></div>`);
-    for(const tab of songCarousel.querySelectorAll(".songTab")){ bindPress(tab,async()=>{ songTab=tab.dataset.tab; selectedSource=songTab==="local"?"local":"builtin"; if(selectedSource==="local"){ selectedSongId=null; selectedDifficultyId=null; selectedSong=null; }else{ selectedSongId="anima"; selectedDifficultyId="tech"; } try{ song.pause(); song.currentTime=0; }catch(e){} await songs.refreshLocal(); renderSongSelect(); }); }
+    for(const tab of songCarousel.querySelectorAll(".songTab")){ bindPress(tab,async()=>{ songTab=tab.dataset.tab; selectedSource=songTab==="local"?"local":"builtin"; if(selectedSource==="local"){ selectedSongId=null; selectedDifficultyId=null; selectedSong=null; }else{ selectedSongId="anima"; selectedDifficultyId="tech"; } try{ pauseSong("reset"); setSongCurrentTime(0,"reset"); }catch(e){} await songs.refreshLocal(); renderSongSelect(); }); }
     const emptyBtn=document.getElementById("openEditorFromEmpty"); if(emptyBtn) bindPress(emptyBtn,()=>{ location.href="./editor.html"; });
     for(const card of songCarousel.querySelectorAll(".songCardPick")){
-      bindPress(card,()=>{ try{ song.pause(); song.currentTime=0; }catch(e){} resolveSelectedSong(card.dataset.songId, selectedSource); selectedDifficultyId=null; renderSongSelect(); });
+      bindPress(card,()=>{ try{ pauseSong("reset"); setSongCurrentTime(0,"reset"); }catch(e){} resolveSelectedSong(card.dataset.songId, selectedSource); selectedDifficultyId=null; renderSongSelect(); });
     }
     for(const btn of songCarousel.querySelectorAll(".songManage button")){
       bindPress(btn,async()=>{ const id=btn.dataset.songId, action=btn.dataset.action; const rec=await window.CircleMixLocalSongs.get(id); if(!rec)return; if(action==="delete"){ if(confirm(`${rec.title}을(를) 삭제할까요? 오디오와 모든 채보도 함께 삭제됩니다.`)){ await window.CircleMixLocalSongs.delete(id); await songs.refreshLocal(); selectedSongId=null; selectedDifficultyId=null; selectedSong=null; renderSongSelect(); } } if(action==="clone"){ const copy={...rec,id:rec.id+"-copy",title:rec.title+" Copy",updatedAt:new Date().toISOString()}; await window.CircleMixLocalSongs.put(copy); await songs.refreshLocal(); resolveSelectedSong(copy.id,"local"); renderSongSelect(); } if(action==="rename"){ const title=prompt("곡명",rec.title); if(title===null)return; const artist=prompt("아티스트",rec.artist||""); if(artist===null)return; await window.CircleMixLocalSongs.put({...rec,title:title.trim()||rec.title,artist:artist.trim()||rec.artist,updatedAt:new Date().toISOString()}); await songs.refreshLocal(); renderSongSelect(); } });
@@ -5053,7 +5147,7 @@ settingsOrigin=${settingsOrigin}`);
     cacheDynamicDomRefs(songDifficulty);
     startSongPreview();
     const songAutoBtn=domCache.songAutoBtn;
-    bindPress(songAutoBtn,()=>{ toggleAuto("song-select"); renderSongSelect(); });
+    bindPress(songAutoBtn,()=>{ toggleAuto("song-select"); });
     if(songPlayBtn) songPlayBtn.disabled = !buildPlayRequest();
   }
 
@@ -5241,7 +5335,7 @@ running=${running}`);
       safeSetState("game", "start wrapper mobile rotate");
       document.body.classList.add("safeClean");
       setRotateOverlay(true);
-      try{ song.pause(); }catch(e){}
+      try{ pauseSong("pause"); }catch(e){}
       return;
     }
     pendingMobileStartMode = null;
@@ -5339,20 +5433,16 @@ running=${running}`);
   bindPress(songSelectBack,()=>showTitleMenu());
   bindPress(songPlayBtn,(e)=>startSelectedSong(e));
 
-  window.addEventListener("resize",()=>{ releaseMobilePointers(); handlePlayOrientation(); });
-  window.addEventListener("orientationchange", () => { releaseMobilePointers(); setTimeout(handlePlayOrientation, 80); });
+  window.addEventListener("resize",()=>{ releaseMobilePointers(); scheduleStableViewportResize("resize"); handlePlayOrientation(); });
+  window.addEventListener("orientationchange", () => { releaseMobilePointers(); keys.MouseLeft=false; scratchHeld=false; filterHeld=false; mouseDownRight=false; scheduleStableViewportResize("orientationchange"); setTimeout(handlePlayOrientation, 80); });
+  window.visualViewport?.addEventListener("resize",()=>scheduleStableViewportResize("visualViewport"));
+  document.addEventListener("touchmove", handleGameplayTouchMove, {passive:false});
 
 
   // Mobile fullscreen lifecycle handling is intentionally kept in this document so song select, play, and pause are scene changes instead of navigations.
-  document.addEventListener("fullscreenchange",()=>{
-    const inFullscreen=!!document.fullscreenElement;
-    fullscreenInterrupted=false;
-    if(fullscreenRetryBtn) fullscreenRetryBtn.hidden=inFullscreen || !isMobileViewport();
-    if(!inFullscreen){ try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){} }
-    resize();
-    requestAnimationFrame(()=>logFullscreenSnapshot(`[Fullscreen] change: ${inFullscreen}`));
-  });
-  document.addEventListener("fullscreenerror",()=>{ if(fullscreenRetryBtn && isMobileViewport()) fullscreenRetryBtn.hidden=false; });
+  document.addEventListener("fullscreenchange",handleFullscreenChange);
+  document.addEventListener("webkitfullscreenchange",handleFullscreenChange);
+  document.addEventListener("fullscreenerror",()=>{ fullscreenTransitioning=false; if(fullscreenRetryBtn && isMobileViewport()) fullscreenRetryBtn.hidden=false; scheduleStableViewportResize("fullscreenerror"); });
 
   cacheDynamicDomRefs();
   safeSetState("title", "initial load");

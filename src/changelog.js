@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.3",
+    date: "2026-07-18",
+    title: "Mobile Play Regression Hotfix",
+    summary: "모바일 AUTO 오디오 재시작, 전체화면 검은 화면, 게임 중 페이지 스크롤 문제를 수정",
+    changes: [
+      { category: "AUTO", text: "AUTO 상태 변경을 단일 함수로 통합하고 곡 선택 AUTO 버튼이 미리듣기와 화면 재렌더링을 재시작하지 않게 수정" },
+      { category: "AUDIO", text: "미리듣기 세션 토큰과 단일 타이머 관리로 stale preview 재시작을 차단하고 모바일 디버그 오디오 카운터를 추가" },
+      { category: "MOBILE", text: "전체화면 전환 lock, 안정 viewport resize, gameplay scroll lock으로 검은 화면과 플레이 중 페이지 스크롤을 방지" }
+    ]
+  },
+  {
     version: "0.9.2",
     date: "2026-07-18",
     title: "Ghost Rule TRACE Entry Polish",
