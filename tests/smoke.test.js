@@ -100,7 +100,13 @@ assert.match(sw, /status:206/);
 assert.doesNotMatch(sw, /cacheExisting\([\s\S]*catch\(\)=>/);
 });
 
-test("manifest keeps SVG-only icon in binary-free offline hotfix", () => {
+test("manifest references installable PNG and SVG icons", () => {
 const manifest = JSON.parse(fs.readFileSync("manifest.webmanifest", "utf8"));
-assert.deepEqual(manifest.icons, [{src:"./icons/circle-mix-icon.svg", sizes:"any", type:"image/svg+xml", purpose:"any maskable"}]);
+assert.deepEqual(manifest.icons, [
+{src:"./icons/circle-mix-icon-192.png", sizes:"192x192", type:"image/png", purpose:"any"},
+{src:"./icons/circle-mix-icon-512.png", sizes:"512x512", type:"image/png", purpose:"any"},
+{src:"./icons/circle-mix-icon-maskable-512.png", sizes:"512x512", type:"image/png", purpose:"maskable"},
+{src:"./icons/circle-mix-icon.svg", sizes:"any", type:"image/svg+xml", purpose:"any"}
+]);
+for(const icon of manifest.icons) assert.ok(fs.existsSync(icon.src.replace(/^\.\//, "")), `${icon.src} exists`);
 });
