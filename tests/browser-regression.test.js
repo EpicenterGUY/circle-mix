@@ -31,6 +31,45 @@ async function measureLoop(page, ms=700){
   const after = await page.evaluate(() => window.CircleMixTestApi.state());
   return {before, after, frameDelta: after.frameCount-before.frameCount, renderDelta: after.renderCount-before.renderCount, timeDelta: after.gameTime-before.gameTime, wallTimeDelta: after.browserNow-before.browserNow};
 }
+async function waitForStableCircleMixPage(page, label){
+  for(let attempt=0; attempt<4; attempt++){
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(() => document.readyState !== 'loading', null, {timeout:10000});
+    const serviceWorkerSupported = await page.evaluate(() => 'serviceWorker' in navigator);
+    if(serviceWorkerSupported){
+      await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
+      await page.waitForFunction(() => !!navigator.serviceWorker.controller, null, {timeout:10000});
+    }
+    await page.waitForFunction(() => {
+      const api = window.CircleMixTestApi;
+      return document.readyState !== 'loading' &&
+        typeof api === 'object' &&
+        typeof api.startTutorial === 'function' &&
+        (!('serviceWorker' in navigator) || !!navigator.serviceWorker.controller);
+    }, null, {timeout:10000});
+    const beforeTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+    await wait(250);
+    const stable = await page.evaluate(timeOrigin => {
+      const api = window.CircleMixTestApi;
+      return performance.timeOrigin === timeOrigin &&
+        document.readyState !== 'loading' &&
+        typeof api === 'object' &&
+        typeof api.startTutorial === 'function' &&
+        (!('serviceWorker' in navigator) || !!navigator.serviceWorker.controller);
+    }, beforeTimeOrigin).catch(() => false);
+    if(stable) return;
+  }
+  const state = await page.evaluate(() => ({
+    readyState: document.readyState,
+    hasApi: typeof window.CircleMixTestApi,
+    hasStartTutorial: typeof window.CircleMixTestApi?.startTutorial,
+    serviceWorkerSupported: 'serviceWorker' in navigator,
+    serviceWorkerControlled: !!navigator.serviceWorker?.controller,
+    href: location.href,
+    timeOrigin: performance.timeOrigin
+  })).catch(error => ({stateReadError:error.message}));
+  throw new Error(`Timed out waiting for stable CIRCLE MIX page (${label}); state=${JSON.stringify(state)}`);
+}
 async function lanePoint(page, lane){ return page.evaluate(l => window.CircleMixTestApi.lanePoint(l), lane); }
 async function moveToLane(page, lane){ const p = await lanePoint(page, lane); await page.mouse.move(p.x, p.y); return p; }
 async function collectErrors(page){
@@ -158,10 +197,14 @@ async function dismissStartupOverlays(page){
     const page = await desktop.newPage();
     const errors = await collectErrors(page);
     await page.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
-    await waitFor(page, () => !!window.CircleMixTestApi, 'desktop test api');
+    await waitForStableCircleMixPage(page, 'desktop');
     await dismissStartupOverlays(page);
 
-    await page.evaluate(() => window.CircleMixTestApi.startTutorial());
+    await page.evaluate(() => {
+      const api = window.CircleMixTestApi;
+      if(!api || typeof api.startTutorial !== 'function') throw new Error('CircleMixTestApi.startTutorial is not ready');
+      api.startTutorial();
+    });
     await waitFor(page, () => window.CircleMixTestApi.state().tutorialMode, 'tutorial mode');
     assert.equal(await page.evaluate(() => window.CircleMixTestApi.state().chartLength), 0, 'first AIM tutorial step has no chart notes');
     const stillMouseLoop = await measureLoop(page, 800);
@@ -295,9 +338,13 @@ async function dismissStartupOverlays(page){
     const mobilePage = await mobile.newPage();
     const mobileErrors = await collectErrors(mobilePage);
     await mobilePage.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
-    await waitFor(mobilePage, () => !!window.CircleMixTestApi, 'mobile test api');
+    await waitForStableCircleMixPage(mobilePage, 'mobile');
     await dismissStartupOverlays(mobilePage);
-    await mobilePage.evaluate(() => window.CircleMixTestApi.startTutorial());
+    await mobilePage.evaluate(() => {
+      const api = window.CircleMixTestApi;
+      if(!api || typeof api.startTutorial !== 'function') throw new Error('CircleMixTestApi.startTutorial is not ready');
+      api.startTutorial();
+    });
     await waitFor(mobilePage, () => window.CircleMixTestApi.state().tutorialMode, 'mobile tutorial');
     await waitFor(mobilePage, () => !document.getElementById('rotateOverlay')?.classList.contains('show'), 'mobile rotate overlay hidden');
     const gameBox = await mobilePage.locator('#game').boundingBox();
