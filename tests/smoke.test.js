@@ -82,3 +82,23 @@ assert.equal(api.getActiveDifficultyLabel(local,"custom"), "CUSTOM");
 assert.doesNotThrow(()=>api.difficultyViewForSong(local,"custom"));
 assert.doesNotThrow(()=>api.renderSongSelect());
 });
+
+
+test("service worker offline integrity contract", () => {
+const sw = fs.readFileSync("service-worker.js", "utf8");
+assert.match(sw, /const APP_SHELL_URLS = \[/);
+assert.match(sw, /const BUILTIN_OFFLINE_URLS = \[\]/);
+assert.match(sw, /requiredCount/);
+assert.match(sw, /cachedCount/);
+assert.match(sw, /missing/);
+assert.match(sw, /OFFLINE_VERIFYING/);
+assert.match(sw, /OFFLINE_FAILED[\s\S]*failures/);
+assert.match(sw, /Content-Range/);
+assert.match(sw, /status:206/);
+assert.doesNotMatch(sw, /cacheExisting\([\s\S]*catch\(\)=>/);
+});
+
+test("manifest keeps SVG-only icon in binary-free offline hotfix", () => {
+const manifest = JSON.parse(fs.readFileSync("manifest.webmanifest", "utf8"));
+assert.deepEqual(manifest.icons, [{src:"./icons/circle-mix-icon.svg", sizes:"any", type:"image/svg+xml", purpose:"any maskable"}]);
+});

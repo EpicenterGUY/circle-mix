@@ -7,6 +7,18 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.8.3",
+    date: "2026-07-18",
+    title: "Offline Data Integrity Hotfix",
+    summary: "OFFLINE DATA가 필수 앱 shell과 내장 재생 자산을 검증한 뒤에만 READY가 되도록 수정",
+    changes: [
+      { category: "OFFLINE", text: "서비스 워커가 APP shell과 내장 오프라인 필수 자산을 분리해 저장하고 누락 URL을 OFFLINE_FAILED/OFFLINE_STATUS로 보고" },
+      { category: "OFFLINE", text: "OFFLINE_STATUS가 현재 버전 캐시의 모든 필수 URL을 검사해 READY, INCOMPLETE, UPDATE REQUIRED 상태를 구분" },
+      { category: "AUDIO", text: "캐시된 완전한 오디오 200 응답에서 Range 요청을 206 Partial Content로 응답하는 경로를 추가" },
+      { category: "PWA", text: "현재 SVG 아이콘만 유지하고 바이너리 아이콘 생성 없이 오프라인 상태 UI를 정리" }
+    ]
+  },
+  {
     version: "0.8.2",
     date: "2026-07-18",
     title: "PWA Offline Install Pass",
