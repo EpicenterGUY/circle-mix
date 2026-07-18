@@ -205,8 +205,16 @@
     }catch(e){ return {aimStabilizer:"LOW", mobileQuality:"AUTO", haptic:false}; }
   }
   function saveInputSettings(){ try{ localStorage.setItem(INPUT_SETTINGS_KEY, JSON.stringify(inputSettings)); }catch(e){} }
+  function effectiveEffectMode(){
+    if(isCoarsePointerMobile() && (getMobileQuality()==="PERFORMANCE" || SESSION_QUALITY.effectMode==="PERFORMANCE")) return "PERFORMANCE";
+    return visualSettings.effectIntensity;
+  }
   function visualScale(kind){
-    if(kind==="effect") return visualSettings.effectIntensity==="LOW"?.55:(visualSettings.effectIntensity==="HIGH"?1.15:.82);
+    if(kind==="effect"){
+      const mode=effectiveEffectMode();
+      if(mode==="PERFORMANCE") return .42;
+      return mode==="LOW"?.55:(mode==="HIGH"?1.15:.82);
+    }
     if(kind==="path") return visualSettings.pathBrightness==="LOW"?.72:(visualSettings.pathBrightness==="HIGH"?1.22:1);
     return visualSettings.noteContrast==="HIGH"?1.12:1;
   }
@@ -220,7 +228,7 @@
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
   let actualHitValue=0, maxHitValue=0;
-  let chart=[], feedback=[], particles=[], waves=[], ringBursts=[], scratchBursts=[];
+  let chart=[], chartLastHitEnd=0, feedback=[], particles=[], waves=[], ringBursts=[], scratchBursts=[];
   const gameState={autoEnabled:false};
   let mapMode="tech";
   let mouseX=0, mouseY=0;
@@ -275,6 +283,12 @@
   const MOBILE_EFFECT_LIMITS={particles:120,feedback:32,waves:20,ringBursts:12,scratchBursts:10};
   const DESKTOP_EFFECT_LIMITS={particles:360,feedback:96,waves:64,ringBursts:40,scratchBursts:32};
   const hudCache={lastAt:0,score:null,combo:null,accuracy:null};
+  const SESSION_QUALITY={autoDprCap:1.5,effectMode:"NORMAL",lastDropAt:0,startedAt:0};
+  const perfEnabled=new URLSearchParams(window.location.search).get("perf")==="1";
+  const perfStats={el:null,lastMs:0,lastPaint:0,samples:0,totalFrame:0,maxFrame:0,longFrames:0,fpsFrames:0,fpsAt:0,fps:0,visibleNotes:0};
+  const autoQualityStats={windowAt:0,samples:0,totalFrame:0,longFrames:0};
+  const renderWindow={start:0,end:0,notes:[]};
+  const domCache={songAutoBtn:null,songAutoState:null,hudSongTitle:null};
 
 
   function sourceKey(songData=selectedSong){ return (songData?.source==="local" || selectedSource==="local") ? "local" : "builtin"; }
@@ -334,7 +348,7 @@
       const quality=getMobileQuality();
       if(quality==="HIGH") return Math.min(nativeDpr,2);
       if(quality==="PERFORMANCE") return 1;
-      return Math.min(nativeDpr,1.5);
+      return Math.min(nativeDpr,SESSION_QUALITY.autoDprCap);
     }
     return Math.min(nativeDpr,2);
   }
@@ -343,6 +357,7 @@
     document.body.classList.toggle("mobileStandalone", mobile);
     document.body.classList.toggle("mobileQualityPerformance", mobile&&getMobileQuality()==="PERFORMANCE");
     document.body.classList.toggle("mobileQualityHigh", mobile&&getMobileQuality()==="HIGH");
+    document.body.classList.toggle("mobileQualityAutoDegraded", mobile&&getMobileQuality()==="AUTO"&&(SESSION_QUALITY.autoDprCap<1.5||SESSION_QUALITY.effectMode==="PERFORMANCE"));
   }
 
   function resize(){
@@ -2018,7 +2033,13 @@
   function activeHold(n,t){return (n.type==="fx"||n.type.startsWith("slide"))&&t>=n.hitTime&&t<=n.hitTime+n.duration;}
 
   function trimVisualArray(arr,limit){ while(arr.length>limit) arr.shift(); }
-  function visualLimits(){ return isCoarsePointerMobile()?MOBILE_EFFECT_LIMITS:DESKTOP_EFFECT_LIMITS; }
+  function visualLimits(){
+    if(!isCoarsePointerMobile()) return DESKTOP_EFFECT_LIMITS;
+    const quality=getMobileQuality();
+    if(quality==="HIGH" && SESSION_QUALITY.effectMode!=="PERFORMANCE") return MOBILE_EFFECT_LIMITS;
+    if(quality==="PERFORMANCE" || SESSION_QUALITY.effectMode==="PERFORMANCE") return {particles:60,feedback:20,waves:8,ringBursts:5,scratchBursts:4};
+    return {particles:90,feedback:26,waves:14,ringBursts:8,scratchBursts:6};
+  }
   function addFeedback(text,x,y,color){feedback.push({text,x,y,color,life:.28});trimVisualArray(feedback,visualLimits().feedback);}
   function addParticles(x,y,color,count=12,power=1){
     for(let i=0;i<count;i++){
@@ -3565,29 +3586,50 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function formatMobileQuality(){ return "MOBILE QUALITY " + getMobileQuality(); }
   function formatHaptic(){ return "HAPTIC " + (inputSettings.haptic?"ON":"OFF"); }
-  function cycleMobileQuality(){ const i=MOBILE_QUALITY_MODES.indexOf(getMobileQuality()); inputSettings.mobileQuality=MOBILE_QUALITY_MODES[(i+1)%MOBILE_QUALITY_MODES.length]; saveInputSettings(); resize(); }
-  function toggleHaptic(){ inputSettings.haptic=!inputSettings.haptic; saveInputSettings(); }
+  function cycleMobileQuality(){ const i=MOBILE_QUALITY_MODES.indexOf(getMobileQuality()); inputSettings.mobileQuality=MOBILE_QUALITY_MODES[(i+1)%MOBILE_QUALITY_MODES.length]; SESSION_QUALITY.autoDprCap=1.5; SESSION_QUALITY.effectMode="NORMAL"; saveInputSettings(); resize(); refreshStaticUi(); }
+  function toggleHaptic(){ inputSettings.haptic=!inputSettings.haptic; saveInputSettings(); refreshStaticUi(); }
 
   function setTextIfChanged(el,value){ if(!el) return; const v=String(value); if(el.textContent!==v) el.textContent=v; }
-  function updateButtons(){
-    applyMusicVolume();
-    autoBox.textContent=gameState.autoEnabled?"AUTO ON":"AUTO OFF";
-    const songAutoBtn=document.querySelector("[data-auto-play]");
-    if(songAutoBtn){
-      songAutoBtn.classList.toggle("on",gameState.autoEnabled);
-      songAutoBtn.innerHTML=`AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span>`;
-    }
-    const hudSongTitle = document.querySelector(".hudSong span");
+  function cacheDynamicDomRefs(root=document){
+    domCache.songAutoBtn=root.querySelector ? root.querySelector("[data-auto-play]") : null;
+    domCache.songAutoState=domCache.songAutoBtn ? domCache.songAutoBtn.querySelector("span") : null;
+    domCache.hudSongTitle=document.querySelector(".hudSong span");
+  }
+  function updateLiveHud(liveStats){
+    score = tutorialMode ? 0 : liveStats.score;
+    const hudNow=performance.now();
+    const nextScore=Math.floor(score);
+    const nextAccuracy=(liveStats.accuracy*100).toFixed(2)+"%";
+    if(hudNow-hudCache.lastAt<=66 && hudCache.score===nextScore && hudCache.combo===combo && hudCache.accuracy===nextAccuracy) return;
+    hudCache.lastAt=hudNow;
+    hudCache.score=nextScore; hudCache.combo=combo; hudCache.accuracy=nextAccuracy;
+    setTextIfChanged(scoreBox,hudCache.score);
+    setTextIfChanged(comboBox,hudCache.combo);
+    setTextIfChanged(accuracyBox,hudCache.accuracy);
     if(tutorialMode){
       const st=tutorialSteps[tutorialStepIndex];
-      if(hudSongTitle) hudSongTitle.textContent = "TUTORIAL";
+      if(domCache.hudSongTitle) setTextIfChanged(domCache.hudSongTitle,"TUTORIAL");
+      setTextIfChanged(mapBox, st ? `STEP ${tutorialStepIndex+1} / ${tutorialSteps.length}` : "STEP");
+      if(difficultyBox) setTextIfChanged(difficultyBox, st?.name || "");
+    }
+  }
+  function refreshStaticUi(){
+    applyMusicVolume();
+    autoBox.textContent=gameState.autoEnabled?"AUTO ON":"AUTO OFF";
+    if(domCache.songAutoBtn){
+      domCache.songAutoBtn.classList.toggle("on",gameState.autoEnabled);
+      if(domCache.songAutoState) setTextIfChanged(domCache.songAutoState,gameState.autoEnabled ? "ON" : "OFF");
+    }
+    if(tutorialMode){
+      const st=tutorialSteps[tutorialStepIndex];
+      if(domCache.hudSongTitle) setTextIfChanged(domCache.hudSongTitle,"TUTORIAL");
       mapBox.textContent = st ? `STEP ${tutorialStepIndex+1} / ${tutorialSteps.length}` : "STEP";
       if(difficultyBox) difficultyBox.textContent = st?.name || "";
     }else{
       const difficultyLabel=getActiveDifficultyLabel(selectedSong,mapMode);
       const hudModeLabel = difficultyLabel + " " + formatDifficulty(mapMode);
       mapBox.textContent=((selectedSong?.title || "") + " · " + hudModeLabel).trim();
-      if(hudSongTitle) hudSongTitle.textContent = "";
+      if(domCache.hudSongTitle) domCache.hudSongTitle.textContent = "";
       if(difficultyBox) difficultyBox.textContent=difficultyLabel + " " + formatDifficulty(mapMode);
     }
     autoToggle.textContent=gameState.autoEnabled?"AUTO ON":"AUTO OFF";
@@ -3607,6 +3649,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(pauseSetHaptic) pauseSetHaptic.textContent = formatHaptic();
     if(typeof safeRefresh === "function") safeRefresh();
   }
+  const updateButtons=refreshStaticUi;
 
 
   function hideResult(){
@@ -3826,7 +3869,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     tutorialState.transitioning=true; tutorialState.phaseCompleted=true;
     clearTutorialTimers(); tutorialAttemptId++;
     tutorialStepToken=runtime.token;
-    chart=[]; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
+    chart=[]; chartLastHitEnd=0; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
     tutorialStepIndex=runtime.index;
     const st=runtime.step; st._hit=0; st._done=false;
     resetTutorialRuntimeState();
@@ -3852,7 +3895,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
   function restoreTutorialAuto(){ gameState.autoEnabled=!!tutorialState.previousAutoEnabled; tutorialState.autoSuppressed=false; updateButtons(); safeRefresh&&safeRefresh(); }
-  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
+  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
   function completeTutorial(){ clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none"; }
   function updateTutorialAim(){
     const st=tutorialSteps[tutorialStepIndex];
@@ -4005,6 +4048,61 @@ endpointCaptured=${n.endpointCaptured===true}`);
     safeRefresh();
   }
 
+  function visibleEndTime(n){
+    if(n.type.startsWith("slide")) return n.hitTime+(n.duration||0)+.30;
+    if(n.duration>0 || n.type.startsWith("trace")) return n.hitTime+(n.duration||0)+.45;
+    return n.hitTime+.36;
+  }
+  function getVisibleNotes(t){
+    const startTime=t-0.50;
+    const endTime=t+APPROACH+0.08;
+    while(renderWindow.start<chart.length && visibleEndTime(chart[renderWindow.start])<startTime) renderWindow.start++;
+    let end=renderWindow.start;
+    while(end<chart.length && chart[end].spawnTime<=endTime) end++;
+    renderWindow.end=end;
+    const out=renderWindow.notes; out.length=0;
+    for(let i=renderWindow.start;i<end;i++){
+      const n=chart[i];
+      if(!n.done && !n.missed && t>=n.spawnTime-.02 && t<=visibleEndTime(n)) out.push(n);
+    }
+    perfStats.visibleNotes=out.length;
+    return out;
+  }
+  function ensurePerfOverlay(){
+    if(!perfEnabled || perfStats.el) return;
+    const el=document.createElement("div");
+    el.id="perfOverlay";
+    el.style.cssText="position:fixed;right:8px;bottom:8px;z-index:130000;background:rgba(0,0,0,.72);color:#8dfaff;font:11px/1.35 monospace;padding:8px;border:1px solid rgba(92,255,251,.45);border-radius:8px;pointer-events:none;white-space:pre";
+    document.body.appendChild(el); perfStats.el=el;
+  }
+  function updatePerfStats(ms,t){
+    const ft=Math.max(0,ms-(perfStats.lastMs||ms)); perfStats.lastMs=ms;
+    perfStats.samples++; perfStats.totalFrame+=ft; if(ft>perfStats.maxFrame) perfStats.maxFrame=ft; if(ft>=24) perfStats.longFrames++;
+    if(!autoQualityStats.windowAt) autoQualityStats.windowAt=ms;
+    autoQualityStats.samples++; autoQualityStats.totalFrame+=ft; if(ft>=24) autoQualityStats.longFrames++;
+    perfStats.fpsFrames++; if(!perfStats.fpsAt) perfStats.fpsAt=ms;
+    if(ms-perfStats.fpsAt>=1000){ perfStats.fps=Math.round(perfStats.fpsFrames*1000/(ms-perfStats.fpsAt)); perfStats.fpsFrames=0; perfStats.fpsAt=ms; }
+    maybeAutoDegrade(ms);
+    if(!perfEnabled || ms-perfStats.lastPaint<300) return;
+    ensurePerfOverlay(); perfStats.lastPaint=ms;
+    const avg=perfStats.samples ? perfStats.totalFrame/perfStats.samples : 0;
+    perfStats.el.textContent=`FPS ${perfStats.fps}\navg ${avg.toFixed(1)}ms max ${perfStats.maxFrame.toFixed(1)}ms long ${perfStats.longFrames}\nDPR ${currentRenderDpr} quality ${getMobileQuality()} ${SESSION_QUALITY.effectMode}\nnotes ${chart.length} visible ${perfStats.visibleNotes}\nparticles ${particles.length} feedback ${feedback.length}\nwaves ${waves.length} rings ${ringBursts.length} scratch ${scratchBursts.length}`;
+    perfStats.samples=0; perfStats.totalFrame=0; perfStats.maxFrame=0; perfStats.longFrames=0;
+  }
+  function maybeAutoDegrade(ms){
+    if(getMobileQuality()!=="AUTO" || !isCoarsePointerMobile() || ms-SESSION_QUALITY.startedAt<3000 || ms-SESSION_QUALITY.lastDropAt<10000) return;
+    if(ms-autoQualityStats.windowAt<3000) return;
+    const avg=autoQualityStats.samples ? autoQualityStats.totalFrame/autoQualityStats.samples : 0;
+    const longFrames=autoQualityStats.longFrames;
+    autoQualityStats.windowAt=ms; autoQualityStats.samples=0; autoQualityStats.totalFrame=0; autoQualityStats.longFrames=0;
+    if(avg<22 && longFrames<18) return;
+    if(SESSION_QUALITY.autoDprCap>1.25) SESSION_QUALITY.autoDprCap=1.25;
+    else if(SESSION_QUALITY.autoDprCap>1) SESSION_QUALITY.autoDprCap=1;
+    else SESSION_QUALITY.effectMode="PERFORMANCE";
+    SESSION_QUALITY.lastDropAt=ms;
+    resize();
+  }
+
   function songEndTime(){ if(selectedSong?.source==="local") return Math.max(song.duration||0, chart.at(-1)?.hitTime||0)+2; return SONG_END_TIME; }
 
   function frame(ms){
@@ -4012,8 +4110,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const dt=Math.min(.033,(ms-lastMs)/1000||.016);
     lastMs=ms; const t=now();
     if(tutorialMode){ updateTutorialAim(); setTutorialHud(); if(tutorialFailed()) return; }
-    const lastHitTime = chart.length ? Math.max(...chart.map(n=>n.hitTime + (n.duration || 0))) : 0;
-    const notesSettled = judgedCount >= chart.length || song.ended || t >= lastHitTime + HIT_WINDOW + 0.25;
+    const notesSettled = judgedCount >= chart.length || song.ended || t >= chartLastHitEnd + HIT_WINDOW + 0.25;
     if(!tutorialMode && (song.ended || t >= songEndTime()) && notesSettled){ scheduleCompletion(); }
     // Tutorial progression is event-driven by tutorialHandleJudgement().
     // Do not also advance from the render loop; that duplicate path caused
@@ -4037,31 +4134,23 @@ endpointCaptured=${n.endpointCaptured===true}`);
     // Tutorial uses only the note and its real guide. Landing ghosts, approach
     // rails and the focus halo are normal-play reading aids and caused several
     // translucent shapes to overlap in the lesson screen.
+    const visibleNotes=getVisibleNotes(t);
     if(!tutorialMode){
-      chart.forEach(n=>drawLandingGhost(n,t));
-      chart.forEach(n=>drawApproachRail(n,t));
+      for(let i=0;i<visibleNotes.length;i++) drawLandingGhost(visibleNotes[i],t);
+      for(let i=0;i<visibleNotes.length;i++) drawApproachRail(visibleNotes[i],t);
     }
     drawJudgeGuides(t);
     drawTutorialExploreTarget(t);
 
-    chart.forEach(n=>{if(n.type.startsWith("trace"))drawNote(n,t);});
-    chart.forEach(n=>{if(!n.type.startsWith("trace"))drawNote(n,t);});
+    for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(n.type.startsWith("trace"))drawNote(n,t); }
+    for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(!n.type.startsWith("trace"))drawNote(n,t); }
     if(!tutorialMode)drawFocusHalo(focusNote,t);
     drawArm();
     drawEffects(dt);
     updateDebugOverlay(t);
 
-    const liveStats = calculateScoreStats();
-    score = tutorialMode ? 0 : liveStats.score;
-    const hudNow=performance.now();
-    if(hudNow-hudCache.lastAt>66 || hudCache.score!==Math.floor(score) || hudCache.combo!==combo){
-      hudCache.lastAt=hudNow;
-      hudCache.score=Math.floor(score); hudCache.combo=combo; hudCache.accuracy=(liveStats.accuracy*100).toFixed(2)+"%";
-      setTextIfChanged(scoreBox,hudCache.score);
-      setTextIfChanged(comboBox,hudCache.combo);
-      setTextIfChanged(accuracyBox,hudCache.accuracy);
-      updateButtons();
-    }
+    updateLiveHud(calculateScoreStats());
+    updatePerfStats(ms,t);
     if(editorMode) updateEditorStatus();
     raf=requestAnimationFrame(frame);
   }
@@ -4084,6 +4173,12 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(editorPanel)editorPanel.classList.toggle("show",editorMode);
     useCustomChart=(selectedMenuMode==="custom" && customChartData.length>0);
     chart=generateChart();
+    chartLastHitEnd=0;
+    for(let i=0;i<chart.length;i++) chartLastHitEnd=Math.max(chartLastHitEnd,chart[i].hitTime+(chart[i].duration||0));
+    renderWindow.start=0; renderWindow.end=0; renderWindow.notes.length=0;
+    perfStats.lastMs=0; perfStats.lastPaint=0; perfStats.samples=0; perfStats.totalFrame=0; perfStats.maxFrame=0; perfStats.longFrames=0; perfStats.fpsFrames=0; perfStats.fpsAt=0; perfStats.visibleNotes=0;
+    autoQualityStats.windowAt=0; autoQualityStats.samples=0; autoQualityStats.totalFrame=0; autoQualityStats.longFrames=0;
+    SESSION_QUALITY.autoDprCap=1.5; SESSION_QUALITY.effectMode="NORMAL"; SESSION_QUALITY.lastDropAt=0; SESSION_QUALITY.startedAt=performance.now();
     if(debugMode) console.log(`[Start Chart]
 source=${activePlaySource}
 songId=${selectedSong?.id || "-"}
@@ -4833,7 +4928,8 @@ settingsOrigin=${settingsOrigin}`);
     for(const btn of songDifficulty.querySelectorAll(".songDiffBtn[data-difficulty]")){
       bindPress(btn,()=>{ selectedDifficultyId = btn.dataset.difficulty; selectedMenuMode = selectedDifficultyId; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });
     }
-    const songAutoBtn=songDifficulty.querySelector("[data-auto-play]");
+    cacheDynamicDomRefs(songDifficulty);
+    const songAutoBtn=domCache.songAutoBtn;
     bindPress(songAutoBtn,()=>{ toggleAuto("song-select"); renderSongSelect(); });
     if(songPlayBtn) songPlayBtn.disabled = !buildPlayRequest();
   }
@@ -5134,6 +5230,7 @@ running=${running}`);
   });
   document.addEventListener("fullscreenerror",()=>{ if(fullscreenRetryBtn && isMobileViewport()) fullscreenRetryBtn.hidden=false; });
 
+  cacheDynamicDomRefs();
   safeSetState("title", "initial load");
   safeRefresh();
   showTutorialPrompt();
