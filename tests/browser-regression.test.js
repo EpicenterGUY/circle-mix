@@ -56,29 +56,78 @@ function contentTypeFor(filePath){
 }
 function startStaticServer(rootDir, port=4173){
   const root = path.resolve(rootDir);
+  const sendText = (res, statusCode, text) => {
+    res.writeHead(statusCode, {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Length': Buffer.byteLength(text)
+    });
+    res.end(text);
+  };
   const server = http.createServer((req, res) => {
     try{
+      if(req.method !== 'GET' && req.method !== 'HEAD'){
+        res.writeHead(405, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Content-Length': 18,
+          'Allow': 'GET, HEAD'
+        });
+        res.end(req.method === 'HEAD' ? undefined : 'method not allowed');
+        return;
+      }
       const url = new URL(req.url, 'http://127.0.0.1');
       const pathname = decodeURIComponent(url.pathname);
       const relativePath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
       const filePath = path.resolve(root, relativePath);
       if(filePath !== root && !filePath.startsWith(root + path.sep)){
-        res.writeHead(403, {'Content-Type': 'text/plain; charset=utf-8'});
-        res.end('forbidden');
+        sendText(res, 403, 'forbidden');
         return;
       }
       fs.readFile(filePath, (error, data) => {
         if(error){
-          res.writeHead(404, {'Content-Type': 'text/plain; charset=utf-8'});
-          res.end('not found');
+          sendText(res, 404, 'not found');
           return;
         }
-        res.writeHead(200, {'Content-Type': contentTypeFor(filePath)});
-        res.end(data);
+        const headers = {
+          'Accept-Ranges': 'bytes',
+          'Content-Type': contentTypeFor(filePath)
+        };
+        const range = req.headers.range;
+        if(range){
+          const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+          const size = data.byteLength;
+          if(match && size > 0){
+            let start = match[1] ? Number(match[1]) : 0;
+            let end = match[2] ? Number(match[2]) : size - 1;
+            if(!match[1] && match[2]){
+              const suffix = Number(match[2]);
+              start = Math.max(0, size - suffix);
+              end = size - 1;
+            }
+            if(Number.isInteger(start) && Number.isInteger(end) && start <= end && start < size){
+              end = Math.min(end, size - 1);
+              const body = data.subarray(start, end + 1);
+              res.writeHead(206, {
+                ...headers,
+                'Content-Range': `bytes ${start}-${end}/${size}`,
+                'Content-Length': body.byteLength
+              });
+              res.end(req.method === 'HEAD' ? undefined : body);
+              return;
+            }
+          }
+          res.writeHead(416, {
+            ...headers,
+            'Content-Range': `bytes */${data.byteLength}`,
+            'Content-Length': 0
+          });
+          res.end();
+          return;
+        }
+        res.writeHead(200, {...headers, 'Content-Length': data.byteLength});
+        res.end(req.method === 'HEAD' ? undefined : data);
       });
     }catch(error){
-      res.writeHead(400, {'Content-Type': 'text/plain; charset=utf-8'});
-      res.end('bad request');
+      sendText(res, 400, 'bad request');
     }
   });
   server.listen(port, '127.0.0.1');
