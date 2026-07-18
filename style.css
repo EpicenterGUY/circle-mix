@@ -397,15 +397,46 @@ body.playingClean .rhythmHud{min-width:0;padding:0;background:transparent}.guide
 .rotateOverlay.show{display:flex}.rotateCard{width:min(420px,calc(100vw - 32px));box-sizing:border-box;padding:24px;border-radius:24px;background:linear-gradient(180deg,rgba(6,14,32,.96),rgba(4,8,20,.90));border:1px solid rgba(92,255,251,.38);box-shadow:0 24px 80px rgba(0,0,0,.62),0 0 70px rgba(92,255,251,.16)}.rotateCard strong{display:block;font-size:24px;color:#fff;margin-bottom:8px}.rotateCard span{display:block;color:#b9cce6;font-size:14px;line-height:1.5}
 
 @media (max-width:768px){
-  html,body{width:100%;min-height:100%;overflow-x:hidden;overscroll-behavior:none}body.safeTitle,body.safeSettings{overflow-y:auto;touch-action:pan-y;background:#01030a}body.safeGame,body.playingClean{overflow:hidden;touch-action:none}
-  #safeMenu{align-items:flex-start;justify-content:center;min-height:100dvh;height:auto;overflow-y:auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom));box-sizing:border-box}
-  #safeMenu::after{width:min(120vw,560px)}.safeMenuCard{width:100%;max-width:560px;box-sizing:border-box;padding:20px 16px;border-radius:22px}.safeMenuLogo{font-size:clamp(32px,14vw,54px);line-height:.96;letter-spacing:.08em}.safeMenuLogo span{letter-spacing:.18em}.safeMenuSub{font-size:12px;line-height:1.45;margin:10px 0 14px;overflow-wrap:normal}.safeModePanel{grid-template-columns:repeat(2,minmax(128px,1fr));gap:10px;width:100%;box-sizing:border-box;margin:14px 0;padding:12px}.safeModePanel #safeAuto{grid-column:1/-1}.safeMenuGrid{grid-template-columns:repeat(2,minmax(128px,1fr));gap:10px;width:100%;box-sizing:border-box}.safeMenuBtn{min-height:44px;box-sizing:border-box;padding:12px 10px;font-size:12px;white-space:normal}.safeMenuBtn.big{grid-column:1/-1;min-height:52px;font-size:16px;white-space:nowrap}.safeMenuGrid #safeSettingsBtn{grid-column:1/-1}.safeMenuGrid #safeEditor,.safeMenuGrid #safeFull{display:none}body.debugMode .safeMenuGrid #safeEditor{display:block}
+  html,body{width:100%;min-height:100%;overflow-x:hidden;overscroll-behavior:none}body.safeTitle{width:100%;height:var(--app-height,100dvh);min-height:0;overflow:hidden;touch-action:none;background:#01030a}body.safeSettings{overflow-y:auto;touch-action:pan-y;background:#01030a}body.safeGame,body.playingClean{overflow:hidden;touch-action:none}
+  body.safeTitle #safeMenu{align-items:center;justify-content:center;width:100vw;height:var(--app-height,100dvh);min-height:0;overflow:hidden;overscroll-behavior:none;touch-action:none;padding:calc(12px + env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));box-sizing:border-box}
+  #safeMenu::after{width:min(120vw,560px)}body.safeTitle .safeMenuCard{width:min(100%,560px);max-width:560px;max-height:calc(var(--app-height,100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px);box-sizing:border-box;padding:clamp(12px,3.8vw,20px) clamp(10px,4vw,16px);border-radius:22px;overflow:hidden}.safeMenuLogo{font-size:clamp(28px,12vw,50px);line-height:.92;letter-spacing:.08em}.safeMenuLogo span{letter-spacing:.18em}.safeMenuSub{font-size:clamp(10px,3.35vw,12px);line-height:1.25;margin:clamp(6px,1.8vh,10px) 0 clamp(8px,2.3vh,14px);overflow-wrap:normal}.safeModePanel{grid-template-columns:repeat(2,minmax(118px,1fr));gap:clamp(6px,1.8vh,10px);width:100%;box-sizing:border-box;margin:clamp(8px,2.2vh,14px) 0;padding:clamp(8px,2.2vh,12px)}.safeModePanel #safeAuto{grid-column:1/-1}.safeMenuGrid{grid-template-columns:repeat(2,minmax(118px,1fr));gap:clamp(6px,1.8vh,10px);width:100%;box-sizing:border-box}.safeMenuBtn{min-height:clamp(36px,7.2vh,44px);box-sizing:border-box;padding:clamp(8px,2.1vh,12px) 8px;font-size:clamp(10px,3.2vw,12px);white-space:normal}.safeMenuBtn.big{grid-column:1/-1;min-height:clamp(40px,8vh,52px);font-size:clamp(13px,4vw,16px);white-space:nowrap}.safeMenuGrid #safeSettingsBtn{grid-column:auto}.safeMenuGrid #safeEditor,.safeMenuGrid #safeFull{display:none}body.debugMode .safeMenuGrid #safeEditor{display:block}
   .mobileControls{display:none !important}.quickMenu{right:10px;top:10px}.quickMenu .quickBtn:not(#quickSettingsBtn){display:none}body.debugMode.safeGame .quickMenu .quickBtn{display:inline-block}.debugToggleBtn{z-index:120001}
   #safeOverlay{align-items:flex-end;padding:0;background:rgba(0,0,0,.58);box-sizing:border-box}#safeOverlay.show{display:flex}.safeOverlayCard{width:100%;max-width:none;max-height:calc(100dvh - env(safe-area-inset-top) - 18px);overflow:auto;box-sizing:border-box;border-radius:24px 24px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));}.safeOverlayGrid{grid-template-columns:1fr 1fr;box-sizing:border-box}.safeFull{grid-column:1/-1}.safeOverlayTitle{font-size:22px}.safeSettingsHint{line-height:1.4}
   .keymapOverlay{z-index:120002;align-items:flex-end;padding:0;box-sizing:border-box}.keymapCard{width:100%;max-height:calc(100dvh - env(safe-area-inset-top) - 18px);box-sizing:border-box;border-radius:24px 24px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom));overflow:auto}.keyGrid{grid-template-columns:1fr;gap:6px;font-size:12px}.keyHead{display:none}.keyCell{padding:8px 10px}.closeKeymap{width:100%;min-height:44px}
   .bottom,.guide{display:none !important}.card,.ruleBox,.startModes,.modeSelect{width:100%;box-sizing:border-box}.card{padding:20px 16px}.card h2{font-size:clamp(22px,8vw,30px)}.modeSelect{display:grid;grid-template-columns:repeat(2,minmax(128px,1fr))}.modeBtn,.btn{min-height:44px}.modeSelect #modeCustomBtn{grid-column:1/-1}
 }
-@media (max-width:320px){.safeModePanel,.safeMenuGrid,.modeSelect{grid-template-columns:1fr}.safeMenuBtn.big{grid-column:1}.safeFull{grid-column:1}}
+@media (max-width:320px){body:not(.safeTitle) .safeModePanel,body:not(.safeTitle) .safeMenuGrid,.modeSelect{grid-template-columns:1fr}.safeMenuBtn.big{grid-column:1}.safeFull{grid-column:1}}
+@media (max-width:768px) and (max-height:700px){
+  body.safeTitle #safeMenu{padding:calc(8px + env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+  body.safeTitle .safeMenuCard{padding:10px 12px;max-height:calc(var(--app-height,100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 16px);border-radius:18px}
+  body.safeTitle .safeMenuLogo{font-size:clamp(24px,10vw,42px);line-height:.88}
+  body.safeTitle .safeMenuSub{font-size:10px;line-height:1.15;margin:5px 0 7px;letter-spacing:.07em}
+  body.safeTitle .safeMenuGrid,body.safeTitle .safeModePanel{gap:6px;margin-top:8px}
+  body.safeTitle .safeModePanel{padding:8px;margin-bottom:8px}
+  body.safeTitle .safeMenuBtn{min-height:34px;padding:7px 6px;font-size:10px;border-radius:12px}
+  body.safeTitle .safeMenuBtn.big{min-height:38px;font-size:13px}
+  body.safeTitle .pwaStatusPanel{margin-top:7px;gap:5px;font-size:9px;line-height:1.15}
+  body.safeTitle .pwaUpdateRow,body.safeTitle .safeVersionRow{margin-top:5px;font-size:9px}
+}
+@media (max-width:768px) and (max-height:560px){
+  body.safeTitle #safeMenu{padding:calc(5px + env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) calc(5px + env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}
+  body.safeTitle .safeMenuCard{padding:8px 10px;max-height:calc(var(--app-height,100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 10px);border-radius:16px}
+  body.safeTitle .safeMenuLogo{font-size:clamp(20px,8vh,34px);letter-spacing:.06em}
+  body.safeTitle .safeMenuSub{font-size:9px;line-height:1.08;margin:3px 0 5px}
+  body.safeTitle .safeMenuGrid{gap:5px;margin-top:6px}
+  body.safeTitle .safeModePanel{gap:5px;margin:5px 0;padding:6px}
+  body.safeTitle .safePanelLabel{font-size:9px}
+  body.safeTitle .safeMenuBtn{min-height:30px;padding:5px 5px;font-size:9px;border-radius:10px}
+  body.safeTitle .safeMenuBtn.big{min-height:32px;font-size:11px}
+  body.safeTitle .pwaStatusPanel{margin-top:5px;padding:5px;gap:4px;font-size:8px}
+  body.safeTitle .pwaStatusPanel small,body.safeTitle .pwaUpdateRow,body.safeTitle .safeVersionRow{font-size:8px}
+}
+@media (max-width:380px){
+  body.safeTitle .safeMenuLogo{font-size:clamp(24px,11vw,40px)}
+  body.safeTitle .safeMenuCard{padding-left:10px;padding-right:10px}
+  body.safeTitle .safeMenuGrid,body.safeTitle .safeModePanel{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 
 @media (max-width:932px) and (orientation:landscape){
   body.safeGame .rhythmHud,body.playingClean .rhythmHud{inset:calc(6px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) auto calc(10px + env(safe-area-inset-left));grid-template-columns:minmax(86px,1fr) minmax(160px,1.4fr) minmax(118px,1fr);grid-template-rows:auto;gap:6px;align-items:start}.hudScore{grid-column:1;grid-row:1}.hudSong{grid-column:2;grid-row:1}.hudStatus{grid-column:3;grid-row:1}.hudCombo{position:fixed;left:50%;top:calc(48px + env(safe-area-inset-top));transform:translateX(-50%);grid-column:auto;grid-row:auto;min-width:0;background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important;text-shadow:0 0 12px rgba(0,0,0,.8)}.rhythmHud>div{border-radius:10px;padding:5px 8px}.rhythmHud span{font-size:8px;letter-spacing:.12em}.rhythmHud strong{font-size:14px}.hudSong em,.hudStatus em{font-size:9px;letter-spacing:.08em}.hudCombo span{display:none}.hudCombo strong{font-size:18px;color:#fff}.miniHint{display:none}
@@ -444,8 +475,8 @@ body.debugMode.safeGame .quickMenu{
   display:flex !important;
 }
 body.safeTitle .safeMenuCard{
-  max-height:calc(100dvh - 32px);
-  overflow:auto;
+  max-height:calc(var(--app-height,100dvh) - 32px);
+  overflow:hidden;
 }
 body.safeTitle .safeMenuGrid{
   margin-top:18px;
@@ -866,7 +897,7 @@ body.updateLogOpen canvas{pointer-events:none !important}
 
 /* Mobile standalone play controls and performance reductions. */
 .mobileGameplayControls{position:fixed;inset:0;z-index:12;pointer-events:none;display:none}.mobilePlayBtn{position:fixed;bottom:max(16px,env(safe-area-inset-bottom));width:88px;height:88px;min-width:64px;min-height:64px;border-radius:999px;border:1px solid rgba(255,255,255,.26);background:rgba(6,18,38,.52);color:#eafcff;font-weight:1000;font-size:12px;letter-spacing:.08em;box-shadow:0 0 22px rgba(92,255,251,.18),inset 0 0 24px rgba(255,255,255,.06);backdrop-filter:blur(6px);touch-action:none;pointer-events:auto;user-select:none}.mobileActionBtn{right:max(18px,env(safe-area-inset-right));background:rgba(92,255,251,.24)}.mobileScratchBtn{left:max(18px,env(safe-area-inset-left));background:rgba(208,71,255,.24)}
-@media (pointer:coarse),(max-width:768px){body.safeGame .mobileGameplayControls{display:block}body.safeGame .mobileControls,body.safeGame .quickMenu,body.safeGame .tuner,body.safeGame .editorPanel,body.safeGame .guide,body.safeGame .bottom,body.safeGame #autoToggle,body.safeGame #mapToggle{display:none!important}body.safeTitle #safeMenu,body.safeSettings #safeOverlay,body.safeSongSelect .songSelect{align-items:flex-start;overflow:auto;padding-top:max(18px,env(safe-area-inset-top));padding-bottom:max(18px,env(safe-area-inset-bottom))}.safeMenuBtn,.songSelectBack,.songPlayBtn,.songDiffBtn{min-height:44px}body.safeGame .rhythmHud{inset:max(8px,env(safe-area-inset-top)) max(64px,env(safe-area-inset-right)) auto max(10px,env(safe-area-inset-left));grid-template-columns:minmax(86px,1fr) minmax(120px,1.25fr) minmax(86px,1fr);gap:4px 8px;font-size:10px}.rhythmHud strong{font-size:clamp(15px,3vw,22px)}.hudCombo{grid-column:2;justify-self:center}.hudStatus{text-align:right}.hudStatus em,#autoBox{display:none!important}.mobilePauseBtn{top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));background:rgba(2,9,22,.58);backdrop-filter:none}body.safeGame.needsLandscape .mobileGameplayControls{display:none}}
+@media (pointer:coarse),(max-width:768px){body.safeGame .mobileGameplayControls{display:block}body.safeGame .mobileControls,body.safeGame .quickMenu,body.safeGame .tuner,body.safeGame .editorPanel,body.safeGame .guide,body.safeGame .bottom,body.safeGame #autoToggle,body.safeGame #mapToggle{display:none!important}body.safeSettings #safeOverlay,body.safeSongSelect .songSelect{align-items:flex-start;overflow:auto;padding-top:max(18px,env(safe-area-inset-top));padding-bottom:max(18px,env(safe-area-inset-bottom))}.safeMenuBtn,.songSelectBack,.songPlayBtn,.songDiffBtn{min-height:44px}body.safeGame .rhythmHud{inset:max(8px,env(safe-area-inset-top)) max(64px,env(safe-area-inset-right)) auto max(10px,env(safe-area-inset-left));grid-template-columns:minmax(86px,1fr) minmax(120px,1.25fr) minmax(86px,1fr);gap:4px 8px;font-size:10px}.rhythmHud strong{font-size:clamp(15px,3vw,22px)}.hudCombo{grid-column:2;justify-self:center}.hudStatus{text-align:right}.hudStatus em,#autoBox{display:none!important}.mobilePauseBtn{top:max(8px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));background:rgba(2,9,22,.58);backdrop-filter:none}body.safeGame.needsLandscape .mobileGameplayControls{display:none}}
 @media (pointer:coarse) and (orientation:portrait){body.safeGame .rotateOverlay.show{display:flex}.songSelectShell{max-height:none;overflow:visible}.songCarousel{overflow-x:auto;overflow-y:visible}.songSelectFooter{position:static}}
 body.mobileStandalone.safeGame:not(.mobileQualityHigh)::before,body.mobileStandalone.safeGame:not(.mobileQualityHigh)::after{animation:none!important}body.mobileStandalone.safeGame .pauseOverlay,body.mobileStandalone.safeGame .songSelect,body.mobileStandalone.safeGame .safeOverlayCard,body.mobileStandalone.safeGame .pauseCard{backdrop-filter:none!important}body.mobileStandalone.safeGame .rhythmHud{filter:none;text-shadow:none}body.mobileQualityPerformance.safeGame::before,body.mobileQualityPerformance.safeGame::after{animation:none!important;opacity:.18!important}body.mobileQualityPerformance.safeGame .mobilePlayBtn{backdrop-filter:none;box-shadow:inset 0 0 12px rgba(255,255,255,.05)}body.mobileQualityPerformance.safeGame .pauseOverlay{backdrop-filter:none!important;background:rgba(0,0,0,.62)}
 
