@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.8.1",
+    date: "2026-07-18",
+    title: "Mobile Render Hot Path Optimization",
+    summary: "모바일 플레이 중 HUD, DOM, 렌더링 노트 범위와 품질 강등 비용을 최적화",
+    changes: [
+      { category: "PERF", text: "frame 루프에서 정적 UI refresh, querySelector, innerHTML 갱신을 제거하고 라이브 HUD만 갱신" },
+      { category: "RENDER", text: "정렬된 채보의 visible note window로 고스트, 레일, 노트 렌더 순회를 축소" },
+      { category: "MOBILE", text: "모바일 품질별 DPR/이펙트 제한과 AUTO 모드 세션 임시 프레임 타임 강등, ?perf=1 측정 오버레이를 추가" }
+    ]
+  },
+  {
     version: "0.8.0",
     date: "2026-07-18",
     title: "Mobile Standalone Play Pass",
