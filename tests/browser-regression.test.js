@@ -155,17 +155,20 @@ async function collectErrors(page){
       songResults[song] = {chartLength: loop.after.chartLength, frameDelta: loop.frameDelta, renderDelta: loop.renderDelta, timeDelta: loop.timeDelta};
     }
 
-    const mobile = await browser.newContext({...devices['iPhone 12'], viewport:{width:390,height:844}});
+    const mobile = await browser.newContext({...devices['iPhone 12'], viewport:{width:844,height:390}, screen:{width:844,height:390}});
     const mobilePage = await mobile.newPage();
     const mobileErrors = await collectErrors(mobilePage);
     await mobilePage.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
     await waitFor(mobilePage, () => !!window.CircleMixTestApi, 'mobile test api');
     await mobilePage.evaluate(() => window.CircleMixTestApi.startTutorial());
     await waitFor(mobilePage, () => window.CircleMixTestApi.state().tutorialMode, 'mobile tutorial');
+    await waitFor(mobilePage, () => !document.getElementById('rotateOverlay')?.classList.contains('show'), 'mobile rotate overlay hidden');
     const gameBox = await mobilePage.locator('#game').boundingBox();
+    assert.ok(gameBox && gameBox.width > 0 && gameBox.height > 0, `valid mobile canvas box ${JSON.stringify(gameBox)}`);
     await mobilePage.touchscreen.tap(gameBox.x + gameBox.width / 2, gameBox.y + gameBox.height / 2);
     const afterAimTap = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
     assert.equal(afterAimTap.lastPointerSource, 'touch');
+    assert.equal(afterAimTap.mobileAimPointerId, null, 'mobile AIM pointer releases after tap');
     await mobilePage.locator('#mobileActionBtn').dispatchEvent('pointerdown', {pointerId:41, pointerType:'touch', isPrimary:true, bubbles:true});
     const actionDown = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
     assert.equal(actionDown.mobileActionPointerId, 41);
