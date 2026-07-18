@@ -80,6 +80,9 @@ async function dismissStartupOverlays(page){
     assert.ok(hudHoverLoop.renderDelta > 8, `HUD hover render ${hudHoverLoop.renderDelta}`);
     assert.ok(hudHoverLoop.wallTimeDelta > 350, `HUD hover wall time ${hudHoverLoop.wallTimeDelta}`);
 
+    await waitFor(page, () => window.CircleMixTestApi.state().inputEnabled, 'AIM input enabled');
+    await moveToLane(page, 7);
+    await wait(100);
     for (const [index, lane] of [0, 2, 5].entries()) {
       await moveToLane(page, lane);
       await wait(320);
@@ -87,6 +90,12 @@ async function dismissStartupOverlays(page){
         const st = window.CircleMixTestApi.state();
         return st.tutorialStepIndex >= 1 || st.tutorialTargetProgress >= expected;
       }, `AIM target progress ${index+1}`, 2000, index+1);
+      if(index === 0){
+        const st = await page.evaluate(() => window.CircleMixTestApi.state());
+        assert.equal(st.inputEnabled, true);
+        assert.equal(st.tutorialPointerMoved, true);
+        assert.ok(Math.abs(Math.atan2(Math.sin(st.armAngle - (-Math.PI/2)), Math.cos(st.armAngle - (-Math.PI/2)))) < 0.08, `lane 0 aligned ${JSON.stringify(st)}`);
+      }
     }
     await waitFor(page, () => window.CircleMixTestApi.state().tutorialStepIndex >= 1, 'AIM step progressed by pointer movement');
     await moveToLane(page, 0);
