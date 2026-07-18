@@ -1,26 +1,26 @@
-const VERSION = "0.8.3";
+const VERSION = "0.8.4";
 const CACHE_PREFIX = "circle-mix-v";
 const APP_CACHE = `${CACHE_PREFIX}${VERSION}-app`;
 const MEDIA_CACHE = `${CACHE_PREFIX}${VERSION}-media`;
 const APP_SHELL_URLS = [
   "./",
   "./index.html",
-  "./style.css?v=20260718-offline-1",
+  "./style.css?v=20260718-mobile-controls-1",
   "./manifest.webmanifest",
   "./icons/circle-mix-icon.svg",
-  "./src/version.js?v=20260718-offline-1",
-  "./src/changelog.js?v=20260718-offline-1",
-  "./src/songs.js?v=20260718-offline-1",
-  "./src/chart.js?v=20260718-offline-1",
-  "./src/audio.js?v=20260718-offline-1",
-  "./src/effects.js?v=20260718-offline-1",
-  "./src/ui.js?v=20260718-offline-1",
-  "./src/input.js?v=20260718-offline-1",
-  "./src/game.js?v=20260718-offline-1",
-  "./src/pwa.js?v=20260718-offline-1"
+  "./src/version.js?v=20260718-mobile-controls-1",
+  "./src/changelog.js?v=20260718-mobile-controls-1",
+  "./src/songs.js?v=20260718-mobile-controls-1",
+  "./src/chart.js?v=20260718-mobile-controls-1",
+  "./src/audio.js?v=20260718-mobile-controls-1",
+  "./src/effects.js?v=20260718-mobile-controls-1",
+  "./src/ui.js?v=20260718-mobile-controls-1",
+  "./src/input.js?v=20260718-mobile-controls-1",
+  "./src/game.js?v=20260718-mobile-controls-1",
+  "./src/pwa.js?v=20260718-mobile-controls-1"
 ];
 // ANiMA uses the #embedded-anima <audio> element in index.html, so there is no
-// separate built-in audio URL to fetch or cache for v0.8.3.
+// separate built-in audio URL to fetch or cache for v0.8.4.
 const BUILTIN_OFFLINE_URLS = [];
 const REQUIRED_OFFLINE_URLS = [...APP_SHELL_URLS, ...BUILTIN_OFFLINE_URLS];
 function sameOrigin(request){ return new URL(request.url).origin === self.location.origin; }
