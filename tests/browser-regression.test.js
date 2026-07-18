@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
-const { spawn } = require('node:child_process');
+const fs = require('node:fs');
 const http = require('node:http');
+const path = require('node:path');
 const { chromium, devices } = require('playwright');
 
 function wait(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -38,6 +39,51 @@ async function collectErrors(page){
   page.on('console', msg => { if(msg.type() === 'error') errors.push(`console.error: ${msg.text()}`); });
   return errors;
 }
+function contentTypeFor(filePath){
+  const ext = path.extname(filePath).toLowerCase();
+  return {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.webmanifest': 'application/manifest+json; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.mp3': 'audio/mpeg'
+  }[ext] || 'application/octet-stream';
+}
+function startStaticServer(rootDir, port=4173){
+  const root = path.resolve(rootDir);
+  const server = http.createServer((req, res) => {
+    try{
+      const url = new URL(req.url, 'http://127.0.0.1');
+      const pathname = decodeURIComponent(url.pathname);
+      const relativePath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+      const filePath = path.resolve(root, relativePath);
+      if(filePath !== root && !filePath.startsWith(root + path.sep)){
+        res.writeHead(403, {'Content-Type': 'text/plain; charset=utf-8'});
+        res.end('forbidden');
+        return;
+      }
+      fs.readFile(filePath, (error, data) => {
+        if(error){
+          res.writeHead(404, {'Content-Type': 'text/plain; charset=utf-8'});
+          res.end('not found');
+          return;
+        }
+        res.writeHead(200, {'Content-Type': contentTypeFor(filePath)});
+        res.end(data);
+      });
+    }catch(error){
+      res.writeHead(400, {'Content-Type': 'text/plain; charset=utf-8'});
+      res.end('bad request');
+    }
+  });
+  server.listen(port, '127.0.0.1');
+  return server;
+}
 
 async function dismissStartupOverlays(page){
   const updateLog = page.locator('#updateLogOverlay');
@@ -55,7 +101,7 @@ async function dismissStartupOverlays(page){
 }
 
 (async()=>{
-  const server = spawn(process.execPath, ['-e', "require('http').createServer((req,res)=>{const fs=require('fs'),path=require('path');let u=new URL(req.url,'http://x').pathname;if(u==='/')u='/index.html';const f=path.join(process.cwd(),u);fs.readFile(f,(e,d)=>{if(e){res.statusCode=404;res.end('not found')}else{res.end(d)}})}).listen(4173)"], {cwd: process.cwd(), stdio:'inherit'});
+  const server = startStaticServer(process.cwd());
   try{
     await waitForServer('http://127.0.0.1:4173/index.html');
     const browser = await chromium.launch({headless:true});
@@ -229,6 +275,6 @@ async function dismissStartupOverlays(page){
     assert.deepEqual([...errors, ...mobileErrors], []);
     console.log('PASS browser regression', {stillMouseLoop, hudHoverLoop, songResults, mobile:{frameDelta:mobileLoop.frameDelta}});
   } finally {
-    server.kill();
+    server.close();
   }
 })().catch(error => { console.error(error); process.exit(1); });
