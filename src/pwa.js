@@ -1,6 +1,6 @@
 (function(){
   "use strict";
-  const VERSION="0.8.2";
+  const VERSION="0.8.3";
   const OFFLINE_KEY=`circleMixOfflineReady.${VERSION}`;
   let deferredInstallPrompt=null, waitingWorker=null, refreshing=false;
   let running=false, paused=false, wakeLock=null;
@@ -8,11 +8,16 @@
   function standalone(){ return window.matchMedia?.("(display-mode: standalone)").matches || window.matchMedia?.("(display-mode: fullscreen)").matches || window.navigator.standalone===true; }
   function setText(id,text){ const el=$(id); if(el) el.textContent=text; }
   function offlineReady(){ try{return localStorage.getItem(OFFLINE_KEY)==="ready";}catch(e){return false;} }
-  function setOfflineState(state,progress){
+  function rememberOfflineReady(ready){ try{ ready ? localStorage.setItem(OFFLINE_KEY,"ready") : localStorage.removeItem(OFFLINE_KEY); }catch(e){} }
+  function formatMissing(count){ return `${count} FILE${count===1?"":"S"} MISSING`; }
+  function setOfflineState(state,progress,detail){
     const online=navigator.onLine!==false;
-    const label=state || (online ? (offlineReady()?"OFFLINE READY":"ONLINE") : (offlineReady()?"OFFLINE READY":"OFFLINE DATA MISSING"));
-    setText("pwaNetworkState", label);
-    setText("offlineDataStatus", label==="ONLINE"?"NOT DOWNLOADED":label);
+    let label=state;
+    if(!label) label = online ? (offlineReady()?"READY":"NOT DOWNLOADED") : (offlineReady()?"UPDATE REQUIRED":"NOT DOWNLOADED");
+    if(label==="INCOMPLETE" && detail?.missingCount) label = `INCOMPLETE · ${formatMissing(detail.missingCount)}`;
+    if(label==="UPDATE_REQUIRED") label = "UPDATE REQUIRED";
+    setText("pwaNetworkState", online ? label : `OFFLINE · ${label}`);
+    setText("offlineDataStatus", label);
     if(progress!=null) setText("offlineDataProgress", `${Math.round(progress)}%`);
   }
   function postToSW(msg){ if(navigator.serviceWorker?.controller) navigator.serviceWorker.controller.postMessage(msg); }
@@ -20,8 +25,9 @@
     if(!navigator.serviceWorker?.controller) return setOfflineState();
     const channel=new MessageChannel();
     const result=await new Promise(resolve=>{ channel.port1.onmessage=e=>resolve(e.data); postToSW({type:"OFFLINE_STATUS", version:VERSION, port:channel.port2}); setTimeout(()=>resolve(null),1200); });
-    if(result?.ready){ try{localStorage.setItem(OFFLINE_KEY,"ready");}catch(e){} }
-    setOfflineState();
+    if(result?.ready){ rememberOfflineReady(true); setOfflineState("READY",100); return; }
+    if(result){ rememberOfflineReady(false); setOfflineState(result.cachedCount>0?"INCOMPLETE":"NOT DOWNLOADED", null, {missingCount:result.missing?.length || result.requiredCount || 0}); return; }
+    setOfflineState(offlineReady()?"UPDATE REQUIRED":null);
   }
   async function downloadOffline(){
     if(!navigator.serviceWorker?.controller){ setOfflineState("FAILED"); return; }
@@ -29,15 +35,16 @@
     const channel=new MessageChannel();
     channel.port1.onmessage=e=>{
       const data=e.data||{};
-      if(data.type==="OFFLINE_PROGRESS") setOfflineState("DOWNLOADING",data.progress||0);
-      if(data.type==="OFFLINE_COMPLETE"){ try{localStorage.setItem(OFFLINE_KEY,"ready");}catch(err){} setOfflineState("READY",100); }
-      if(data.type==="OFFLINE_FAILED") setOfflineState("FAILED");
+      if(data.type==="OFFLINE_PROGRESS") setOfflineState("DOWNLOADING",Math.min(95,data.progress||0));
+      if(data.type==="OFFLINE_VERIFYING") setOfflineState("VERIFYING");
+      if(data.type==="OFFLINE_COMPLETE"){ rememberOfflineReady(true); setOfflineState("READY",100); }
+      if(data.type==="OFFLINE_FAILED"){ rememberOfflineReady(false); setOfflineState("FAILED",null,{missingCount:data.status?.missing?.length || data.failures?.length || 0}); console.warn("OFFLINE DATA failed", data.failures || data.status?.missing || []); }
     };
     postToSW({type:"DOWNLOAD_OFFLINE", version:VERSION, port:channel.port2});
   }
   function updateInstallUi(){ const btn=$("installAppBtn"), help=$("installHelp"); if(btn) btn.hidden=standalone() || !deferredInstallPrompt; if(help) help.hidden=standalone() || !!deferredInstallPrompt; document.body.classList.toggle("pwaStandalone", standalone()); }
   async function promptInstall(){ if(!deferredInstallPrompt){ const h=$("installHelp"); if(h) h.hidden=!h.hidden; return; } const promptEvent=deferredInstallPrompt; deferredInstallPrompt=null; updateInstallUi(); try{ await promptEvent.prompt(); await promptEvent.userChoice; }catch(e){} updateInstallUi(); }
-  function showUpdateReady(worker){ waitingWorker=worker||waitingWorker; const row=$("pwaUpdateRow"), btn=$("pwaUpdateBtn"); if(row) row.hidden=false; if(btn) btn.hidden=false; setOfflineState("UPDATE AVAILABLE"); }
+  function showUpdateReady(worker){ waitingWorker=worker||waitingWorker; const row=$("pwaUpdateRow"), btn=$("pwaUpdateBtn"); if(row) row.hidden=false; if(btn) btn.hidden=false; setOfflineState("UPDATE REQUIRED"); }
   function applyUpdate(){ if(!waitingWorker || running) return; waitingWorker.postMessage({type:"SKIP_WAITING"}); }
   async function requestWakeLock(){ if(!running||paused||document.hidden||!("wakeLock" in navigator)) return; try{ wakeLock=await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release",()=>{ wakeLock=null; }); }catch(e){} }
   async function releaseWakeLock(){ const lock=wakeLock; wakeLock=null; if(lock){ try{ await lock.release(); }catch(e){} } }
