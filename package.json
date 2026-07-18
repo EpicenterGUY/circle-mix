@@ -1,5 +1,5 @@
 {
   "scripts": {
-    "test": "node --check src/game.js && node --check src/version.js && node --check src/changelog.js && node tests/smoke.test.js"
+    "test": "node --check src/game.js && node --check src/version.js && node --check src/changelog.js && node --check src/pwa.js && node --check service-worker.js && node tests/smoke.test.js"
   }
 }

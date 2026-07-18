@@ -1,27 +1,27 @@
-const VERSION = "0.9.3";
+const VERSION = "0.9.4";
 const CACHE_PREFIX = "circle-mix-v";
 const APP_CACHE = `${CACHE_PREFIX}${VERSION}-app`;
 const MEDIA_CACHE = `${CACHE_PREFIX}${VERSION}-media`;
 const APP_SHELL_URLS = [
   "./",
   "./index.html",
-  "./style.css?v=20260718-mobile-play-hotfix-1",
+  "./style.css?v=20260718-pwa-offline-port-fix-1",
   "./manifest.webmanifest",
   "./icons/circle-mix-icon-192.png",
   "./icons/circle-mix-icon-512.png",
   "./icons/circle-mix-icon-maskable-512.png",
   "./icons/circle-mix-icon.svg",
-  "./src/version.js?v=20260718-mobile-play-hotfix-1",
-  "./src/changelog.js?v=20260718-mobile-play-hotfix-1",
-  "./src/charts/ghost-rule.js?v=20260718-mobile-play-hotfix-1",
-  "./src/songs.js?v=20260718-mobile-play-hotfix-1",
-  "./src/chart.js?v=20260718-mobile-play-hotfix-1",
-  "./src/audio.js?v=20260718-mobile-play-hotfix-1",
-  "./src/effects.js?v=20260718-mobile-play-hotfix-1",
-  "./src/ui.js?v=20260718-mobile-play-hotfix-1",
-  "./src/input.js?v=20260718-mobile-play-hotfix-1",
-  "./src/game.js?v=20260718-mobile-play-hotfix-1",
-  "./src/pwa.js?v=20260718-mobile-play-hotfix-1"
+  "./src/version.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/changelog.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/charts/ghost-rule.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/songs.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/chart.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/audio.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/effects.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/ui.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/input.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/game.js?v=20260718-pwa-offline-port-fix-1",
+  "./src/pwa.js?v=20260718-pwa-offline-port-fix-1"
 ];
 // ANiMA uses the #embedded-anima <audio> element in index.html, so there is no
 // separate built-in audio URL to fetch or cache for ANiMA; Ghost Rule uses external media cached below.
@@ -47,9 +47,9 @@ async function cacheRequired(port){
   for(const url of REQUIRED_OFFLINE_URLS){
     try{ const result=await putRequired(url, port, done, total); if(!result.ok) failures.push(result); }
     catch(error){ failures.push({ok:false, url, status:error?.message || "fetch-failed"}); }
-    done++; if(port) port.postMessage({type:"OFFLINE_PROGRESS", progress:Math.min(95, (done/Math.max(1,total))*95), done, total});
+    done++; safePost(port,{type:"OFFLINE_PROGRESS", progress:Math.min(95, (done/Math.max(1,total))*95), done, total});
   }
-  if(port) port.postMessage({type:"OFFLINE_VERIFYING"});
+  safePost(port,{type:"OFFLINE_VERIFYING"});
   const status = await offlineStatus();
   if(failures.length || !status.ready) throw {failures:[...failures, ...status.missing.map(url=>({url,status:"missing"}))], status};
   return status;
@@ -84,7 +84,21 @@ async function rangeResponse(request, response){
 }
 self.addEventListener("install", event=>{ event.waitUntil(cacheRequired().catch(()=>{})); });
 self.addEventListener("activate", event=>{ event.waitUntil((async()=>{ const keys=await caches.keys(); await Promise.all(keys.filter(k=>k.startsWith(CACHE_PREFIX) && ![APP_CACHE,MEDIA_CACHE].includes(k)).map(k=>caches.delete(k))); await self.clients.claim(); })()); });
-self.addEventListener("message", event=>{ const data=event.data||{}; const port=data.port || event.ports?.[0]; if(data.type==="SKIP_WAITING") self.skipWaiting(); if(data.type==="DOWNLOAD_OFFLINE") event.waitUntil(cacheRequired(port).then(status=>port&&port.postMessage({type:"OFFLINE_COMPLETE", status})).catch(error=>port&&port.postMessage({type:"OFFLINE_FAILED", failures:error?.failures || [], status:error?.status || null}))); if(data.type==="OFFLINE_STATUS") event.waitUntil(offlineStatus().then(status=>port&&port.postMessage(status))); });
+function safePost(port, message){ try{ port?.postMessage(message); }catch(error){ console.warn("Offline response postMessage failed", error); } }
+function missingPortStatus(type){ return {type:"OFFLINE_FAILED", failures:[{status:"missing-message-port", requestType:type}], status:{ready:false, version:VERSION, requiredCount:REQUIRED_OFFLINE_URLS.length, cachedCount:0, missing:REQUIRED_OFFLINE_URLS.slice(), appCache:APP_CACHE, mediaCache:MEDIA_CACHE, error:"missing-message-port"}}; }
+self.addEventListener("message", event=>{
+  const data=event.data||{};
+  const port=event.ports?.[0];
+  if(data.type==="SKIP_WAITING") self.skipWaiting();
+  if(data.type==="DOWNLOAD_OFFLINE"){
+    if(!port){ console.warn("DOWNLOAD_OFFLINE missing MessagePort", missingPortStatus(data.type)); return; }
+    event.waitUntil(cacheRequired(port).then(status=>safePost(port,{type:"OFFLINE_COMPLETE", status})).catch(error=>safePost(port,{type:"OFFLINE_FAILED", failures:error?.failures || [], status:error?.status || null})));
+  }
+  if(data.type==="OFFLINE_STATUS"){
+    if(!port){ console.warn("OFFLINE_STATUS missing MessagePort", missingPortStatus(data.type)); return; }
+    event.waitUntil(offlineStatus().then(status=>safePost(port,{type:"OFFLINE_STATUS", ...status})).catch(error=>safePost(port,{type:"OFFLINE_FAILED", failures:[{status:error?.message || "status-failed"}], status:null})));
+  }
+});
 self.addEventListener("fetch", event=>{
   const request=event.request; if(request.method!=="GET" || !sameOrigin(request) || request.url.startsWith("blob:")) return;
   const url=new URL(request.url); const accept=request.headers.get("accept")||"";
