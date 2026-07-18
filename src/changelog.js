@@ -7,6 +7,16 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.6",
+    date: "2026-07-18",
+    title: "PC Gameplay Loop Hotfix",
+    summary: "PC 입력 회귀를 수정하면서 PR #73의 직접 조준·대칭 disengage·UI 위 포인터 추적을 유지",
+    changes: [
+      { category: "PC", text: "광범위한 updateArm 예외 억제를 제거하고 Aim Stabilizer OFF 기본값, OFF 직접 조준, CW/CCW 대칭 disengage, UI 위 포인터 추적을 유지" },
+      { category: "PWA", text: "앱 버전과 앱 셸 cache-bust query를 갱신해 수정된 game.js가 기존 서비스 워커 캐시에 갇히지 않도록 정리" }
+    ]
+  },
+  {
     version: "0.9.5",
     date: "2026-07-18",
     title: "Mobile PWA Update Log Hotfix",

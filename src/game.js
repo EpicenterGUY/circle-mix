@@ -257,8 +257,10 @@
 
   let W=0,H=0,cx=0,cy=0,baseR=0,hitR=0,outerR=0;
   let running=false, startMs=0, lastMs=0, raf=0;
+  let testFrameCount=0, testRenderCount=0;
   let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
   let tutorialSessionId=0, tutorialStepToken=0, tutorialAttemptId=0;
+  let tutorialLastAdvanceReason=null, tutorialLastAdvanceSource=null;
   const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
@@ -3996,6 +3998,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(!tutorialMode || tutorialState.transitioning)return;
     if(source!=="skip" && reason!=="SKIP_BUTTON" && tutorialState.validUserInputCount<=0){ if(debugMode) console.warn("[Tutorial] blocked advance without valid user input", {reason,step:tutorialSteps[tutorialStepIndex]?.name}); return; }
     if(nextIndex>=tutorialSteps.length) return completeTutorial();
+    tutorialLastAdvanceReason=reason; tutorialLastAdvanceSource=source;
     logTutorialAdvance(reason,extra);
     enterTutorialStep(nextIndex,{source,skipCountdown});
   }
@@ -4271,6 +4274,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function frame(ms){
     if(!running)return;
+    testFrameCount++;
     const dt=Math.min(.033,(ms-lastMs)/1000||.016);
     lastMs=ms; const t=now();
     if(tutorialMode){ updateTutorialAim(); setTutorialHud(); if(tutorialFailed()) return; }
@@ -4293,6 +4297,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
     focusNote=currentFocusNote(t);
 
+    testRenderCount++;
     drawBackground(t);
 
     // Tutorial uses only the note and its real guide. Landing ghosts, approach
@@ -4856,7 +4861,7 @@ settingsOrigin=${settingsOrigin}`);
     window.addEventListener("touchmove",e=>{ if(!isCoarsePointerMobile()) updateGameplayPointerFromEvent(e,"touch"); },{passive:true});
   }
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
-  function isAimPointerBlockedTarget(target){return !!(target && target.closest && target.closest("#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud button,.tutorialComplete,.tuner,.editorPanel,.start,.mobileControls,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay"));}
+  function isAimPointerBlockedTarget(target){return !!(target && target.closest && target.closest("#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialComplete,.tuner,.editorPanel,.start,.mobileControls,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay"));}
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay"));}
   function releaseMobilePointers(){ mobileAimPointerId=null; mobileActionPointerId=null; mobileScratchPointerId=null; keys.MouseLeft=false; scratchHeld=false; filterHeld=false; mouseDownRight=false; mobileActionBtn?.classList.remove("mobileActionActive"); mobileScratchBtn?.classList.remove("mobileScratchActive"); }
   function handleMobileAimPointer(e){ if(e.pointerId!==mobileAimPointerId) return; updateGameplayPointerFromEvent(e,"touch"); }
@@ -5461,7 +5466,30 @@ running=${running}`);
   safeRefresh();
   showTutorialPrompt();
 
+  function installBrowserTestApi(){
+    if(new URLSearchParams(window.location.search).get("browserTest")!=="1") return;
+    window.CircleMixTestApi={
+      startTutorial:()=>startTutorial(),
+      skipTutorialStep:()=>nextTutorialStep(),
+      startBuiltIn:async(songId,difficulty)=>{
+        if(tutorialMode) exitTutorial(false);
+        const previousSession=playSessionToken;
+        const songData=songs.get(songId);
+        selectedSource="builtin"; activePlaySource="builtin"; activeChartId=difficulty;
+        selectedSong=songData; selectedSongId=songData.id; selectedDifficultyId=difficulty; selectedMenuMode=difficulty; mapMode=difficulty; useCustomChart=false;
+        const started=await start("play");
+        return {started, previousSession, playSessionToken, songId:selectedSongId, difficulty:selectedDifficultyId};
+      },
+      exitTutorial:()=>exitTutorial(false),
+      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
+      lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
+      setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
+      magnetProbe:(mode,velocity)=>{ const previousMode=inputSettings.aimStabilizer, previousTarget=magnetTarget, previousError=magnetAngleError, previousFocus=focusNote; try{ const probeNow=now(); const probeNote={type:"cut", angle:0, done:false, missed:false, spawnTime:probeNow-1, hitTime:probeNow}; inputSettings.aimStabilizer=mode; focusNote=probeNote; magnetTarget=probeNote; magnetAngleError=0; const result=updateAimMagnet(0, velocity); const disengaged=magnetTarget===null; return {mode, velocity, disengaged, result, profile:aimStabilizerProfile()}; } finally { inputSettings.aimStabilizer=previousMode; magnetTarget=previousTarget; magnetAngleError=previousError; focusNote=previousFocus; } },
+      resetCounters:()=>{ testFrameCount=0; testRenderCount=0; }
+    };
+  }
 
+  installBrowserTestApi();
 
   updateModeButtons();
   updateButtons();
