@@ -244,3 +244,13 @@ assert.deepEqual(manifest.icons, [
 ]);
 for(const icon of manifest.icons) assert.ok(fs.existsSync(icon.src.replace(/^\.\//, "")), `${icon.src} exists`);
 });
+
+test("mobile title screen locks page and card scrolling with compact breakpoints", () => {
+const css = fs.readFileSync("style.css", "utf8");
+assert.match(css, /body\.safeTitle\{[^}]*height:var\(--app-height,100dvh\)[^}]*overflow:hidden[^}]*touch-action:none/);
+assert.match(css, /body\.safeTitle #safeMenu\{[^}]*height:var\(--app-height,100dvh\)[^}]*overflow:hidden[^}]*overscroll-behavior:none[^}]*touch-action:none/);
+assert.match(css, /body\.safeTitle \.safeMenuCard\{[^}]*max-height:calc\(var\(--app-height,100dvh\)[^}]*overflow:hidden/);
+assert.match(css, /@media \(max-width:768px\) and \(max-height:700px\)/);
+assert.match(css, /@media \(max-width:768px\) and \(max-height:560px\)/);
+assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOverlay,body\.safeSongSelect \.songSelect\{align-items:flex-start;overflow:auto/);
+});
