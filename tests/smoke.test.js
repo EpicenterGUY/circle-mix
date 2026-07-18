@@ -326,73 +326,12 @@ assert.match(lastBodyRule, /overflow:hidden/);
 assert.doesNotMatch(css.slice(css.lastIndexOf("body.safeTitle{")), /body\.safeTitle\{[^}]*overflow:auto/);
 assert.doesNotMatch(css.slice(css.lastIndexOf("body.safeTitle #safeMenu{")), /body\.safeTitle #safeMenu\{[^}]*overflow:auto/);
 });
-
-test("PC updateArm exceptions are contained inside the frame loop", () => {
-const game = fs.readFileSync("src/game.js", "utf8");
-assert.match(game, /function updateArmSafely\(dt\)\{/);
-assert.match(game, /console\.error\("\[PC input hotfix\] updateArm failed; resetting desktop pointer runtime and continuing frame", err\)/);
-assert.ok(game.includes("updateAuto(t);\n    updateArmSafely(dt);\n    updateNotes(t,dt);"));
-assert.ok(!game.includes("updateAuto(t);\n    updateArm(dt);\n    updateNotes(t,dt);"));
-});
-
-test("PC aim stabilizer defaults to OFF while preserving saved LOW/MEDIUM", () => {
+test("PC input runtime uses f4d3003 stable updateArm path", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /aimStabilizer:AIM_STABILIZER_MODES\.includes\(saved\.aimStabilizer\)\?saved\.aimStabilizer:"OFF"/);
-assert.match(src, /catch\(e\)\{ return sanitizeInputSettings\(\{aimStabilizer:"OFF"/);
-assert.match(src, /const aimStabilizer=AIM_STABILIZER_MODES\.includes\(settings\.aimStabilizer\)\?settings\.aimStabilizer:"OFF"/);
-for(const saved of ["LOW", "MEDIUM"]){
-const AIM_STABILIZER_MODES = ["OFF", "LOW", "MEDIUM"];
-const sanitized = AIM_STABILIZER_MODES.includes(saved) ? saved : "OFF";
-assert.equal(sanitized, saved);
-}
-});
-
-test("OFF PC mouse aim is direct atan2 without normal center deadzone or smoothing", () => {
-const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /const safetyRadius=1/);
-assert.match(src, /lastPointerSource!=="touch" && profile\.mode!=="OFF"[\s\S]*const enter=Math\.max\(24, hitR\*\.18\)/);
-assert.match(src, /else if\(cursorRadius<safetyRadius\)[\s\S]*rawTargetAngle=lastValidTargetAngle/);
-assert.match(src, /else\{\s*centerDeadzoneActive=false;\s*rawTargetAngle=Math\.atan2\(dy,dx\);\s*lastValidTargetAngle=rawTargetAngle;\s*\}/);
-assert.match(src, /if\(profile\.mode!=="OFF" && Math\.abs\(rawAngularVelocity\)<profile\.fastVel\)/);
-const dx = 0, dy = -0.5;
-assert.equal(Math.atan2(dy, dx), -Math.PI / 2);
-});
-
-test("LOW/MEDIUM keep center deadzone and magnet disengage is symmetric", () => {
-const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /if\(mode==="MEDIUM"\) return \{mode, slowTime:\.040/);
-assert.match(src, /if\(mode==="LOW"\) return \{mode, slowTime:\.028/);
-assert.match(src, /Math\.abs\(velocity\)>profile\.disengageVel/);
-const disengageVel = 4.6;
-assert.equal(Math.abs(5.1) > disengageVel, true);
-assert.equal(Math.abs(-5.1) > disengageVel, true);
-const movingAway = (velocity, err) => Math.sign(velocity) === -Math.sign(err) && Math.abs(velocity) > 1.15;
-assert.equal(movingAway(1.2, -0.1), true);
-assert.equal(movingAway(-1.2, 0.1), true);
-assert.equal(movingAway(1.2, 0.1), false);
-assert.equal(movingAway(-1.2, -0.1), false);
-});
-
-test("PC pointermove aim tracking is separate from click blocking over UI", () => {
-const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /function isAimPointerBlockedTarget/);
-assert.match(src, /function isUiInputTarget/);
-assert.match(src, /updateGameplayPointerFromEvent\(e,source\)\{\s*if\(isAimPointerBlockedTarget\(e\.target\)\)return/);
-assert.doesNotMatch(src.match(/function isAimPointerBlockedTarget[\s\S]*?\n  function isUiInputTarget/)?.[0] || "", /\.quickMenu|button,#safeMenu|\.tutorialHud,/);
-assert.match(src, /function isUiInputTarget[\s\S]*button,#safeMenu[\s\S]*\.quickMenu/);
-for(const blocked of [".updateLogOverlay", ".pauseOverlay", "#safeOverlay", ".tutorialPrompt"]){
-assert.ok(src.match(/function isAimPointerBlockedTarget[\s\S]*?\n  function isUiInputTarget/)?.[0].includes(blocked), `${blocked} blocks aim tracking`);
-}
-});
-
-test("fast CW and CCW raw angular velocity remain symmetric for gestures", () => {
-const norm = a => Math.atan2(Math.sin(a), Math.cos(a));
-const dt = 0.016;
-const cw = norm(Math.PI / 2 - 0) / dt;
-const ccw = norm(-Math.PI / 2 - 0) / dt;
-assert.equal(Math.abs(cw), Math.abs(ccw));
-assert.equal(Math.sign(cw), -Math.sign(ccw));
-const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /n\.swingLastAngle=rawTargetAngle/);
-assert.match(src, /scratchSpeed=Math\.abs\(rawArmVel\)/);
+assert.doesNotMatch(src, /function updateArmSafely/);
+assert.ok(src.includes("updateAuto(t);\n    updateArm(dt);\n    updateNotes(t,dt);"));
+assert.match(src, /aimStabilizer:AIM_STABILIZER_MODES\.includes\(saved\.aimStabilizer\)\?saved\.aimStabilizer:"LOW"/);
+assert.match(src, /if\(profile\.mode==="OFF" \|\| velocity>profile\.disengageVel\)/);
+assert.match(src, /const enter=Math\.max\(24, hitR\*\.18\), exit=Math\.max\(24, hitR\*\.23\);/);
+assert.doesNotMatch(src, /function isAimPointerBlockedTarget/);
 });

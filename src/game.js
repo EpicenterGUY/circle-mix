@@ -230,15 +230,14 @@
   function loadInputSettings(){
     try{
       const saved=JSON.parse(localStorage.getItem(INPUT_SETTINGS_KEY)||"{}");
-      return sanitizeInputSettings({...saved, aimStabilizer:AIM_STABILIZER_MODES.includes(saved.aimStabilizer)?saved.aimStabilizer:"OFF", mobileQuality:MOBILE_QUALITY_MODES.includes(saved.mobileQuality)?saved.mobileQuality:"AUTO", haptic:!!saved.haptic});
-    }catch(e){ return sanitizeInputSettings({aimStabilizer:"OFF", mobileQuality:"AUTO", haptic:false}); }
+      return sanitizeInputSettings({aimStabilizer:AIM_STABILIZER_MODES.includes(saved.aimStabilizer)?saved.aimStabilizer:"LOW", mobileQuality:MOBILE_QUALITY_MODES.includes(saved.mobileQuality)?saved.mobileQuality:"AUTO", haptic:!!saved.haptic, ...saved});
+    }catch(e){ return sanitizeInputSettings({aimStabilizer:"LOW", mobileQuality:"AUTO", haptic:false}); }
   }
   function finiteRange(v,min,max,fallback){ v=Number(v); return Number.isFinite(v)?Math.min(max,Math.max(min,v)):fallback; }
   function finite01(v,fallback){ v=Number(v); return Number.isFinite(v)?Math.min(1,Math.max(0,v)):fallback; }
   function sanitizeInputSettings(settings){
     const preset=MOBILE_CONTROL_PRESETS.includes(settings.mobileControlPreset)?settings.mobileControlPreset:"STANDARD";
-    const aimStabilizer=AIM_STABILIZER_MODES.includes(settings.aimStabilizer)?settings.aimStabilizer:"OFF";
-    return {...settings, aimStabilizer, mobileControlPreset:preset, mobileActionSize:finiteRange(settings.mobileActionSize,64,124,88), mobileScratchSize:finiteRange(settings.mobileScratchSize,64,124,88), mobileButtonOpacity:finiteRange(settings.mobileButtonOpacity,.35,1,.68), mobileActionX:finite01(settings.mobileActionX,null), mobileActionY:finite01(settings.mobileActionY,null), mobileScratchX:finite01(settings.mobileScratchX,null), mobileScratchY:finite01(settings.mobileScratchY,null), mobileControlGap:finiteRange(settings.mobileControlGap,4,32,18)};
+    return {...settings, mobileControlPreset:preset, mobileActionSize:finiteRange(settings.mobileActionSize,64,124,88), mobileScratchSize:finiteRange(settings.mobileScratchSize,64,124,88), mobileButtonOpacity:finiteRange(settings.mobileButtonOpacity,.35,1,.68), mobileActionX:finite01(settings.mobileActionX,null), mobileActionY:finite01(settings.mobileActionY,null), mobileScratchX:finite01(settings.mobileScratchX,null), mobileScratchY:finite01(settings.mobileScratchY,null), mobileControlGap:finiteRange(settings.mobileControlGap,4,32,18)};
   }
   function saveInputSettings(){ try{ localStorage.setItem(INPUT_SETTINGS_KEY, JSON.stringify(inputSettings)); }catch(e){} }
   function effectiveEffectMode(){
@@ -257,6 +256,7 @@
 
   let W=0,H=0,cx=0,cy=0,baseR=0,hitR=0,outerR=0;
   let running=false, startMs=0, lastMs=0, raf=0;
+  let testFrameCount=0, testRenderCount=0;
   let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
   let tutorialSessionId=0, tutorialStepToken=0, tutorialAttemptId=0;
   const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
@@ -2120,7 +2120,7 @@
   function updateAimMagnet(baseAngle, velocity){
     const profile=aimStabilizerProfile();
     const t=now();
-    if(profile.mode==="OFF" || Math.abs(velocity)>profile.disengageVel){ magnetTarget=null; magnetAngleError=0; return baseAngle; }
+    if(profile.mode==="OFF" || velocity>profile.disengageVel){ magnetTarget=null; magnetAngleError=0; return baseAngle; }
     if(magnetTarget && (magnetTarget.done||magnetTarget.missed||magnetTarget!==focusNote||t>magnetTarget.hitTime+HIT_WINDOW)){ magnetTarget=null; }
     const n=magnetTarget || focusNote;
     if(!isAimMagnetNote(n) || t<n.spawnTime || Math.abs(t-n.hitTime)>HIT_WINDOW+.10){ magnetTarget=null; magnetAngleError=0; return baseAngle; }
@@ -2517,22 +2517,6 @@
     }
   }
 
-  function updateArmSafely(dt){
-    try{
-      updateArm(dt);
-      return;
-    }catch(err){
-      console.error("[PC input hotfix] updateArm failed; resetting desktop pointer runtime and continuing frame", err);
-      magnetTarget=null; centerDeadzoneActive=false; cursorRadius=hitR;
-      rawAngularVelocity=0; rawArmVel=0; armVel=0;
-      mouseX=cx; mouseY=cy-hitR;
-      armAngle=targetAngle=prevArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=lastRawAngleForVelocity=-Math.PI/2;
-      try{ updateArm(dt); }catch(retryErr){
-        console.error("[PC input hotfix] updateArm fallback failed; keeping game loop alive", retryErr);
-      }
-    }
-  }
-
   function updateArm(dt){
     const tNow = now();
     if(isAutoActive() && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
@@ -2555,20 +2539,9 @@
     }else{
       const dx=mouseX-cx, dy=mouseY-cy;
       cursorRadius=Math.hypot(dx,dy);
-      const profile=lastPointerSource!=="touch"?aimStabilizerProfile():{mode:"OFF"};
-      const safetyRadius=1;
-      if(lastPointerSource!=="touch" && profile.mode!=="OFF"){
-        const enter=Math.max(24, hitR*.18), exit=Math.max(24, hitR*.23);
-        if(centerDeadzoneActive ? cursorRadius<exit : cursorRadius<enter){
-          centerDeadzoneActive=true;
-          rawTargetAngle=lastValidTargetAngle;
-        }else{
-          centerDeadzoneActive=false;
-          rawTargetAngle=Math.atan2(dy,dx);
-          lastValidTargetAngle=rawTargetAngle;
-        }
-      }else if(cursorRadius<safetyRadius){
-        centerDeadzoneActive=false;
+      const enter=Math.max(24, hitR*.18), exit=Math.max(24, hitR*.23);
+      if(centerDeadzoneActive ? cursorRadius<exit : cursorRadius<enter){
+        centerDeadzoneActive=true;
         rawTargetAngle=lastValidTargetAngle;
       }else{
         centerDeadzoneActive=false;
@@ -2581,6 +2554,7 @@
       let desired=targetAngle;
       if(lastPointerSource!=="touch"){
         desired=updateAimMagnet(desired, rawAngularVelocity);
+        const profile=aimStabilizerProfile();
         if(profile.mode!=="OFF" && Math.abs(rawAngularVelocity)<profile.fastVel){
           const slowFactor=clamp((profile.fastVel-Math.abs(rawAngularVelocity))/Math.max(profile.fastVel-profile.slowVel,.001),0,1);
           const timeConstant=profile.slowTime*slowFactor;
@@ -4287,6 +4261,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function frame(ms){
     if(!running)return;
+    testFrameCount++;
     const dt=Math.min(.033,(ms-lastMs)/1000||.016);
     lastMs=ms; const t=now();
     if(tutorialMode){ updateTutorialAim(); setTutorialHud(); if(tutorialFailed()) return; }
@@ -4304,11 +4279,12 @@ endpointCaptured=${n.endpointCaptured===true}`);
     scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
     scratchCandidate=!!scratchHeld;
     updateAuto(t);
-    updateArmSafely(dt);
+    updateArm(dt);
     updateNotes(t,dt);
 
     focusNote=currentFocusNote(t);
 
+    testRenderCount++;
     drawBackground(t);
 
     // Tutorial uses only the note and its real guide. Landing ghosts, approach
@@ -4854,7 +4830,10 @@ settingsOrigin=${settingsOrigin}`);
   if(laneGrid) laneGrid.addEventListener("click",e=>{const btn=e.target.closest("[data-lane]");if(!btn)return;setEditorAngle((Number(btn.dataset.lane)||0)*45);});
 
   function updateGameplayPointerFromEvent(e,source){
-    if(isAimPointerBlockedTarget(e.target))return;
+    // Moving over tutorial buttons must not steer the in-game arm or satisfy an
+    // explore target. This was the main cause of stages skipping while the user
+    // moved toward the right-side SKIP STEP button.
+    if(isUiInputTarget(e.target))return;
     const point=e.touches?.[0] || e;
     if(!Number.isFinite(point.clientX)||!Number.isFinite(point.clientY))return;
     mouseX=point.clientX; mouseY=point.clientY;
@@ -4872,7 +4851,6 @@ settingsOrigin=${settingsOrigin}`);
     window.addEventListener("touchmove",e=>{ if(!isCoarsePointerMobile()) updateGameplayPointerFromEvent(e,"touch"); },{passive:true});
   }
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
-  function isAimPointerBlockedTarget(target){return !!(target && target.closest && target.closest("#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud button,.tutorialComplete,.tuner,.editorPanel,.start,.mobileControls,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay"));}
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay"));}
   function releaseMobilePointers(){ mobileAimPointerId=null; mobileActionPointerId=null; mobileScratchPointerId=null; keys.MouseLeft=false; scratchHeld=false; filterHeld=false; mouseDownRight=false; mobileActionBtn?.classList.remove("mobileActionActive"); mobileScratchBtn?.classList.remove("mobileScratchActive"); }
   function handleMobileAimPointer(e){ if(e.pointerId!==mobileAimPointerId) return; updateGameplayPointerFromEvent(e,"touch"); }
@@ -5477,7 +5455,24 @@ running=${running}`);
   safeRefresh();
   showTutorialPrompt();
 
+  function installBrowserTestApi(){
+    if(new URLSearchParams(window.location.search).get("browserTest")!=="1") return;
+    window.CircleMixTestApi={
+      startTutorial:()=>startTutorial(),
+      skipTutorialStep:()=>nextTutorialStep(),
+      startBuiltIn:async(songId,difficulty)=>{
+        const songData=songs.get(songId);
+        selectedSource="builtin"; activePlaySource="builtin"; activeChartId=difficulty;
+        selectedSong=songData; selectedSongId=songData.id; selectedDifficultyId=difficulty; selectedMenuMode=difficulty; mapMode=difficulty; useCustomChart=false;
+        return start("play");
+      },
+      state:()=>({running, paused, tutorialMode, tutorialStepIndex, chartLength:chart.length, gameTime:now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, armAngle, rawArmVel, rawAngularVelocity}),
+      setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
+      resetCounters:()=>{ testFrameCount=0; testRenderCount=0; }
+    };
+  }
 
+  installBrowserTestApi();
 
   updateModeButtons();
   updateButtons();
