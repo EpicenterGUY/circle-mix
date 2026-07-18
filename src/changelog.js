@@ -7,6 +7,18 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.8.2",
+    date: "2026-07-18",
+    title: "PWA Offline Install Pass",
+    summary: "PWA 설치, 서비스 워커 오프라인 실행, 수동 업데이트 적용, Screen Wake Lock을 추가",
+    changes: [
+      { category: "PWA", text: "상대 경로 manifest, 앱 아이콘, 설치 버튼, 온라인/오프라인 상태 UI를 추가" },
+      { category: "OFFLINE", text: "서비스 워커와 OFFLINE DATA 버튼으로 앱 shell과 내장 실행 데이터를 캐시에 저장" },
+      { category: "UPDATE", text: "새 서비스 워커는 대기시키고 사용자가 메뉴에서 UPDATE를 눌렀을 때만 적용" },
+      { category: "MOBILE", text: "게임 시작/재개 중 Screen Wake Lock을 요청하고 일시정지/결과/숨김 상태에서 해제" }
+    ]
+  },
+  {
     version: "0.8.1",
     date: "2026-07-18",
     title: "Mobile Render Hot Path Optimization",

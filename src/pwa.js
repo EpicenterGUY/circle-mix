@@ -1,0 +1,59 @@
+(function(){
+  "use strict";
+  const VERSION="0.8.2";
+  const OFFLINE_KEY=`circleMixOfflineReady.${VERSION}`;
+  let deferredInstallPrompt=null, waitingWorker=null, refreshing=false;
+  let running=false, paused=false, wakeLock=null;
+  const $=id=>document.getElementById(id);
+  function standalone(){ return window.matchMedia?.("(display-mode: standalone)").matches || window.matchMedia?.("(display-mode: fullscreen)").matches || window.navigator.standalone===true; }
+  function setText(id,text){ const el=$(id); if(el) el.textContent=text; }
+  function offlineReady(){ try{return localStorage.getItem(OFFLINE_KEY)==="ready";}catch(e){return false;} }
+  function setOfflineState(state,progress){
+    const online=navigator.onLine!==false;
+    const label=state || (online ? (offlineReady()?"OFFLINE READY":"ONLINE") : (offlineReady()?"OFFLINE READY":"OFFLINE DATA MISSING"));
+    setText("pwaNetworkState", label);
+    setText("offlineDataStatus", label==="ONLINE"?"NOT DOWNLOADED":label);
+    if(progress!=null) setText("offlineDataProgress", `${Math.round(progress)}%`);
+  }
+  function postToSW(msg){ if(navigator.serviceWorker?.controller) navigator.serviceWorker.controller.postMessage(msg); }
+  async function refreshOfflineStatus(){
+    if(!navigator.serviceWorker?.controller) return setOfflineState();
+    const channel=new MessageChannel();
+    const result=await new Promise(resolve=>{ channel.port1.onmessage=e=>resolve(e.data); postToSW({type:"OFFLINE_STATUS", version:VERSION, port:channel.port2}); setTimeout(()=>resolve(null),1200); });
+    if(result?.ready){ try{localStorage.setItem(OFFLINE_KEY,"ready");}catch(e){} }
+    setOfflineState();
+  }
+  async function downloadOffline(){
+    if(!navigator.serviceWorker?.controller){ setOfflineState("FAILED"); return; }
+    setOfflineState("DOWNLOADING",0);
+    const channel=new MessageChannel();
+    channel.port1.onmessage=e=>{
+      const data=e.data||{};
+      if(data.type==="OFFLINE_PROGRESS") setOfflineState("DOWNLOADING",data.progress||0);
+      if(data.type==="OFFLINE_COMPLETE"){ try{localStorage.setItem(OFFLINE_KEY,"ready");}catch(err){} setOfflineState("READY",100); }
+      if(data.type==="OFFLINE_FAILED") setOfflineState("FAILED");
+    };
+    postToSW({type:"DOWNLOAD_OFFLINE", version:VERSION, port:channel.port2});
+  }
+  function updateInstallUi(){ const btn=$("installAppBtn"), help=$("installHelp"); if(btn) btn.hidden=standalone() || !deferredInstallPrompt; if(help) help.hidden=standalone() || !!deferredInstallPrompt; document.body.classList.toggle("pwaStandalone", standalone()); }
+  async function promptInstall(){ if(!deferredInstallPrompt){ const h=$("installHelp"); if(h) h.hidden=!h.hidden; return; } const promptEvent=deferredInstallPrompt; deferredInstallPrompt=null; updateInstallUi(); try{ await promptEvent.prompt(); await promptEvent.userChoice; }catch(e){} updateInstallUi(); }
+  function showUpdateReady(worker){ waitingWorker=worker||waitingWorker; const row=$("pwaUpdateRow"), btn=$("pwaUpdateBtn"); if(row) row.hidden=false; if(btn) btn.hidden=false; setOfflineState("UPDATE AVAILABLE"); }
+  function applyUpdate(){ if(!waitingWorker || running) return; waitingWorker.postMessage({type:"SKIP_WAITING"}); }
+  async function requestWakeLock(){ if(!running||paused||document.hidden||!("wakeLock" in navigator)) return; try{ wakeLock=await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release",()=>{ wakeLock=null; }); }catch(e){} }
+  async function releaseWakeLock(){ const lock=wakeLock; wakeLock=null; if(lock){ try{ await lock.release(); }catch(e){} } }
+  window.addEventListener("circlemix:gameplay-state",e=>{ running=!!e.detail?.running; paused=!!e.detail?.paused; if(running&&!paused) requestWakeLock(); else releaseWakeLock(); });
+  document.addEventListener("visibilitychange",()=>{ if(document.hidden) releaseWakeLock(); else if(running&&!paused) requestWakeLock(); });
+  window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); deferredInstallPrompt=e; updateInstallUi(); });
+  window.addEventListener("appinstalled",()=>{ deferredInstallPrompt=null; updateInstallUi(); });
+  window.addEventListener("online",()=>setOfflineState()); window.addEventListener("offline",()=>setOfflineState());
+  if("serviceWorker" in navigator){
+    window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").then(reg=>{
+      if(reg.waiting) showUpdateReady(reg.waiting);
+      reg.addEventListener("updatefound",()=>{ const sw=reg.installing; if(!sw) return; sw.addEventListener("statechange",()=>{ if(sw.state==="installed" && navigator.serviceWorker.controller) showUpdateReady(sw); }); });
+      refreshOfflineStatus();
+    }).catch(()=>setOfflineState("FAILED")));
+    navigator.serviceWorker.addEventListener("controllerchange",()=>{ if(refreshing) return; refreshing=true; window.location.reload(); });
+  }
+  window.CircleMixPWA={setGameplayState(detail){ window.dispatchEvent(new CustomEvent("circlemix:gameplay-state",{detail})); }, canApplyUpdate(){return !running;}};
+  document.addEventListener("DOMContentLoaded",()=>{ $("offlineDataBtn")?.addEventListener("click",downloadOffline); $("installAppBtn")?.addEventListener("click",promptInstall); $("pwaUpdateBtn")?.addEventListener("click",applyUpdate); setOfflineState(); updateInstallUi(); });
+})();

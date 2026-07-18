@@ -3877,7 +3877,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
     tutorialMode=true; tutorialState.autoSuppressed=true; tutorialState.transitioning=true;
     document.body.classList.add("tutorialMode","tutorialIntro"); resize();
-    abortingRun=false; resultShown=false; completionPending=false; paused=false; running=true;
+    abortingRun=false; resultShown=false; completionPending=false; paused=false; running=true; notifyPwaGameplay();
     chart=runtime.chart;
     score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1;
     setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none";
@@ -3895,7 +3895,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
   function restoreTutorialAuto(){ gameState.autoEnabled=!!tutorialState.previousAutoEnabled; tutorialState.autoSuppressed=false; updateButtons(); safeRefresh&&safeRefresh(); }
-  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); chart=[]; chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
+  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
   function completeTutorial(){ clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none"; }
   function updateTutorialAim(){
     const st=tutorialSteps[tutorialStepIndex];
@@ -3921,6 +3921,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
   function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialState.failCount++; tutorialAttempts++; addFeedback("다시 시도",cx,cy-baseR*.42,COLORS.miss); tutorialSetTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
 
+  function notifyPwaGameplay(){ try{ window.CircleMixPWA?.setGameplayState({running, paused, scene:activeSceneName()}); }catch(e){} }
+
   function showResult(result, recordInfo){
     score=result.finalScore;
     if(resultSongTitle) resultSongTitle.textContent=`${result.songTitle} / ${result.difficultyLabel || getActiveDifficultyLabel(selectedSong,result.difficulty)} / ${result.starLevel}`;
@@ -3940,6 +3942,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
       resultBest.textContent=best ? `BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")} / POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"} / ${best.bestRank || "---"} / ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}` : (result.autoPlay ? "AUTO PLAY is not saved" : "NO RECORD");
     }
     if(resultOverlay){ resultOverlay.classList.toggle("newRecord", !!(recordInfo?.newRecord || recordInfo?.newPowerRecord)); resultOverlay.classList.add("show"); }
+    notifyPwaGameplay();
     animateResultScore(result.finalScore);
   }
 
@@ -3948,6 +3951,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(resultShown || abortingRun) return;
     resultShown=true;
     cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:false});
+    notifyPwaGameplay();
     const result=buildResultData();
     if(!result){ alert("결과를 계산할 수 없습니다. 채보가 비어 있거나 잘못되었습니다."); exitToMenu(); return; }
     const recordInfo=saveBestRecord(result);
@@ -3964,6 +3968,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function endGame(stopAudio=true){
     cleanupPlaySession({stopAudio, hideResultOverlay:true, abort:true});
+    notifyPwaGameplay();
     if(stopAudio && activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
     startLayer.style.display="flex";
     updateButtons();
@@ -3975,6 +3980,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(!paused){
       paused=true;
       song.pause();
+      notifyPwaGameplay();
       if(raf){cancelAnimationFrame(raf);raf=0;}
     }
     if(pauseOverlay) pauseOverlay.classList.add("show");
@@ -3987,6 +3993,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     releaseMobilePointers();
     if(!paused) return;
     paused=false;
+    notifyPwaGameplay();
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     if(pauseRetry) pauseRetry.textContent="RETRY";
     document.body.classList.remove("pausedInputBlocked");
@@ -4192,6 +4199,7 @@ settingsOrigin=${settingsOrigin}`);
     score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0; actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0);
     feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
     running=true;
+    notifyPwaGameplay();
     closeSettingsOverlayOnly();
     safeSetState("game", "start runtime init");
     setCleanGameplay(true);
