@@ -4808,7 +4808,7 @@ settingsOrigin=${settingsOrigin}`);
   bindPress(pauseSetAimStabilizer,()=>{cycleAimStabilizer();syncPauseSettingsUI();});
   bindPress(pauseSetMobileQuality,()=>{cycleMobileQuality();syncPauseSettingsUI();});
   bindPress(pauseSetHaptic,()=>{toggleHaptic();syncPauseSettingsUI();});
-  bindPress(pauseSetMobileLayout,openMobileLayoutEditor); bindPress(pauseSetMobileInputTest,openMobileInputTest); bindPress(pauseSetMobileExport,()=>{try{navigator.clipboard?.writeText(exportMobileControls());}catch(e){} alert(exportMobileControls());}); bindPress(pauseSetMobileReset,resetMobileControls);
+  bindPress(pauseSetMobileLayout,openMobileLayoutEditor); bindPress(pauseSetMobileInputTest,openMobileInputTest); bindPress(pauseSetMobileExport,()=>{try{navigator.clipboard?.writeText(exportMobileControls());}catch(e){} alert(exportMobileControls());}); bindPress(pauseSetMobileReset,resetMobileControls); bindPress(document.getElementById("pauseSetUpdateLog"),()=>openUpdateLog({index:0, auto:false}));
   bindPress(document.getElementById("mobileLayoutSave"),()=>closeMobileLayoutEditor(true)); bindPress(document.getElementById("mobileLayoutCancel"),()=>closeMobileLayoutEditor(false)); bindPress(document.getElementById("mobileLayoutCancelTop"),()=>closeMobileLayoutEditor(false)); bindPress(document.getElementById("mobileLayoutReset"),()=>{Object.assign(inputSettings,MOBILE_CONTROL_DEFAULTS); mobileLayoutDraft=presetMobileLayout("STANDARD"); renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileLayoutSwap"),()=>{[mobileLayoutDraft.actionX,mobileLayoutDraft.scratchX]=[mobileLayoutDraft.scratchX,mobileLayoutDraft.actionX];[mobileLayoutDraft.actionY,mobileLayoutDraft.scratchY]=[mobileLayoutDraft.scratchY,mobileLayoutDraft.actionY]; renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileLayoutPreset"),()=>{const i=(MOBILE_CONTROL_PRESETS.indexOf(inputSettings.mobileControlPreset)+1)%3; inputSettings.mobileControlPreset=MOBILE_CONTROL_PRESETS[i]; mobileLayoutDraft=presetMobileLayout(inputSettings.mobileControlPreset); renderMobileLayoutEditor();});
   bindPress(document.getElementById("mobileActionSizeDown"),()=>{inputSettings.mobileActionSize=finiteRange(inputSettings.mobileActionSize-4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileActionSizeUp"),()=>{inputSettings.mobileActionSize=finiteRange(inputSettings.mobileActionSize+4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileScratchSizeDown"),()=>{inputSettings.mobileScratchSize=finiteRange(inputSettings.mobileScratchSize-4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileScratchSizeUp"),()=>{inputSettings.mobileScratchSize=finiteRange(inputSettings.mobileScratchSize+4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileOpacityDown"),()=>{inputSettings.mobileButtonOpacity=finiteRange(inputSettings.mobileButtonOpacity-.05,.35,1,.68);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileOpacityUp"),()=>{inputSettings.mobileButtonOpacity=finiteRange(inputSettings.mobileButtonOpacity+.05,.35,1,.68);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileInputTestClose"),closeMobileInputTest);
   bindPress(addCutBtn,()=>addEditorNote("cut"));bindPress(addSwingCWBtn,()=>addEditorNote("swingCW"));bindPress(addSwingCCWBtn,()=>addEditorNote("swingCCW"));bindPress(addFxBtn,()=>addEditorNote("fx"));bindPress(addSlideCWBtn,()=>addEditorNote("slideCW"));bindPress(addSlideCCWBtn,()=>addEditorNote("slideCCW"));bindPress(addScratchCWBtn,()=>addEditorNote("scratchCW"));bindPress(addScratchCCWBtn,()=>addEditorNote("scratchCCW"));
@@ -4913,7 +4913,6 @@ settingsOrigin=${settingsOrigin}`);
   }
 
   function openUpdateLog(options={}){
-    if(!circleMixDevMode) return;
     const overlay=document.getElementById("updateLogOverlay");
     if(!overlay) return;
     updateLogState.index = Math.max(0, Math.min(options.index || 0, sortedChangelogEntries().length - 1));
@@ -4930,7 +4929,7 @@ settingsOrigin=${settingsOrigin}`);
     const overlay=document.getElementById("updateLogOverlay");
     if(overlay){ overlay.classList.remove("show"); overlay.hidden=true; }
     document.body.classList.remove("updateLogOpen");
-    if(updateLogState.auto) markCurrentVersionSeen();
+    markCurrentVersionSeen();
     updateLogState.auto=false;
   }
 
@@ -4938,7 +4937,9 @@ settingsOrigin=${settingsOrigin}`);
     try{ localStorage.removeItem("circleMixDevMode"); }catch(e){}
     circleMixDevMode=false;
     const btn=document.getElementById("safeUpdateLogBtn");
-    if(btn) btn.hidden=true;
+    if(btn) btn.hidden=false;
+    const devOffBtn=document.getElementById("updateLogDevOff");
+    if(devOffBtn) devOffBtn.hidden=true;
     closeUpdateLog();
   }
 
@@ -4946,17 +4947,17 @@ settingsOrigin=${settingsOrigin}`);
     const versionText=document.getElementById("safeVersionText");
     const updateBtn=document.getElementById("safeUpdateLogBtn");
     if(versionText) versionText.textContent=`CIRCLE MIX v${currentVersionString()}`;
-    if(updateBtn){ updateBtn.hidden=!circleMixDevMode; safeBind(updateBtn,()=>openUpdateLog({index:0, auto:false})); }
+    if(updateBtn){ updateBtn.hidden=false; safeBind(updateBtn,()=>openUpdateLog({index:0, auto:false})); }
+    const devOffBtn=document.getElementById("updateLogDevOff");
+    if(devOffBtn) devOffBtn.hidden=!circleMixDevMode;
     safeBind(document.getElementById("updateLogClose"), closeUpdateLog);
     safeBind(document.getElementById("updateLogCloseIcon"), closeUpdateLog);
     safeBind(document.getElementById("updateLogDevOff"), disableCircleMixDevMode);
     safeBind(document.getElementById("updateLogPrev"), ()=>{ updateLogState.index=Math.min(updateLogState.index+1, sortedChangelogEntries().length-1); renderUpdateLog(); });
     safeBind(document.getElementById("updateLogNext"), ()=>{ updateLogState.index=Math.max(updateLogState.index-1, 0); renderUpdateLog(); });
-    if(circleMixDevMode){
-      let lastSeen="";
-      try{ lastSeen=localStorage.getItem(LAST_SEEN_VERSION_KEY) || ""; }catch(e){}
-      if(currentVersionString() !== lastSeen && activeSceneName() === "title") setTimeout(()=>openUpdateLog({index:0, auto:true}), 120);
-    }
+    let lastSeen="";
+    try{ lastSeen=localStorage.getItem(LAST_SEEN_VERSION_KEY) || ""; }catch(e){}
+    if(currentVersionString() !== lastSeen && activeSceneName() === "title") setTimeout(()=>{ if(activeSceneName() === "title") openUpdateLog({index:0, auto:true}); }, 120);
   }
 
   window.addEventListener("keydown",e=>{
@@ -5021,6 +5022,7 @@ settingsOrigin=${settingsOrigin}`);
   const safeSetAuto=document.getElementById("safeSetAuto");
   const safeSetMap=document.getElementById("safeSetMap");
   const safeSetKeymap=document.getElementById("safeSetKeymap");
+  const safeSetUpdateLog=document.getElementById("safeSetUpdateLog");
   const safeSetFull=document.getElementById("safeSetFull");
   const safeSetSfx=document.getElementById("safeSetSfx");
   const safeSetMusic=document.getElementById("safeSetMusic");
@@ -5410,6 +5412,7 @@ running=${running}`);
   safeBind(safeSetAuto,()=>toggleAuto("settings"));
   safeBind(safeSetMap,()=>{if(running && !debugMode)return; mapMode=mapMode==="tech"?"normal":"tech";selectedMenuMode=mapMode;safeRefresh();restartIfRunning();});
   safeBind(safeSetKeymap,()=>toggleKeymap(true));
+  safeBind(safeSetUpdateLog,()=>openUpdateLog({index:0, auto:false}));
   safeBind(safeSetFull,requestFullscreenSafe);
   safeBind(safeSetSfx,()=>{sfxEnabled=!sfxEnabled;refreshSettingsUI();});
   safeBind(safeSetMusic,()=>changeMusic(musicVolume>=.95?-.45:.10));

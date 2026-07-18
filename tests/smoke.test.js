@@ -175,8 +175,10 @@ assert.equal(JSON.stringify(mirror.charts[difficulty].notes), JSON.stringify(bun
 test("index and service worker use the same PWA cache query", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260718-pwa-offline-port-fix-1/);
-assert.match(sw, /20260718-pwa-offline-port-fix-1/);
+assert.match(index, /20260718-mobile-update-log-hotfix-1/);
+assert.match(sw, /20260718-mobile-update-log-hotfix-1/);
+assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
+assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
 assert.doesNotMatch(sw, /20260718-mobile-play-hotfix-1/);
 });
@@ -253,4 +255,74 @@ assert.match(css, /body\.safeTitle \.safeMenuCard\{[^}]*max-height:calc\(var\(--
 assert.match(css, /@media \(max-width:768px\) and \(max-height:700px\)/);
 assert.match(css, /@media \(max-width:768px\) and \(max-height:560px\)/);
 assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOverlay,body\.safeSongSelect \.songSelect\{align-items:flex-start;overflow:auto/);
+});
+
+
+test("mobile hotfix versions are synchronized at 0.9.5", () => {
+const version = fs.readFileSync("src/version.js", "utf8");
+const pwa = fs.readFileSync("src/pwa.js", "utf8");
+const sw = fs.readFileSync("service-worker.js", "utf8");
+const changelog = fs.readFileSync("src/changelog.js", "utf8");
+assert.match(version, /version:\s*"0\.9\.5"/);
+assert.match(pwa, /const VERSION="0\.9\.5"/);
+assert.match(sw, /const VERSION = "0\.9\.5"/);
+assert.match(changelog, /version:\s*"0\.9\.5"/);
+});
+
+test("index and service worker app shell cache-bust URLs match exactly", () => {
+const index = fs.readFileSync("index.html", "utf8");
+const sw = fs.readFileSync("service-worker.js", "utf8");
+const indexUrls = [...index.matchAll(/(?:href|src)="(\.\/(?:style\.css|src\/[^\"]+\.js)\?v=[^"]+)"/g)].map(m=>m[1]).sort();
+const swUrls = [...sw.matchAll(/"(\.\/(?:style\.css|src\/[^\"]+\.js)\?v=[^"]+)"/g)].map(m=>m[1]).sort();
+assert.deepEqual(swUrls, indexUrls);
+assert.ok(indexUrls.length > 5);
+});
+
+test("old mobile PWA cache-bust token is fully removed", () => {
+for(const file of ["index.html", "service-worker.js", "src/version.js", "src/pwa.js", "src/changelog.js"]){
+const text = fs.readFileSync(file, "utf8");
+assert.doesNotMatch(text, /20260718-pwa-offline-port-fix-1/, file);
+}
+});
+
+test("update log is available to regular users", () => {
+const game = fs.readFileSync("src/game.js", "utf8");
+const openBody = game.match(/function openUpdateLog\(options=\{\}\)\{([\s\S]*?)\n  \}/)[1];
+assert.doesNotMatch(openBody, /circleMixDevMode\) return/);
+assert.match(game, /if\(updateBtn\)\{ updateBtn\.hidden=false; safeBind\(updateBtn,\(\)=>openUpdateLog/);
+const index = fs.readFileSync("index.html", "utf8");
+assert.doesNotMatch(index, /id="safeUpdateLogBtn"[^>]*hidden/);
+});
+
+test("update log buttons are not dev-mode-only except DEV MODE OFF", () => {
+const game = fs.readFileSync("src/game.js", "utf8");
+assert.match(game, /const devOffBtn=document\.getElementById\("updateLogDevOff"\);\n    if\(devOffBtn\) devOffBtn\.hidden=!circleMixDevMode;/);
+assert.doesNotMatch(game, /safeUpdateLogBtn[\s\S]{0,140}hidden=!circleMixDevMode/);
+assert.match(fs.readFileSync("index.html", "utf8"), /id="safeSetUpdateLog"[\s\S]*UPDATE LOG[\s\S]*id="pauseSetUpdateLog"/);
+});
+
+
+test("turning off dev mode immediately hides only DEV MODE OFF", () => {
+const game = fs.readFileSync("src/game.js", "utf8");
+const disableBody = game.match(/function disableCircleMixDevMode\(\)\{([\s\S]*?)\n  \}/)[1];
+assert.match(disableBody, /circleMixDevMode=false/);
+assert.match(disableBody, /const btn=document\.getElementById\("safeUpdateLogBtn"\);\n    if\(btn\) btn\.hidden=false;/);
+assert.match(disableBody, /const devOffBtn=document\.getElementById\("updateLogDevOff"\);\n    if\(devOffBtn\) devOffBtn\.hidden=true;/);
+assert.doesNotMatch(disableBody, /safeUpdateLogBtn[\s\S]{0,120}hidden=true/);
+});
+
+test("automatic update log only opens on the title screen", () => {
+const game = fs.readFileSync("src/game.js", "utf8");
+assert.match(game, /currentVersionString\(\) !== lastSeen && activeSceneName\(\) === "title"/);
+assert.match(game, /setTimeout\(\(\)=>\{ if\(activeSceneName\(\) === "title"\) openUpdateLog\(\{index:0, auto:true\}\); \}, 120\)/);
+});
+
+test("mobile title final safeTitle CSS keeps overflow hidden", () => {
+const css = fs.readFileSync("style.css", "utf8");
+const safeTitleRules = [...css.matchAll(/body\.safeTitle(?:\s+#safeMenu)?\{([^}]*)\}/g)];
+assert.ok(safeTitleRules.length >= 2);
+const lastBodyRule = [...css.matchAll(/body\.safeTitle\{([^}]*)\}/g)].at(-1)[1];
+assert.match(lastBodyRule, /overflow:hidden/);
+assert.doesNotMatch(css.slice(css.lastIndexOf("body.safeTitle{")), /body\.safeTitle\{[^}]*overflow:auto/);
+assert.doesNotMatch(css.slice(css.lastIndexOf("body.safeTitle #safeMenu{")), /body\.safeTitle #safeMenu\{[^}]*overflow:auto/);
 });
