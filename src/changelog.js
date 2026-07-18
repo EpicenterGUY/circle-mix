@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.5",
+    date: "2026-07-18",
+    title: "Mobile PWA Update Log Hotfix",
+    summary: "모바일 PWA 캐시 갱신과 일반 사용자 업데이트 로그 노출을 수정",
+    changes: [
+      { category: "PWA", text: "앱 버전과 앱 셸 cache-bust query를 갱신해 새 서비스 워커가 수정된 모바일 시작 화면 CSS를 제공" },
+      { category: "UPDATE", text: "UPDATE LOG를 일반 기능으로 전환하고 새 버전 최초 타이틀 진입 시 한 번 자동 표시" },
+      { category: "MOBILE", text: "업데이트 로그 overlay가 모바일 화면 안에서 카드 본문만 스크롤되도록 조정" }
+    ]
+  },
+  {
     version: "0.9.4",
     date: "2026-07-18",
     title: "PWA Offline Download Port Fix",
