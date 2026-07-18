@@ -1,5 +1,6 @@
 (() => {
   const song = document.getElementById("song");
+  const embeddedAnimaSrc = (song && typeof song.getAttribute === "function") ? (song.getAttribute("src") || "") : (song?.src || "");
   const canvas = document.getElementById("game");
   const gameRoot = document.getElementById("gameRoot") || document.documentElement;
   const fullscreenTarget = document.documentElement;
@@ -289,9 +290,10 @@
   let selectedMenuMode=(selectedDifficultyId || initialDifficultyParam || "tech").toLowerCase();
   let songTab=selectedSource==="local" ? "local" : "built-in";
   let activeLocalBlobUrl=null;
+  let previewTimer=0;
+  let previewActive=false;
   let activePlaySource="builtin";
   let activeChartId=null;
-  if(selectedSource==="builtin" && !initialDifficultyParam && selectedMenuMode!=="normal" && selectedMenuMode!=="tech") selectedMenuMode="tech";
   let paused=false;
   let completionPending=false, completionTimer=0, resultShown=false, abortingRun=false;
   let settingsVisible=false;
@@ -300,7 +302,7 @@
   let fullscreenInterrupted=false;
   let pauseSettingsOpen=false;
   let customChartData=[];
-  const difficultyCache={normal:null,tech:null};
+  const difficultyCache={};
   let lastTraceSwingRuntimeLogAt=0, lastTraceSwingRuntimeLogState="";
   let mobileAimPointerId = null;
   let mobileActionPointerId = null;
@@ -324,7 +326,7 @@
   }
   function getActiveDifficultyLabel(songData=selectedSong, difficultyId=selectedDifficultyId || selectedMenuMode){
     if(!difficultyId) return "UNKNOWN";
-    if(songData?.source==="builtin") return difficultyId==="tech" ? "TECH" : (difficultyId==="normal" ? "NORMAL" : String(difficultyId).toUpperCase());
+    if(songData?.source==="builtin") return songData?.difficulties?.[difficultyId]?.label || String(difficultyId).toUpperCase();
     const diffMeta=songData?.difficulties?.[difficultyId];
     if(diffMeta?.label) return String(diffMeta.label);
     const chartMeta=songData?.charts?.[difficultyId]?.meta || songData?.charts?.[difficultyId]?.metadata || songData?.charts?.[difficultyId];
@@ -333,6 +335,44 @@
     return "UNKNOWN";
   }
   function getSelectedChartId(){ return selectedSource==="local" ? selectedDifficultyId : selectedMenuMode; }
+  function stopSongPreview(){
+    previewActive=false;
+    if(previewTimer){ clearTimeout(previewTimer); previewTimer=0; }
+    try{ song.pause(); song.currentTime=0; }catch(e){}
+  }
+
+  function loadPreviewAudio(songData){
+    if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
+    if(songData?.source==="local"){
+      if(!songData.audioBlob) return false;
+      activeLocalBlobUrl=URL.createObjectURL(songData.audioBlob); song.src=activeLocalBlobUrl;
+    }else if(songData?.audio && String(songData.audio).startsWith("#")){
+      song.src=embeddedAnimaSrc;
+    }else if(songData?.audio){
+      song.src=songData.audio;
+    }
+    try{ song.load(); }catch(e){}
+    applyMusicVolume();
+    return true;
+  }
+
+  function startSongPreview(){
+    if(running || !songSelect || songSelect.hidden || !selectedSong) return;
+    stopSongPreview();
+    if(!loadPreviewAudio(selectedSong)) return;
+    const previewStart=Number(selectedSong.previewStart)||0;
+    const previewDuration=Math.max(1, Number(selectedSong.previewDuration)||15);
+    previewActive=true;
+    const play=()=>{
+      if(!previewActive || running) return;
+      try{ song.currentTime=previewStart; }catch(e){}
+      song.play().catch(()=>{});
+      previewTimer=setTimeout(()=>{ if(previewActive) startSongPreview(); }, previewDuration*1000);
+    };
+    if(Number.isFinite(song.duration) || song.readyState>=1) play();
+    else song.addEventListener("loadedmetadata", play, {once:true});
+  }
+
   function syncSongUrl(){
     const url = new URL(window.location.href);
     url.searchParams.set("tab", selectedSource==="local" ? "local" : "builtin");
@@ -354,8 +394,7 @@
     if(!selectedSong && selectedSource==="builtin") selectedSong = {id:"anima", source:"builtin", title:"ANiMA", artist:"xi", bpm:184.6, offset:-0.04, difficulties:{normal:{label:"NORMAL"}, tech:{label:"TECH"}}};
     BPM = selectedSong?.bpm || 184.6;
     BEAT = 60 / BPM;
-    difficultyCache.normal = null;
-    difficultyCache.tech = null;
+    SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04;
     Object.keys(difficultyCache).forEach(k=>delete difficultyCache[k]);
     return selectedSong;
   }
@@ -703,19 +742,41 @@
     return {stars:Math.round(clamp(normalized,1,10)*10)/10, raw};
   }
 
+  function getBuiltinChartSource(songId, difficultyId){
+    if(songId==="anima" && difficultyId==="normal") return {kind:"generator", notes:generateNormalChart(), gap:1.75, trimBeat:CHART_END_BEAT};
+    if(songId==="anima" && difficultyId==="tech") return {kind:"generator", notes:generateTechChart(), gap:1.10, trimBeat:CHART_END_BEAT};
+    if(songId==="ghost-rule"){
+      const bundle=window.CircleMixGhostRuleBundle;
+      const chartData=bundle?.charts?.[difficultyId];
+      if(chartData?.notes?.length) return {kind:"bundle", notes:chartData.notes, chart:chartData};
+    }
+    throw new Error(`지원하지 않는 내장 채보입니다: ${songId}/${difficultyId}`);
+  }
+
   function chartForDifficulty(mode){
-    const raw=mode==="tech" ? generateTechChart() : generateNormalChart();
-    const gapFilled=fillPlayableGaps(raw, mode==="tech" ? 1.10 : 1.75);
-    return gapFilled.filter(n => (n.beat ?? 0) <= CHART_END_BEAT).map(n => ({
-      ...n,
-      hitTime:(n.beat ?? 0)*BEAT*CHART_STRETCH,
-      duration:n.duration||0
-    })).sort((a,b)=>a.hitTime-b.hitTime);
+    const source=getBuiltinChartSource(selectedSong?.id || "anima", mode);
+    if(source.kind==="generator"){
+      const raw=fillPlayableGaps(source.notes, source.gap).filter(n => (n.beat ?? 0) <= source.trimBeat);
+      return raw.map(n => {
+        const note={...n};
+        if(note.endBeat && note.endBeat > source.trimBeat){
+          const maxDurBeat = Math.max(0.5, source.trimBeat - note.beat);
+          note.duration = maxDurBeat * BEAT * CHART_STRETCH;
+          note.endBeat = source.trimBeat;
+        }
+        note.hitTime = note.beat * BEAT * CHART_STRETCH;
+        note.spawnTime = note.hitTime - APPROACH;
+        return note;
+      }).sort((a,b)=>a.hitTime-b.hitTime);
+    }
+    return source.notes.map(localNoteToGame).sort((a,b)=>a.hitTime-b.hitTime);
   }
 
   function getDifficulty(mode=mapMode){
     if(selectedSong?.source==="local"){ const c=selectedSong.charts?.[mode]; return c ? {stars:chartTools.calculateStars(c), raw:0} : null; }
-    if(mode!=="normal" && mode!=="tech") return null;
+    const meta=selectedSong?.difficulties?.[mode];
+    if(meta && Number.isFinite(Number(meta.stars))) return {stars:Number(meta.stars), raw:null, bundleStars:true};
+    if(!songs.hasDifficulty(selectedSong, mode)) return null;
     if(!difficultyCache[mode]) difficultyCache[mode]=calculateChartDifficulty(chartForDifficulty(mode));
     return difficultyCache[mode];
   }
@@ -1752,7 +1813,7 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT*CHART_STRETCH, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); }
 
   function generateChart(){
     if(useCustomChart){
@@ -1767,26 +1828,8 @@
       if(!checked.ok){ alert("채보 오류로 플레이를 시작할 수 없습니다.\n"+checked.errors.join("\n")); return []; }
       return (data.notes||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT*CHART_STRETCH; n.spawnTime=n.hitTime-APPROACH; return n; }).sort((a,b)=>a.hitTime-b.hitTime);
     }
-    const raw = mapMode==="tech" ? generateTechChart() : generateNormalChart();
-
-    // CLEAN HARD FLOW:
-    // 구조형 채보는 유지하되, 긴 빈 구간만 단일 CUT으로 보강.
-    // NORMAL은 숨 쉴 틈 있는 연속감, TECH는 거의 계속 손이 움직이게.
-    const gapFilled = fillPlayableGaps(raw, mapMode==="tech" ? 1.10 : 1.75);
-    const trimmed = gapFilled.filter(n => (n.beat ?? 0) <= CHART_END_BEAT);
-
-    return trimmed
-      .map(n => {
-        if(n.endBeat && n.endBeat > CHART_END_BEAT){
-          const maxDurBeat = Math.max(0.5, CHART_END_BEAT - n.beat);
-          n.duration = maxDurBeat * BEAT * CHART_STRETCH;
-          n.endBeat = CHART_END_BEAT;
-        }
-        n.hitTime = n.beat * BEAT * CHART_STRETCH;
-        n.spawnTime = n.hitTime - APPROACH;
-        return n;
-      })
-      .sort((a,b)=>a.hitTime-b.hitTime);
+    try{ return chartForDifficulty(mapMode); }
+    catch(err){ alert(err.message); return []; }
   }
 
   function resolveTraceMotion(n){
@@ -3699,7 +3742,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     document.body.classList.remove("pausedInputBlocked", "pauseSettingsOpen", "showSettings");
     settingsVisible=false;
     setPauseMessage("");
-    if(stopAudio){ try{ song.pause(); }catch(e){} }
+    if(stopAudio){ stopSongPreview(); try{ song.pause(); }catch(e){} }
     if(hideResultOverlay) hideResult();
     setCleanGameplay(false);
   }
@@ -4136,7 +4179,11 @@ endpointCaptured=${n.endpointCaptured===true}`);
     resize();
   }
 
-  function songEndTime(){ if(selectedSong?.source==="local") return Math.max(song.duration||0, chart.at(-1)?.hitTime||0)+2; return SONG_END_TIME; }
+  function songEndTime(){
+    if(selectedSong?.id==="anima" && selectedSong?.source==="builtin") return SONG_END_TIME;
+    const audioEnd=Number.isFinite(song.duration) ? song.duration - SONG_OFFSET : 0;
+    return Math.max(audioEnd || 0, chartLastHitEnd || 0) + 1.5;
+  }
 
   function frame(ms){
     if(!running)return;
@@ -4188,7 +4235,22 @@ endpointCaptured=${n.endpointCaptured===true}`);
     raf=requestAnimationFrame(frame);
   }
 
-  async function prepareSelectedAudio(){ if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; } SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04; if(activePlaySource==="local"){ if(!selectedSong?.audioBlob) throw new Error("로컬 오디오 Blob을 찾을 수 없습니다."); activeLocalBlobUrl=URL.createObjectURL(selectedSong.audioBlob); song.src=activeLocalBlobUrl; try{ song.load(); }catch(e){} } }
+  async function prepareSelectedAudio(){
+    stopSongPreview();
+    try{ song.pause(); song.currentTime=0; }catch(e){}
+    if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
+    BPM = selectedSong?.bpm || 184.6; BEAT = 60 / BPM; SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04;
+    if(activePlaySource==="local"){
+      if(!selectedSong?.audioBlob) throw new Error("로컬 오디오 Blob을 찾을 수 없습니다.");
+      activeLocalBlobUrl=URL.createObjectURL(selectedSong.audioBlob); song.src=activeLocalBlobUrl;
+    }else if(selectedSong?.audio && String(selectedSong.audio).startsWith("#")){
+      song.src=embeddedAnimaSrc;
+    }else if(selectedSong?.audio){
+      song.src=selectedSong.audio;
+    }
+    try{ song.load(); }catch(e){}
+    applyMusicVolume();
+  }
 
   async function start(mode="play"){
     if(raf)cancelAnimationFrame(raf);
@@ -4199,8 +4261,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     paused=false;
     abortingRun=false; completionPending=false; resultShown=false;
-    if(selectedMenuMode==="normal") mapMode="normal";
-    if(selectedMenuMode==="tech") mapMode="tech";
+    if(selectedMenuMode) mapMode=selectedMenuMode;
     if(selectedMenuMode==="custom") useCustomChart=customChartData.length>0;
     editorMode=mode==="editor";
     if(editorPanel)editorPanel.classList.toggle("show",editorMode);
@@ -4956,15 +5017,16 @@ settingsOrigin=${settingsOrigin}`);
       const artist=escapeHtml(songData.artist || "UNKNOWN");
       const bpm=escapeHtml(songData.bpm || "--");
       const manage=songData.source==="local" ? `<div class="songManage"><button data-action="rename" data-song-id="${songIdAttr}">EDIT META</button><button data-action="clone" data-song-id="${songIdAttr}">CLONE</button><button data-action="delete" data-song-id="${songIdAttr}">DELETE</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : "";
+      const jacket=songData.jacket ? `<img src="${escapeAttribute(songData.jacket)}" alt="" loading="lazy" onerror="this.remove()">` : "";
       return `<div class="songCard${active ? " active" : ""}" data-song-id="${songIdAttr}">
-        <button class="songCardPick" type="button" data-song-id="${songIdAttr}"><div class="songJacket" aria-hidden="true"><span>${songTitle}</span></div>
+        <button class="songCardPick" type="button" data-song-id="${songIdAttr}"><div class="songJacket" aria-hidden="true">${jacket}<span>${songTitle}</span></div>
         <div class="songMeta"><span>${artist}</span><strong>${songTitle}</strong><em>${bpm} BPM</em><small>${diffs || "NO CHART"}</small></div></button>${manage}
       </div>`;
     }).join("") : `<div class="localEmpty"><p>로컬 라이브러리가 비어 있습니다. 에디터에서 곡을 만들어주세요.</p><button class="songPlayBtn" id="openEditorFromEmpty" type="button">OPEN EDITOR</button></div>`);
-    for(const tab of songCarousel.querySelectorAll(".songTab")){ bindPress(tab,async()=>{ songTab=tab.dataset.tab; selectedSource=songTab==="local"?"local":"builtin"; if(selectedSource==="local"){ selectedSongId=null; selectedDifficultyId=null; selectedSong=null; }else{ selectedSongId="anima"; selectedDifficultyId="tech"; } await songs.refreshLocal(); renderSongSelect(); }); }
+    for(const tab of songCarousel.querySelectorAll(".songTab")){ bindPress(tab,async()=>{ songTab=tab.dataset.tab; selectedSource=songTab==="local"?"local":"builtin"; if(selectedSource==="local"){ selectedSongId=null; selectedDifficultyId=null; selectedSong=null; }else{ selectedSongId="anima"; selectedDifficultyId="tech"; } try{ song.pause(); song.currentTime=0; }catch(e){} await songs.refreshLocal(); renderSongSelect(); }); }
     const emptyBtn=document.getElementById("openEditorFromEmpty"); if(emptyBtn) bindPress(emptyBtn,()=>{ location.href="./editor.html"; });
     for(const card of songCarousel.querySelectorAll(".songCardPick")){
-      bindPress(card,()=>{ resolveSelectedSong(card.dataset.songId, selectedSource); selectedDifficultyId=null; renderSongSelect(); });
+      bindPress(card,()=>{ try{ song.pause(); song.currentTime=0; }catch(e){} resolveSelectedSong(card.dataset.songId, selectedSource); selectedDifficultyId=null; renderSongSelect(); });
     }
     for(const btn of songCarousel.querySelectorAll(".songManage button")){
       bindPress(btn,async()=>{ const id=btn.dataset.songId, action=btn.dataset.action; const rec=await window.CircleMixLocalSongs.get(id); if(!rec)return; if(action==="delete"){ if(confirm(`${rec.title}을(를) 삭제할까요? 오디오와 모든 채보도 함께 삭제됩니다.`)){ await window.CircleMixLocalSongs.delete(id); await songs.refreshLocal(); selectedSongId=null; selectedDifficultyId=null; selectedSong=null; renderSongSelect(); } } if(action==="clone"){ const copy={...rec,id:rec.id+"-copy",title:rec.title+" Copy",updatedAt:new Date().toISOString()}; await window.CircleMixLocalSongs.put(copy); await songs.refreshLocal(); resolveSelectedSong(copy.id,"local"); renderSongSelect(); } if(action==="rename"){ const title=prompt("곡명",rec.title); if(title===null)return; const artist=prompt("아티스트",rec.artist||""); if(artist===null)return; await window.CircleMixLocalSongs.put({...rec,title:title.trim()||rec.title,artist:artist.trim()||rec.artist,updatedAt:new Date().toISOString()}); await songs.refreshLocal(); renderSongSelect(); } });
@@ -4989,6 +5051,7 @@ settingsOrigin=${settingsOrigin}`);
       bindPress(btn,()=>{ selectedDifficultyId = btn.dataset.difficulty; selectedMenuMode = selectedDifficultyId; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });
     }
     cacheDynamicDomRefs(songDifficulty);
+    startSongPreview();
     const songAutoBtn=domCache.songAutoBtn;
     bindPress(songAutoBtn,()=>{ toggleAuto("song-select"); renderSongSelect(); });
     if(songPlayBtn) songPlayBtn.disabled = !buildPlayRequest();
@@ -5026,11 +5089,11 @@ settingsOrigin=${settingsOrigin}`);
     songTab=selectedSource==="local" ? "local" : "built-in";
     selectedSongId=selectedSource==="local" ? (params.get("song") || null) : (params.get("song") || selectedSongId || "anima");
     selectedDifficultyId=selectedSource==="local" ? (params.get("chart") || null) : ((params.get("difficulty") || selectedDifficultyId || "tech").toLowerCase());
-    renderSongSelect();
+    stopSongPreview();
     safeSetState("songSelect");
     document.body.classList.remove("safeClean");
     if(songSelect) songSelect.hidden = false;
-    try{ song.pause(); }catch(e){}
+    renderSongSelect();
   }
 
   function showTitleMenu(){
@@ -5055,6 +5118,7 @@ settingsOrigin=${settingsOrigin}`);
     selectedDifficultyId=resolved.difficultyId;
     selectedMenuMode=resolved.difficultyId;
     mapMode=resolved.difficultyId;
+    stopSongPreview();
     if(songSelect) songSelect.hidden = true;
     closeSettingsOverlayOnly();
     safeSetState("game", "startSelectedSong");

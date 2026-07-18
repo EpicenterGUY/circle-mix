@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.0",
+    date: "2026-07-18",
+    title: "Ghost Rule Built-in Track",
+    summary: "Ghost Rule 내장곡과 HARD/EXPERT/MASTER bundle 채보, 곡별 오디오 및 오프라인 캐시를 추가",
+    changes: [
+      { category: "SONG", text: "src/charts/ghost-rule.js bundle을 source of truth로 Ghost Rule 메타데이터와 난이도를 등록" },
+      { category: "CHART", text: "built-in 난이도 ID를 일반화하고 Ghost Rule raw notes를 런타임 노트로 변환" },
+      { category: "PWA", text: "Ghost Rule chart JS, jacket, MP3를 OFFLINE DATA 필수 자산에 포함" }
+    ]
+  },
+  {
     version: "0.8.4",
     date: "2026-07-18",
     title: "Mobile Control Layout Tools",

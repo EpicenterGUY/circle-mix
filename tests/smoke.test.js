@@ -87,7 +87,9 @@ assert.doesNotThrow(()=>api.renderSongSelect());
 test("service worker offline integrity contract", () => {
 const sw = fs.readFileSync("service-worker.js", "utf8");
 assert.match(sw, /const APP_SHELL_URLS = \[/);
-assert.match(sw, /const BUILTIN_OFFLINE_URLS = \[\]/);
+assert.match(sw, /\.\/assets\/audio\/ghost-rule\.mp3/);
+assert.match(sw, /\.\/assets\/jackets\/ghost-rule\.jpg/);
+assert.match(sw, /\.\/src\/charts\/ghost-rule\.js\?v=/);
 assert.match(sw, /requiredCount/);
 assert.match(sw, /cachedCount/);
 assert.match(sw, /missing/);

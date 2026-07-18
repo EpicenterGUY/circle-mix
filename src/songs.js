@@ -1,9 +1,28 @@
 // Shared song registry and local-song persistence for CIRCLE MIX.
 (() => {
+  const ghostBundle = window.CircleMixGhostRuleBundle || null;
+  function cloneGhostDifficulties(bundle){
+    const songDiffs=bundle?.song?.difficulties || {};
+    const charts=bundle?.charts || {};
+    return Object.keys(songDiffs).reduce((out,id)=>{
+      const meta=songDiffs[id] || {};
+      const chart=charts[id] || {};
+      out[id]={ label:meta.label || chart.label || id.toUpperCase(), chart:meta.chart || `builtin:ghost-rule-${id}`, stars:Number.isFinite(Number(meta.stars)) ? Number(meta.stars) : Number(chart.stars), notes:chart.notes };
+      return out;
+    },{});
+  }
   const BUILT_INS = [
     { id:"anima", source:"builtin", title:"ANiMA", artist:"xi", audio:"#embedded-anima", jacket:null, bpm:184.6, offset:-0.04, previewStart:20, previewDuration:15,
       difficulties:{ normal:{label:"NORMAL",chart:"builtin:anima-normal"}, tech:{label:"TECH",chart:"builtin:anima-tech"} } }
   ];
+  if(ghostBundle?.song && ghostBundle?.charts){
+    BUILT_INS.push({
+      ...ghostBundle.song,
+      id:"ghost-rule", source:"builtin", title:"Ghost Rule", titleUnicode:"ゴーストルール", artist:"DECO*27", bpm:210, offset:0.148,
+      audio:"./assets/audio/ghost-rule.mp3", jacket:"./assets/jackets/ghost-rule.jpg",
+      difficulties:cloneGhostDifficulties(ghostBundle)
+    });
+  }
   const VALID_TYPES = new Set(["cut","fx","slideCW","slideCCW","trace","traceCW","traceCCW","swingCW","swingCCW","scratchCW","scratchCCW"]);
   const DB_NAME="circle-mix-local-songs", DB_VERSION=1, STORE="songs";
   let localCache=[];
@@ -35,7 +54,7 @@
     if(hasSigned && !Number.isFinite(Number(n.signedSweepAngle))) errors.push(`#${i} invalid signedSweepAngle`);
     if(hasSweep && !Number.isFinite(Number(n.sweepAngle))) errors.push(`#${i} invalid sweepAngle`);
     if(hasTurns && !Number.isFinite(Number(n.turns))) errors.push(`#${i} invalid turns`);
-    const sign=directionSign(n);
+    const sign=n.direction!==undefined ? directionSign(n) : 0;
     if(hasSigned && Number(n.signedSweepAngle)!==0 && sign && Math.sign(Number(n.signedSweepAngle))!==sign) errors.push(`#${i} direction conflicts with signedSweepAngle`);
     if(!hasSigned && hasSweep && Number(n.sweepAngle)!==0 && sign && Math.sign(Number(n.sweepAngle))!==sign) errors.push(`#${i} direction conflicts with sweepAngle`);
     if(hasTurns && Number(n.turns)!==0 && Number(n.turns)<0 && sign) errors.push(`#${i} direction conflicts with negative turns`);
