@@ -1,0 +1,14 @@
+{
+  "name": "CIRCLE MIX",
+  "short_name": "CIRCLE MIX",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#050814",
+  "theme_color": "#061a2f",
+  "description": "CIRCLE MIX rhythm game with offline play support.",
+  "icons": [
+    { "src": "./icons/circle-mix-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
