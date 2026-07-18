@@ -5470,14 +5470,19 @@ running=${running}`);
       startTutorial:()=>startTutorial(),
       skipTutorialStep:()=>nextTutorialStep(),
       startBuiltIn:async(songId,difficulty)=>{
+        if(tutorialMode) exitTutorial(false);
+        const previousSession=playSessionToken;
         const songData=songs.get(songId);
         selectedSource="builtin"; activePlaySource="builtin"; activeChartId=difficulty;
         selectedSong=songData; selectedSongId=songData.id; selectedDifficultyId=difficulty; selectedMenuMode=difficulty; mapMode=difficulty; useCustomChart=false;
-        return start("play");
+        const started=await start("play");
+        return {started, previousSession, playSessionToken, songId:selectedSongId, difficulty:selectedDifficultyId};
       },
-      state:()=>({running, paused, tutorialMode, tutorialStepIndex, chartLength:chart.length, gameTime:now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR}),
+      exitTutorial:()=>exitTutorial(false),
+      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
       lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
       setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
+      magnetProbe:(mode,velocity)=>{ const previous=inputSettings.aimStabilizer; inputSettings.aimStabilizer=mode; magnetTarget={done:false, missed:false}; magnetAngleError=1; const result=updateAimMagnet(0, velocity); const disengaged=magnetTarget===null && magnetAngleError===0 && result===0; inputSettings.aimStabilizer=previous; return {mode, velocity, disengaged, result, profile:aimStabilizerProfile()}; },
       resetCounters:()=>{ testFrameCount=0; testRenderCount=0; }
     };
   }

@@ -15,12 +15,14 @@ function waitForServer(url, timeoutMs=5000){
 }
 async function waitFor(page, predicate, label, timeoutMs=5000, arg=undefined){
   const deadline = Date.now() + timeoutMs;
+  let lastValue;
   while(Date.now() < deadline){
-    const value = await page.evaluate(predicate, arg);
-    if(value) return value;
+    lastValue = await page.evaluate(predicate, arg);
+    if(lastValue) return lastValue;
     await wait(100);
   }
-  throw new Error(`Timed out waiting for ${label}`);
+  const state = await page.evaluate(() => window.CircleMixTestApi?.state?.() || null).catch(error => ({stateReadError:error.message}));
+  throw new Error(`Timed out waiting for ${label}; lastValue=${JSON.stringify(lastValue)}; state=${JSON.stringify(state)}`);
 }
 async function measureLoop(page, ms=700){
   const before = await page.evaluate(() => window.CircleMixTestApi.state());
@@ -62,12 +64,24 @@ async function collectErrors(page){
     assert.ok(hudHoverLoop.renderDelta > 8, `HUD hover render ${hudHoverLoop.renderDelta}`);
     assert.ok(hudHoverLoop.timeDelta > 0.25, `HUD hover time ${hudHoverLoop.timeDelta}`);
 
-    for (const lane of [0, 2, 5]) await moveToLane(page, lane);
+    for (const [index, lane] of [0, 2, 5].entries()) {
+      await moveToLane(page, lane);
+      await wait(320);
+      await waitFor(page, expected => {
+        const st = window.CircleMixTestApi.state();
+        return st.tutorialStepIndex >= 1 || st.tutorialTargetProgress >= expected;
+      }, `AIM target progress ${index+1}`, 2000, index+1);
+    }
     await waitFor(page, () => window.CircleMixTestApi.state().tutorialStepIndex >= 1, 'AIM step progressed by pointer movement');
     await moveToLane(page, 0);
+    await waitFor(page, () => window.CircleMixTestApi.state().inputEnabled, 'CUT input enabled');
+    const cutBefore = await page.evaluate(() => window.CircleMixTestApi.state());
     await page.mouse.down();
     await page.mouse.up();
-    await waitFor(page, () => window.CircleMixTestApi.state().tutorialStepIndex >= 2, 'CUT explore step progressed by real cut input');
+    await waitFor(page, before => {
+      const st = window.CircleMixTestApi.state();
+      return st.tutorialStepIndex >= 2 && st.tutorialStepIndex > before.tutorialStepIndex;
+    }, 'CUT explore step progressed by real cut input', 3000, cutBefore);
     await waitFor(page, () => window.CircleMixTestApi.state().chartLength > 0, 'note tutorial chart');
 
     await page.evaluate(() => window.CircleMixTestApi.setAimStabilizer('OFF'));
@@ -79,21 +93,32 @@ async function collectErrors(page){
     }, [p0.x,p0.y]);
     assert.ok(Math.abs(Math.atan2(Math.sin(offAim.armAngle-offAim.expected), Math.cos(offAim.armAngle-offAim.expected))) < 0.08, 'OFF aim follows atan2 directly');
     const symmetry = await page.evaluate(() => {
-      const norm = a => Math.atan2(Math.sin(a), Math.cos(a));
-      const dt = 0.016;
-      const cw = norm(Math.PI / 2) / dt;
-      const ccw = norm(-Math.PI / 2) / dt;
-      return {cw, ccw, absEqual: Math.abs(Math.abs(cw)-Math.abs(ccw)) < 1e-9, signOpposite: Math.sign(cw) === -Math.sign(ccw)};
+      const cw = window.CircleMixTestApi.magnetProbe('LOW', 99);
+      const ccw = window.CircleMixTestApi.magnetProbe('LOW', -99);
+      return {cw, ccw, bothDisengaged: cw.disengaged && ccw.disengaged, absEqual: Math.abs(Math.abs(cw.velocity)-Math.abs(ccw.velocity)) < 1e-9};
     });
-    assert.ok(symmetry.absEqual && symmetry.signOpposite, `CW/CCW symmetry ${JSON.stringify(symmetry)}`);
+    assert.ok(symmetry.bothDisengaged && symmetry.absEqual, `CW/CCW magnet disengage symmetry ${JSON.stringify(symmetry)}`);
+    const beforeUiHover = await page.evaluate(() => window.CircleMixTestApi.state());
     await page.hover('#tutorialSkipStep');
     const uiPointer = await page.evaluate(() => window.CircleMixTestApi.state());
     assert.equal(uiPointer.pointerActive, true, 'UI hover keeps pointer tracking active');
+    assert.equal(uiPointer.lastPointerSource, 'pointer');
+    assert.notEqual(uiPointer.mouseX, beforeUiHover.mouseX, 'UI hover updates mouseX');
+    assert.equal(uiPointer.tutorialStepIndex, beforeUiHover.tutorialStepIndex, 'button hover alone does not advance tutorial');
+    await page.mouse.down();
+    await page.mouse.up();
+    await wait(200);
+    const afterUiClick = await page.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(afterUiClick.tutorialStepIndex, uiPointer.tutorialStepIndex, 'button click is not treated as CUT judgement');
+    const uiLoop = await measureLoop(page, 500);
+    assert.ok(uiLoop.frameDelta > 5 && uiLoop.renderDelta > 5 && uiLoop.timeDelta > 0.2, `UI hover/click loop ${JSON.stringify(uiLoop)}`);
 
     const songResults = {};
     for (const [song, difficulty] of [['anima','tech'], ['ghost-rule','hard']]) {
-      await page.evaluate(([songId, diff]) => window.CircleMixTestApi.startBuiltIn(songId, diff), [song, difficulty]);
-      await waitFor(page, () => window.CircleMixTestApi.state().chartLength > 0, `${song} chart`);
+      const startResult = await page.evaluate(([songId, diff]) => window.CircleMixTestApi.startBuiltIn(songId, diff), [song, difficulty]);
+      assert.equal(startResult.songId, song);
+      assert.equal(startResult.difficulty, difficulty);
+      await waitFor(page, ([songId, diff]) => { const st=window.CircleMixTestApi.state(); return !st.tutorialMode && st.selectedSongId===songId && st.selectedDifficultyId===diff && st.chartLength > 0; }, `${song} chart`, 5000, [song, difficulty]);
       const loop = await measureLoop(page, 900);
       assert.ok(loop.frameDelta > 10, `${song} RAF delta ${loop.frameDelta}`);
       assert.ok(loop.renderDelta > 10, `${song} render delta ${loop.renderDelta}`);
@@ -108,11 +133,28 @@ async function collectErrors(page){
     await waitFor(mobilePage, () => !!window.CircleMixTestApi, 'mobile test api');
     await mobilePage.evaluate(() => window.CircleMixTestApi.startTutorial());
     await waitFor(mobilePage, () => window.CircleMixTestApi.state().tutorialMode, 'mobile tutorial');
-    await mobilePage.tap('#game');
-    await mobilePage.tap('#mobileActionBtn');
-    await mobilePage.tap('#mobileScratchBtn');
+    const gameBox = await mobilePage.locator('#game').boundingBox();
+    await mobilePage.touchscreen.tap(gameBox.x + gameBox.width / 2, gameBox.y + gameBox.height / 2);
+    const afterAimTap = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(afterAimTap.lastPointerSource, 'touch');
+    await mobilePage.locator('#mobileActionBtn').dispatchEvent('pointerdown', {pointerId:41, pointerType:'touch', isPrimary:true, bubbles:true});
+    const actionDown = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(actionDown.mobileActionPointerId, 41);
+    assert.equal(actionDown.actionHeld, true);
+    await mobilePage.locator('#mobileActionBtn').dispatchEvent('pointerup', {pointerId:41, pointerType:'touch', isPrimary:true, bubbles:true});
+    const actionUp = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(actionUp.mobileActionPointerId, null);
+    assert.equal(actionUp.actionHeld, false);
+    await mobilePage.locator('#mobileScratchBtn').dispatchEvent('pointerdown', {pointerId:42, pointerType:'touch', isPrimary:true, bubbles:true});
+    const scratchDown = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(scratchDown.mobileScratchPointerId, 42);
+    assert.equal(scratchDown.scratchHeld, true);
+    await mobilePage.locator('#mobileScratchBtn').dispatchEvent('pointercancel', {pointerId:42, pointerType:'touch', isPrimary:true, bubbles:true});
+    const scratchUp = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(scratchUp.mobileScratchPointerId, null);
+    assert.equal(scratchUp.scratchHeld, false);
     const mobileLoop = await measureLoop(mobilePage, 500);
-    assert.ok(mobileLoop.frameDelta > 5, `mobile RAF ${mobileLoop.frameDelta}`);
+    assert.ok(mobileLoop.frameDelta > 5 && mobileLoop.renderDelta > 5 && mobileLoop.timeDelta > 0.2, `mobile loop ${JSON.stringify(mobileLoop)}`);
 
     await browser.close();
     assert.deepEqual([...errors, ...mobileErrors], []);
