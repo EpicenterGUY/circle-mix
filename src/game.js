@@ -261,7 +261,7 @@
   let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
   let tutorialSessionId=0, tutorialStepToken=0, tutorialAttemptId=0, tutorialTransitionGeneration=0;
   let tutorialLastAdvanceReason=null, tutorialLastAdvanceSource=null;
-  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,transitionState:"IDLE",completing:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],pendingSkipQueue:[],inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
+  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,transitionState:"IDLE",completing:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],pendingSkipQueue:[],mixRetryScheduled:false,mixRetryCount:0,completeCount:0,inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
@@ -3967,7 +3967,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
       delete n.swingGestureArmed; delete n.swingLastAngle; delete n.swingDirectedTravel;
     }
   }
-  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.mixRetryScheduled=false; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
   function logTutorialAdvance(reason,extra={}){ if(!debugMode)return; const st=tutorialSteps[tutorialStepIndex]; console.log(`[Tutorial Advance]\nstep=${st?.kind||"-"}\nphase=${st?.phase||"-"}\nreason=${reason}\nsource=${extra.source||tutorialState.lastSource||"-"}\nsuccessCount=${tutorialState.successCount}\nsessionId=${tutorialSessionId}\nstepToken=${tutorialStepToken}\nattemptId=${tutorialAttemptId}\nfunction=${extra.fn||"-"}\ntimer=${!!extra.timer}\nnoteId=${extra.noteId||"-"}\npreviousStepToken=${extra.previousStepToken??tutorialStepToken}\ncurrentStepToken=${tutorialStepToken}`); }
   function tutorialHandleJudgement(ev){
     if(!tutorialMode || tutorialState.transitioning) return;
@@ -3993,6 +3993,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(st?.kind==="traceSwing" && ev.noteType && String(ev.noteType).startsWith("swing")) tutorialState.traceSwingPhase="DONE";
     const required=st?.kind==="traceSwing"?2:Math.max(1,chart.length);
     if(tutorialState.successCount>=required) requestTutorialTransition(tutorialStepIndex+1,{source:"success", reason:"USER_JUDGEMENT", extra:ev});
+    else handleFinalMixCompletion();
   }
   function tutorialCompleteExploreTarget(reason,source="pointer"){
     const st=tutorialSteps[tutorialStepIndex]; const nowMs=performance.now();
@@ -4058,14 +4059,14 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(!raf) raf=requestAnimationFrame(frame);
   }
   function startTutorialStep(idx=tutorialStepIndex,{startMode="initial"}={}){ enterTutorialStep(idx,{source:startMode==="initial"?"replay":(startMode==="restart"?"retry":startMode),skipCountdown:startMode==="skip"}); }
-  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.completing=false; tutorialState.pendingSkipQueue=[]; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
+  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.completing=false; tutorialState.pendingSkipQueue=[]; tutorialState.mixRetryCount=0; tutorialState.completeCount=0; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
   function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
   function restoreTutorialAuto(){ tutorialState.autoSuppressed=false; setAutoPlayEnabled(!!tutorialState.previousAutoEnabled, "tutorial-restore"); }
   function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
   function completeTutorial(){
     if(tutorialState.completing) return;
-    tutorialState.completing=true; tutorialState.pendingSkipQueue=[]; tutorialTransitionGeneration++; tutorialState.transitionState="IDLE"; tutorialState.transitioning=false;
+    tutorialState.completing=true; tutorialState.completeCount++; tutorialState.pendingSkipQueue=[]; tutorialTransitionGeneration++; tutorialState.transitionState="IDLE"; tutorialState.transitioning=false;
     clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none";
   }
   function updateTutorialAim(){
@@ -4090,7 +4091,27 @@ endpointCaptured=${n.endpointCaptured===true}`);
       tutorialState.exploreInsideSince=0;
     }
   }
-  function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialState.failCount++; tutorialAttempts++; addFeedback("다시 시도",cx,cy-baseR*.42,COLORS.miss); tutorialSetTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
+  function tutorialChartSettled(){ return chart.length>0 && chart.every(n=>n.done||n.missed); }
+  function scheduleTutorialRetry(delay=700){
+    if(tutorialState.mixRetryScheduled) return;
+    tutorialState.mixRetryScheduled=true; tutorialState.failCount++; tutorialAttempts++;
+    addFeedback("다시 시도",cx,cy-baseR*.42,COLORS.miss);
+    tutorialSetTimeout(()=>{ if(tutorialMode){ tutorialState.mixRetryCount++; restartTutorialStep(); } },delay);
+  }
+  function handleFinalMixCompletion(){
+    const st=tutorialSteps[tutorialStepIndex];
+    if(!tutorialMode || st?.kind!=="mix" || !tutorialChartSettled()) return false;
+    if(chart.some(n=>n.missed)){ scheduleTutorialRetry(700); return false; }
+    requestTutorialTransition(tutorialSteps.length,{source:"success", reason:"USER_JUDGEMENT", extra:{source:"system",fn:"handleFinalMixCompletion"}});
+    return true;
+  }
+  function tutorialFailed(){
+    if(!tutorialMode)return false;
+    const st=tutorialSteps[tutorialStepIndex];
+    if(st?.kind==="mix") return handleFinalMixCompletion();
+    if(chart.some(n=>n.missed)){ scheduleTutorialRetry(700); return true; }
+    return false;
+  }
 
   function notifyPwaGameplay(){ try{ window.CircleMixPWA?.setGameplayState({running, paused, scene:activeSceneName()}); }catch(e){} }
 
@@ -5508,7 +5529,10 @@ running=${running}`);
         return {started, previousSession, playSessionToken, songId:selectedSongId, difficulty:selectedDifficultyId};
       },
       exitTutorial:()=>exitTutorial(false),
-      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], chartDoneStates:chart.map(n=>({type:n.type,hold:n.hold||0,missed:!!n.missed,done:!!n.done,completed:!!n.completed})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
+      completeTutorial:()=>completeTutorial(),
+      markFirstPendingTutorialNoteMissed:()=>{ const n=chart.find(note=>!note.done&&!note.missed); if(n){ miss(n,"TEST_FORCED_MISS"); return true; } return false; },
+      clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
+      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialFinalMixRetryScheduled:tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:tutorialState.mixRetryCount, tutorialCompleteCount:tutorialState.completeCount, tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], chartDoneStates:chart.map(n=>({type:n.type,hold:n.hold||0,missed:!!n.missed,done:!!n.done,completed:!!n.completed})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
       lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
       setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
       magnetProbe:(mode,velocity)=>{ const previousMode=inputSettings.aimStabilizer, previousTarget=magnetTarget, previousError=magnetAngleError, previousFocus=focusNote; try{ const probeNow=now(); const probeNote={type:"cut", angle:0, done:false, missed:false, spawnTime:probeNow-1, hitTime:probeNow}; inputSettings.aimStabilizer=mode; focusNote=probeNote; magnetTarget=probeNote; magnetAngleError=0; const result=updateAimMagnet(0, velocity); const disengaged=magnetTarget===null; return {mode, velocity, disengaged, result, profile:aimStabilizerProfile()}; } finally { inputSettings.aimStabilizer=previousMode; magnetTarget=previousTarget; magnetAngleError=previousError; focusNote=previousFocus; } },

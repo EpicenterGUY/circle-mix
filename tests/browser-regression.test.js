@@ -101,7 +101,7 @@ async function runRapidSkipRegression(page, label){
     assert.ok(loop.renderDelta > 5, `${label} ${interval}ms render survives ${JSON.stringify(loop)}`);
   }
 }
-async function runFinalTutorialRegression(page, label){
+async function reachFinalTutorialStep(page, label){
   await page.evaluate(() => window.CircleMixTestApi.startTutorial());
   await waitFor(page, () => window.CircleMixTestApi.state().tutorialMode, `${label} tutorial restart`);
   await clickSkipRapidly(page, 17, 20);
@@ -121,16 +121,67 @@ async function runFinalTutorialRegression(page, label){
   assert.ok(finalState.chartDoneStates.every(n => !n.hold && !n.missed && !n.done && !n.completed), `${label} final notes reset ${JSON.stringify(finalState.chartDoneStates)}`);
   const loop = await measureLoop(page, 650);
   assert.ok(loop.frameDelta > 8 && loop.renderDelta > 8 && loop.timeDelta > 0.3, `${label} final loop ${JSON.stringify(loop)}`);
-  await clickSkipRapidly(page, 4, 20);
+}
+async function runFinalMixMissRegression(page, label){
+  await reachFinalTutorialStep(page, `${label} miss`);
+  const beforeMiss = await page.evaluate(() => window.CircleMixTestApi.state());
+  assert.equal(await page.evaluate(() => window.CircleMixTestApi.markFirstPendingTutorialNoteMissed()), true);
+  await wait(1000);
+  const afterOneSecond = await page.evaluate(() => window.CircleMixTestApi.state());
+  assert.equal(afterOneSecond.tutorialStepIndex, 17);
+  assert.equal(afterOneSecond.currentTutorialKind, 'mix');
+  assert.equal(afterOneSecond.tutorialFinalMixRetryScheduled, false, `${label} final mix must not retry immediately after first miss`);
+  assert.equal(afterOneSecond.tutorialSuccessCount, beforeMiss.tutorialSuccessCount, `${label} successCount is not reset mid-chart`);
+  const loop = await measureLoop(page, 500);
+  assert.ok(loop.frameDelta > 5 && loop.renderDelta > 5 && loop.timeDelta > 0.2, `${label} final mix miss loop ${JSON.stringify(loop)}`);
+  await page.evaluate(() => {
+    const api = window.CircleMixTestApi;
+    const st = api.state();
+    for(let i=1;i<st.chartLength;i++) api.markFirstPendingTutorialNoteMissed();
+  });
+  await waitFor(page, () => window.CircleMixTestApi.state().tutorialFinalMixRetryScheduled, `${label} final mix retry scheduled after chart end`, 3000);
+  const scheduled = await page.evaluate(() => window.CircleMixTestApi.state());
+  assert.equal(scheduled.tutorialFinalMixRetryCount, 0);
+  assert.equal(scheduled.tutorialTimerCount, 1);
+  await waitFor(page, () => {
+    const st = window.CircleMixTestApi.state();
+    return st.tutorialMode && st.tutorialStepIndex === 17 && st.tutorialFinalMixRetryCount === 1 && st.tutorialTimerCount === 0 && st.chartDoneStates.every(n => !n.done && !n.missed);
+  }, `${label} final mix retries once`, 4000);
+}
+async function runSuccessfulFinalMixRegression(page, label){
+  await reachFinalTutorialStep(page, `${label} success`);
+  await page.evaluate(() => window.CircleMixTestApi.clearAndPerfectTutorialChart());
+  await waitFor(page, () => {
+    const st = window.CircleMixTestApi.state();
+    return !st.tutorialMode && st.tutorialCompleteVisible && st.tutorialCompleteCount === 1 && st.activeScene === 'title';
+  }, `${label} successful final mix completion`, 5000);
+  const completeState = await page.evaluate(() => window.CircleMixTestApi.state());
+  assert.equal(completeState.tutorialHudHidden, true);
+  assert.equal(completeState.pendingTutorialSkipCount, 0);
+  assert.equal(completeState.tutorialTimerCount, 0);
+}
+async function runFinalSkipCompletionRegression(page, label){
+  await reachFinalTutorialStep(page, `${label} skip`);
+  await page.locator('#tutorialSkipStep').click({timeout:3000});
   await waitFor(page, () => {
     const st = window.CircleMixTestApi.state();
     return !st.tutorialMode && st.tutorialCompleteVisible && st.activeScene === 'title';
-  }, `${label} final completion`, 8000);
-  const completeState = await page.evaluate(() => window.CircleMixTestApi.state());
-  assert.equal(completeState.pendingTutorialSkipCount, 0);
-  assert.equal(completeState.tutorialCompleteVisible, true);
-  assert.equal(completeState.tutorialMode, false);
-  assert.equal(completeState.tutorialTimerCount, 0);
+  }, `${label} final skip completion`, 5000);
+  const firstComplete = await page.evaluate(() => window.CircleMixTestApi.state());
+  assert.equal(firstComplete.tutorialCompleteCount, 1);
+  await page.evaluate(() => { window.CircleMixTestApi.skipTutorialStep(); window.CircleMixTestApi.completeTutorial(); window.CircleMixTestApi.completeTutorial(); });
+  await wait(200);
+  const afterDuplicate = await page.evaluate(() => window.CircleMixTestApi.state());
+  assert.equal(afterDuplicate.tutorialCompleteCount, 1);
+  assert.equal(afterDuplicate.tutorialCompleteVisible, true);
+  assert.equal(afterDuplicate.tutorialMode, false);
+  assert.equal(afterDuplicate.pendingTutorialSkipCount, 0);
+  assert.equal(afterDuplicate.tutorialTimerCount, 0);
+}
+async function runFinalTutorialRegression(page, label){
+  await runFinalMixMissRegression(page, label);
+  await runSuccessfulFinalMixRegression(page, label);
+  await runFinalSkipCompletionRegression(page, label);
 }
 
 async function collectErrors(page){
