@@ -2684,6 +2684,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function drawDirectedArcSegments(r, start, amount, color, width, alpha=1, shadowColor=null, shadowBlur=0){
+    // drawDirectedArcSegments expects the canvas transform to be at identity.
+    // It clips with absolute cx/cy, then applies the cx/cy translation internally.
     // Canvas arc는 2π 경계/긴 호에서 헷갈릴 수 있으므로
     // 긴 슬라이드는 작은 조각으로 직접 그림. 모든 호출은 화면 좌표 기준으로
     // 새 path를 만들고 원형 플레이 영역 안에서만 stroke한다.
@@ -2948,7 +2950,18 @@ endpointCaptured=${n.endpointCaptured===true}`);
       drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.22})`,activeWidth,1,null,0);
       drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,`rgba(255,255,255,${hotAlpha*.42})`,innerWidth,1,COLORS.trace,3*visualScale("effect"));
     }
+    if(n.tutorialStaticTrace && active){
+      const staticProgress=clamp((n.traceQualityTime||0)/Math.max(dur,.001),0,1);
+      if(debugMode && !n.staticTraceRenderLogged){
+        n.staticTraceRenderLogged=true;
+        const transform=ctx.getTransform?.();
+        console.log(`[Static Trace Render]\ncx=${cx.toFixed(2)}\ncy=${cy.toFixed(2)}\ncurrAngle=${curr.toFixed(4)}\nradius=${(r+18).toFixed(2)}\ncanvasTransform=${transform ? `a=${transform.a.toFixed(3)}, b=${transform.b.toFixed(3)}, c=${transform.c.toFixed(3)}, d=${transform.d.toFixed(3)}, e=${transform.e.toFixed(2)}, f=${transform.f.toFixed(2)}` : "unavailable"}`);
+      }
+      drawDirectedArcSegments(r+18,curr-activeHalf,activeHalf*2*staticProgress,`rgba(255,255,255,.72)`,4,1,null,0);
+    }
 
+    // Local trace decorations below are drawn after translating to the playfield center.
+    // Do not call drawDirectedArcSegments in this translated block; it translates internally.
     ctx.save();
     ctx.translate(cx,cy);
     ctx.lineCap="round";
@@ -2978,10 +2991,6 @@ endpointCaptured=${n.endpointCaptured===true}`);
       ctx.save();ctx.translate(Math.cos(aa)*ar,Math.sin(aa)*ar);ctx.rotate(aa+(dir>0?Math.PI/2:-Math.PI/2));
       ctx.fillStyle=`rgba(53,240,197,${focus?.82:.62})`;
       const size=7; ctx.beginPath();ctx.moveTo(size,0);ctx.lineTo(-size*.55,-size*.55);ctx.lineTo(-size*.25,0);ctx.lineTo(-size*.55,size*.55);ctx.closePath();ctx.fill();ctx.restore();
-    }
-    if(n.tutorialStaticTrace && active){
-      const staticProgress=clamp((n.traceQualityTime||0)/Math.max(dur,.001),0,1);
-      drawDirectedArcSegments(r+18,curr-activeHalf,activeHalf*2*staticProgress,`rgba(255,255,255,.72)`,4,1,null,0);
     }
     if((!active && n.hitTime-t<.8) || n.tutorialStaticTrace){
       ctx.fillStyle="rgba(53,240,197,.88)"; ctx.font="900 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
