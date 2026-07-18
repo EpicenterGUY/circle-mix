@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.7",
+    date: "2026-07-18",
+    title: "Tutorial Rapid Skip Hotfix",
+    summary: "튜토리얼 빠른 SKIP 큐와 단계 전환 직렬화를 추가해 마지막 종합 연습 진입과 완료 처리를 안정화",
+    changes: [
+      { category: "Tutorial", text: "전환 중 SKIP을 유실하지 않도록 pending queue로 직렬 처리하고 완료 처리를 idempotent하게 정리" },
+      { category: "Tutorial", text: "단계 이동 시 전체 플레이 세션 재시작을 피하고 단계별 chart, timer, 입력 상태만 정리" },
+      { category: "Test", text: "PC/모바일 브라우저 회귀 테스트에 rapid skip, final step, final completion 검증을 추가" }
+    ]
+  },
+  {
     version: "0.9.6",
     date: "2026-07-18",
     title: "PC Gameplay Loop Hotfix",

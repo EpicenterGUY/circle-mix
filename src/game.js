@@ -259,9 +259,9 @@
   let running=false, startMs=0, lastMs=0, raf=0;
   let testFrameCount=0, testRenderCount=0;
   let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
-  let tutorialSessionId=0, tutorialStepToken=0, tutorialAttemptId=0;
+  let tutorialSessionId=0, tutorialStepToken=0, tutorialAttemptId=0, tutorialTransitionGeneration=0;
   let tutorialLastAdvanceReason=null, tutorialLastAdvanceSource=null;
-  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
+  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,transitionState:"IDLE",completing:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],pendingSkipQueue:[],inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
@@ -3949,7 +3949,15 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function beep(freq=660,dur=.07){ ensureAudioCtx(); const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=freq; o.type="square"; g.gain.value=.035*(sfxEnabled ? clamp(sfxVolume,0,4) : 0); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur); }
   function clearTutorialTimers(){ for(const id of tutorialState.timers) clearTimeout(id); tutorialState.timers=[]; for(const id of tutorialState.rafIds) cancelAnimationFrame(id); tutorialState.rafIds=[]; }
-  function tutorialSetTimeout(fn,delay){ const token=tutorialStepToken, session=tutorialSessionId, attempt=tutorialAttemptId; const id=setTimeout(()=>{ if(!tutorialMode || token!==tutorialStepToken || session!==tutorialSessionId || attempt!==tutorialAttemptId) return; fn(); },delay); tutorialState.timers.push(id); return id; }
+  function tutorialSetTimeout(fn,delay){
+    const token=tutorialStepToken, session=tutorialSessionId, attempt=tutorialAttemptId, generation=tutorialTransitionGeneration;
+    const id=setTimeout(()=>{
+      tutorialState.timers=tutorialState.timers.filter(timerId=>timerId!==id);
+      if(!tutorialMode || token!==tutorialStepToken || session!==tutorialSessionId || attempt!==tutorialAttemptId || generation!==tutorialTransitionGeneration) return;
+      fn();
+    },delay);
+    tutorialState.timers.push(id); return id;
+  }
   function resetTraceRuntimeState(){
     for(const n of chart){
       if(!n?.type?.startsWith("trace")) continue;
@@ -3994,9 +4002,27 @@ endpointCaptured=${n.endpointCaptured===true}`);
     addWave(laneAngle(st.targets[Math.max(0,st._hit-1)]),COLORS.perfect); beep(780,.05); tutorialState.exploreInsideSince=0;
     if(st._hit>=st.targets.length) requestTutorialTransition(tutorialStepIndex+1,{source:"success", reason, extra:{source,fn:"tutorialCompleteExploreTarget"}});
   }
+  function maxPendingTutorialSkips(){ return Math.max(0, tutorialSteps.length - 1 - tutorialStepIndex) + (tutorialStepIndex>=tutorialSteps.length-1 ? 1 : 0); }
+  function queueTutorialSkip(extra={}){
+    if(!tutorialMode || tutorialState.completing) return;
+    const cap=maxPendingTutorialSkips();
+    if(tutorialState.pendingSkipQueue.length>=cap) return;
+    tutorialState.pendingSkipQueue.push({reason:"SKIP_BUTTON", source:"skip", extra, queuedAt:performance.now()});
+  }
+  function drainTutorialSkipQueue(){
+    if(!tutorialMode || tutorialState.transitionState!=="IDLE" || tutorialState.completing) return;
+    const item=tutorialState.pendingSkipQueue.shift();
+    if(!item) return;
+    requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:item.extra});
+  }
   function requestTutorialTransition(nextIndex,{source="success",reason="USER_JUDGEMENT",skipCountdown=false,extra={}}={}){
-    if(!tutorialMode || tutorialState.transitioning)return;
+    if(!tutorialMode || tutorialState.completing)return;
+    if(tutorialState.transitionState!=="IDLE"){
+      if(source==="skip" || reason==="SKIP_BUTTON") queueTutorialSkip(extra);
+      return;
+    }
     if(source!=="skip" && reason!=="SKIP_BUTTON" && tutorialState.validUserInputCount<=0){ if(debugMode) console.warn("[Tutorial] blocked advance without valid user input", {reason,step:tutorialSteps[tutorialStepIndex]?.name}); return; }
+    if(nextIndex<=tutorialStepIndex && nextIndex<tutorialSteps.length) return;
     if(nextIndex>=tutorialSteps.length) return completeTutorial();
     tutorialLastAdvanceReason=reason; tutorialLastAdvanceSource=source;
     logTutorialAdvance(reason,extra);
@@ -4006,7 +4032,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function enterTutorialStep(idx,{source="success",skipCountdown=false}={}){
     const runtime=buildTutorialStepRuntime(idx);
     if(!runtime.valid){ console.error("[Tutorial] invalid step", runtime); return; }
-    tutorialState.transitioning=true; tutorialState.phaseCompleted=true;
+    tutorialTransitionGeneration++; tutorialState.transitionState="PREPARING"; tutorialState.transitioning=true; tutorialState.phaseCompleted=true;
     clearTutorialTimers(); tutorialAttemptId++;
     tutorialStepToken=runtime.token;
     chart=[]; chartLastHitEnd=0; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
@@ -4014,29 +4040,34 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const st=runtime.step; st._hit=0; st._done=false;
     resetTutorialRuntimeState();
     if(runtime.step.kind==="traceSwing") tutorialState.traceSwingPhase="TRACE_ACTIVE";
-    cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
-    tutorialMode=true; tutorialState.autoSuppressed=true; tutorialState.transitioning=true;
-    document.body.classList.add("tutorialMode","tutorialIntro"); resize();
-    abortingRun=false; resultShown=false; completionPending=false; paused=false; running=true; setGameplayScrollLocked(true); notifyPwaGameplay();
+    const fullSessionStart=source==="replay" || !running || activeSceneName()!=="game";
+    if(fullSessionStart) cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
+    tutorialMode=true; tutorialState.autoSuppressed=true; tutorialState.transitionState="READY"; tutorialState.transitioning=true;
+    document.body.classList.add("tutorialMode","tutorialIntro"); if(fullSessionStart) resize();
+    abortingRun=false; resultShown=false; completionPending=false; paused=false; running=true; setGameplayScrollLocked(true); if(fullSessionStart) notifyPwaGameplay();
     chart=runtime.chart;
     score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1;
-    setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none";
+    setCleanGameplay(true); if(fullSessionStart || activeSceneName()!=="game") safeSetState("game"); startLayer.style.display="none";
     mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=lastRawAngleForVelocity=-Math.PI/2; magnetTarget=null; centerDeadzoneActive=false;
     const leadMs=source==="replay"?3000:(skipCountdown?120:(source==="retry"?650:560));
     tutorialCountdownUntil=performance.now()+leadMs; tutorialState.inputEnabledAt=performance.now()+leadMs+60; audioStartedAt=performance.now()+leadMs; startMs=audioStartedAt; lastMs=performance.now();
     setTutorialHud(runtime);
     if(source==="replay"){ ["3","2","1","시작"].forEach((txt,i)=>tutorialSetTimeout(()=>{ tutorialCountdown.textContent=txt; beep(520+i*110,.06); },i*720)); }
     else tutorialCountdown.textContent=skipCountdown?"다음 단계":"준비";
-    tutorialSetTimeout(()=>{ tutorialCountdown.textContent=""; document.body.classList.remove("tutorialIntro"); resize(); tutorialState.transitioning=false; },leadMs);
-    if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(frame);
+    tutorialSetTimeout(()=>{ tutorialCountdown.textContent=""; document.body.classList.remove("tutorialIntro"); if(fullSessionStart) resize(); tutorialState.transitionState="IDLE"; tutorialState.transitioning=false; drainTutorialSkipQueue(); },leadMs);
+    if(!raf) raf=requestAnimationFrame(frame);
   }
   function startTutorialStep(idx=tutorialStepIndex,{startMode="initial"}={}){ enterTutorialStep(idx,{source:startMode==="initial"?"replay":(startMode==="restart"?"retry":startMode),skipCountdown:startMode==="skip"}); }
-  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
+  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.completing=false; tutorialState.pendingSkipQueue=[]; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
   function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
   function restoreTutorialAuto(){ tutorialState.autoSuppressed=false; setAutoPlayEnabled(!!tutorialState.previousAutoEnabled, "tutorial-restore"); }
   function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
-  function completeTutorial(){ clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none"; }
+  function completeTutorial(){
+    if(tutorialState.completing) return;
+    tutorialState.completing=true; tutorialState.pendingSkipQueue=[]; tutorialTransitionGeneration++; tutorialState.transitionState="IDLE"; tutorialState.transitioning=false;
+    clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none";
+  }
   function updateTutorialAim(){
     const st=tutorialSteps[tutorialStepIndex];
     if(!tutorialMode||!st?.targets||tutorialState.transitioning)return;
@@ -4748,13 +4779,9 @@ settingsOrigin=${settingsOrigin}`);
 
   function bindImmediatePress(el,fn){
     if(!el)return;
-    let last=0;
     let pointerRunAt=-Infinity;
     const run=e=>{
       if(e){if(e.cancelable)e.preventDefault();e.stopPropagation();}
-      const m=performance.now();
-      if(m-last<120)return;
-      last=m;
       fn(e);
     };
     if(window.PointerEvent){
@@ -5481,7 +5508,7 @@ running=${running}`);
         return {started, previousSession, playSessionToken, songId:selectedSongId, difficulty:selectedDifficultyId};
       },
       exitTutorial:()=>exitTutorial(false),
-      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
+      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], chartDoneStates:chart.map(n=>({type:n.type,hold:n.hold||0,missed:!!n.missed,done:!!n.done,completed:!!n.completed})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
       lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
       setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
       magnetProbe:(mode,velocity)=>{ const previousMode=inputSettings.aimStabilizer, previousTarget=magnetTarget, previousError=magnetAngleError, previousFocus=focusNote; try{ const probeNow=now(); const probeNote={type:"cut", angle:0, done:false, missed:false, spawnTime:probeNow-1, hitTime:probeNow}; inputSettings.aimStabilizer=mode; focusNote=probeNote; magnetTarget=probeNote; magnetAngleError=0; const result=updateAimMagnet(0, velocity); const disengaged=magnetTarget===null; return {mode, velocity, disengaged, result, profile:aimStabilizerProfile()}; } finally { inputSettings.aimStabilizer=previousMode; magnetTarget=previousTarget; magnetAngleError=previousError; focusNote=previousFocus; } },

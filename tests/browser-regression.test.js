@@ -72,6 +72,67 @@ async function waitForStableCircleMixPage(page, label){
 }
 async function lanePoint(page, lane){ return page.evaluate(l => window.CircleMixTestApi.lanePoint(l), lane); }
 async function moveToLane(page, lane){ const p = await lanePoint(page, lane); await page.mouse.move(p.x, p.y); return p; }
+
+async function clickSkipRapidly(page, count, intervalMs){
+  const steps = [];
+  for(let i=0;i<count;i++){
+    await page.locator('#tutorialSkipStep').click({timeout:3000});
+    steps.push(await page.evaluate(() => window.CircleMixTestApi.state()));
+    if(intervalMs) await wait(intervalMs);
+  }
+  return steps;
+}
+async function runRapidSkipRegression(page, label){
+  await page.evaluate(() => window.CircleMixTestApi.startTutorial());
+  await waitFor(page, () => window.CircleMixTestApi.state().tutorialMode, `${label} tutorial mode`);
+  const intervals = [20, 50, 80, 120];
+  for(const interval of intervals){
+    const before = await page.evaluate(() => window.CircleMixTestApi.state());
+    await clickSkipRapidly(page, 2, interval);
+    await waitFor(page, arg => {
+      const st = window.CircleMixTestApi.state();
+      return st.tutorialStepIndex >= Math.min(arg.beforeIndex + 2, 17) || !st.tutorialMode;
+    }, `${label} rapid skip ${interval}ms`, 8000, {beforeIndex:before.tutorialStepIndex});
+    const after = await page.evaluate(() => window.CircleMixTestApi.state());
+    assert.ok(after.tutorialStepIndex >= before.tutorialStepIndex, `${label} ${interval}ms monotonic ${JSON.stringify({before, after})}`);
+    assert.equal(after.pendingTutorialSkipCount, 0, `${label} ${interval}ms queue drained`);
+    const loop = await measureLoop(page, 500);
+    assert.ok(loop.frameDelta > 5, `${label} ${interval}ms RAF survives ${JSON.stringify(loop)}`);
+    assert.ok(loop.renderDelta > 5, `${label} ${interval}ms render survives ${JSON.stringify(loop)}`);
+  }
+}
+async function runFinalTutorialRegression(page, label){
+  await page.evaluate(() => window.CircleMixTestApi.startTutorial());
+  await waitFor(page, () => window.CircleMixTestApi.state().tutorialMode, `${label} tutorial restart`);
+  await clickSkipRapidly(page, 17, 20);
+  await waitFor(page, () => {
+    const st = window.CircleMixTestApi.state();
+    return st.tutorialMode && st.tutorialStepIndex === 17 && st.pendingTutorialSkipCount === 0 && st.tutorialTransitionState === 'IDLE';
+  }, `${label} final tutorial step`, 12000);
+  const finalState = await page.evaluate(() => window.CircleMixTestApi.state());
+  assert.equal(finalState.tutorialStepIndex, 17);
+  assert.equal(finalState.currentTutorialTitle, '종합 연습');
+  assert.equal(finalState.currentTutorialKind, 'mix');
+  assert.equal(finalState.chartLength, 8);
+  assert.deepEqual(finalState.chartNoteTypes, ['cut','cut','fx','slideCW','traceCCW','swingCW','scratchCCW','cut']);
+  assert.equal(finalState.traceSwingPhase, null);
+  assert.equal(finalState.tutorialSuccessCount, 0);
+  assert.deepEqual(finalState.consumedNoteIds, []);
+  assert.ok(finalState.chartDoneStates.every(n => !n.hold && !n.missed && !n.done && !n.completed), `${label} final notes reset ${JSON.stringify(finalState.chartDoneStates)}`);
+  const loop = await measureLoop(page, 650);
+  assert.ok(loop.frameDelta > 8 && loop.renderDelta > 8 && loop.timeDelta > 0.3, `${label} final loop ${JSON.stringify(loop)}`);
+  await clickSkipRapidly(page, 4, 20);
+  await waitFor(page, () => {
+    const st = window.CircleMixTestApi.state();
+    return !st.tutorialMode && st.tutorialCompleteVisible && st.activeScene === 'title';
+  }, `${label} final completion`, 8000);
+  const completeState = await page.evaluate(() => window.CircleMixTestApi.state());
+  assert.equal(completeState.pendingTutorialSkipCount, 0);
+  assert.equal(completeState.tutorialCompleteVisible, true);
+  assert.equal(completeState.tutorialMode, false);
+  assert.equal(completeState.tutorialTimerCount, 0);
+}
+
 async function collectErrors(page){
   const errors = [];
   page.on('pageerror', error => errors.push(`pageerror: ${error.stack || error.message}`));
@@ -321,6 +382,9 @@ async function dismissStartupOverlays(page){
     const skipLoop = await measureLoop(page, 500);
     assert.ok(skipLoop.frameDelta > 5 && skipLoop.renderDelta > 5 && skipLoop.wallTimeDelta > 300, `SKIP click loop ${JSON.stringify(skipLoop)}`);
 
+    await runRapidSkipRegression(page, 'desktop');
+    await runFinalTutorialRegression(page, 'desktop');
+
     const songResults = {};
     for (const [song, difficulty] of [['anima','tech'], ['ghost-rule','hard']]) {
       const startResult = await page.evaluate(([songId, diff]) => window.CircleMixTestApi.startBuiltIn(songId, diff), [song, difficulty]);
@@ -371,6 +435,8 @@ async function dismissStartupOverlays(page){
     assert.equal(scratchUp.scratchHeld, false);
     const mobileLoop = await measureLoop(mobilePage, 500);
     assert.ok(mobileLoop.frameDelta > 5 && mobileLoop.renderDelta > 5 && mobileLoop.wallTimeDelta > 300, `mobile loop ${JSON.stringify(mobileLoop)}`);
+    await runRapidSkipRegression(mobilePage, 'mobile');
+    await runFinalTutorialRegression(mobilePage, 'mobile');
 
     await browser.close();
     assert.deepEqual([...errors, ...mobileErrors], []);
