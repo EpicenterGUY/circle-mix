@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.8.0",
+    date: "2026-07-18",
+    title: "Mobile Standalone Play Pass",
+    summary: "스마트폰 단독 플레이를 위한 듀얼 터치 입력, 모바일 HUD, DPR/효과 제한을 추가",
+    changes: [
+      { category: "INPUT", text: "모바일 AIM / ACTION / SCRATCH 포인터 역할을 분리하고 ACTION 버튼 전용 CUT·HOLD·SLIDE 흐름을 추가" },
+      { category: "UI", text: "모바일 게임 화면에 safe area 대응 ACTION, SCRATCH, PAUSE 버튼과 가로 HUD 정리를 적용" },
+      { category: "PERF", text: "모바일 렌더 DPR 품질 모드, HUD 갱신 제한, 시각 이펙트 배열 상한을 추가" }
+    ]
+  },
+  {
     version: "0.7.5",
     date: "2026-07-18",
     title: "Tutorial 45° TRACE Intro",

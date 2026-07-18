@@ -68,6 +68,10 @@
   const pauseSetEffectIntensity = document.getElementById("pauseSetEffectIntensity");
   const pauseSetJudgeGuide = document.getElementById("pauseSetJudgeGuide");
   const pauseSetAimStabilizer = document.getElementById("pauseSetAimStabilizer");
+  const pauseSetMobileQuality = document.getElementById("pauseSetMobileQuality");
+  const pauseSetHaptic = document.getElementById("pauseSetHaptic");
+  const mobileActionBtn = document.getElementById("mobileActionBtn");
+  const mobileScratchBtn = document.getElementById("mobileScratchBtn");
   const resultOverlay = document.getElementById("resultOverlay");
   const resultScore = document.getElementById("resultScore");
   const resultPower = document.getElementById("resultPower");
@@ -170,6 +174,7 @@
   const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, trace:3.0, hold:11.5 };
   const VISUAL_SETTINGS_KEY = "circleMixVisualSettings.v1";
   const INPUT_SETTINGS_KEY = "circleMixInputSettings.v1";
+  const MOBILE_QUALITY_MODES = ["AUTO","HIGH","PERFORMANCE"];
   const AIM_STABILIZER_MODES = ["OFF","LOW","MEDIUM"];
   const VISUAL_CHOICES = { noteContrast:["NORMAL","HIGH"], pathBrightness:["LOW","NORMAL","HIGH"], effectIntensity:["LOW","NORMAL","HIGH"], judgeGuide:["OFF","BEGINNER","ALWAYS"] };
   const visualSettings = loadVisualSettings();
@@ -196,8 +201,8 @@
   function loadInputSettings(){
     try{
       const saved=JSON.parse(localStorage.getItem(INPUT_SETTINGS_KEY)||"{}");
-      return {aimStabilizer:AIM_STABILIZER_MODES.includes(saved.aimStabilizer)?saved.aimStabilizer:"LOW"};
-    }catch(e){ return {aimStabilizer:"LOW"}; }
+      return {aimStabilizer:AIM_STABILIZER_MODES.includes(saved.aimStabilizer)?saved.aimStabilizer:"LOW", mobileQuality:MOBILE_QUALITY_MODES.includes(saved.mobileQuality)?saved.mobileQuality:"AUTO", haptic:!!saved.haptic};
+    }catch(e){ return {aimStabilizer:"LOW", mobileQuality:"AUTO", haptic:false}; }
   }
   function saveInputSettings(){ try{ localStorage.setItem(INPUT_SETTINGS_KEY, JSON.stringify(inputSettings)); }catch(e){} }
   function visualScale(kind){
@@ -263,6 +268,13 @@
   let customChartData=[];
   const difficultyCache={normal:null,tech:null};
   let lastTraceSwingRuntimeLogAt=0, lastTraceSwingRuntimeLogState="";
+  let mobileAimPointerId = null;
+  let mobileActionPointerId = null;
+  let mobileScratchPointerId = null;
+  let currentRenderDpr = 1;
+  const MOBILE_EFFECT_LIMITS={particles:120,feedback:32,waves:20,ringBursts:12,scratchBursts:10};
+  const DESKTOP_EFFECT_LIMITS={particles:360,feedback:96,waves:64,ringBursts:40,scratchBursts:32};
+  const hudCache={lastAt:0,score:null,combo:null,accuracy:null};
 
 
   function sourceKey(songData=selectedSong){ return (songData?.source==="local" || selectedSource==="local") ? "local" : "builtin"; }
@@ -309,8 +321,34 @@
   }
 
   let resizeRetryPending=false;
+  function isCoarsePointerMobile(){
+    const coarse=!!(window.matchMedia&&window.matchMedia("(pointer: coarse)").matches);
+    const touch=(typeof navigator!=="undefined" && (navigator.maxTouchPoints||0)>0);
+    const compact=Math.min(window.innerWidth||0,window.innerHeight||0)<=900;
+    return (coarse&&touch)||(touch&&compact);
+  }
+  function getMobileQuality(){ return MOBILE_QUALITY_MODES.includes(inputSettings.mobileQuality)?inputSettings.mobileQuality:"AUTO"; }
+  function getRenderDpr(){
+    const nativeDpr = window.devicePixelRatio || 1;
+    if(isCoarsePointerMobile()){
+      const quality=getMobileQuality();
+      if(quality==="HIGH") return Math.min(nativeDpr,2);
+      if(quality==="PERFORMANCE") return 1;
+      return Math.min(nativeDpr,1.5);
+    }
+    return Math.min(nativeDpr,2);
+  }
+  function syncMobilePerformanceClass(){
+    const mobile=isCoarsePointerMobile();
+    document.body.classList.toggle("mobileStandalone", mobile);
+    document.body.classList.toggle("mobileQualityPerformance", mobile&&getMobileQuality()==="PERFORMANCE");
+    document.body.classList.toggle("mobileQualityHigh", mobile&&getMobileQuality()==="HIGH");
+  }
+
   function resize(){
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getRenderDpr();
+    currentRenderDpr = dpr;
+    syncMobilePerformanceClass();
     const rectSource = document.fullscreenElement ? (gameRoot || document.documentElement) : null;
     const rect = rectSource ? rectSource.getBoundingClientRect() : null;
     W=Math.floor(rect && rect.width ? rect.width : window.innerWidth);
@@ -331,7 +369,7 @@
 
     const outerGlowSize = 26;
     const outerLineWidth = 2;
-    const safeMargin = Math.max(32, outerGlowSize + outerLineWidth);
+    const safeMargin = Math.max(isCoarsePointerMobile()?44:32, outerGlowSize + outerLineWidth);
     const tutorialSidePanel = tutorialMode && W >= 1180 && H >= 620;
     const tutorialTopPanel = tutorialMode && !tutorialSidePanel && W > H;
     document.body.classList.toggle("tutorialSidePanel", tutorialSidePanel);
@@ -1979,19 +2017,27 @@
   }
   function activeHold(n,t){return (n.type==="fx"||n.type.startsWith("slide"))&&t>=n.hitTime&&t<=n.hitTime+n.duration;}
 
-  function addFeedback(text,x,y,color){feedback.push({text,x,y,color,life:.28});}
+  function trimVisualArray(arr,limit){ while(arr.length>limit) arr.shift(); }
+  function visualLimits(){ return isCoarsePointerMobile()?MOBILE_EFFECT_LIMITS:DESKTOP_EFFECT_LIMITS; }
+  function addFeedback(text,x,y,color){feedback.push({text,x,y,color,life:.28});trimVisualArray(feedback,visualLimits().feedback);}
   function addParticles(x,y,color,count=12,power=1){
     for(let i=0;i<count;i++){
       const a=Math.random()*TAU, s=(34+Math.random()*112)*power;
       particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.16+Math.random()*.12,color});
     }
+    trimVisualArray(particles,visualLimits().particles);
   }
-  function addWave(angle,color){waves.push({angle,color,life:.24});}
+  function addWave(angle,color){waves.push({angle,color,life:.24});trimVisualArray(waves,visualLimits().waves);}
   function addRingBurst(color, power=1, label=""){
-    ringBursts.push({color, power, life:.30, label});
+    ringBursts.push({color, power, life:.30, label});trimVisualArray(ringBursts,visualLimits().ringBursts);
   }
   function addScratchBurst(angle,color,dir=1){
-    scratchBursts.push({angle,color,dir,life:.24});
+    scratchBursts.push({angle,color,dir,life:.24});trimVisualArray(scratchBursts,visualLimits().scratchBursts);
+  }
+  function mobileHaptic(result){
+    if(!inputSettings.haptic || gameState.autoEnabled || !isCoarsePointerMobile() || typeof navigator==="undefined" || typeof navigator.vibrate!=="function") return;
+    const ms=result==="MISS"?20:(result==="PERFECT"?10:8);
+    try{ navigator.vibrate(ms); }catch(e){}
   }
 
   function ensureAudioCtx(){
@@ -2137,6 +2183,7 @@
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
 
     addFeedback(label,p.x,p.y-18,color);
+    mobileHaptic(label);
     addParticles(p.x,p.y,color,isScratch?16:(isSwing?22:14),isScratch?.85:(isSwing?1.35:1));
     addWave((isScratch||isSwing)?a:a,color);
 
@@ -2198,6 +2245,7 @@
     const isScratch=n.type&&n.type.startsWith("scratch");
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
     addFeedback(tutorialMode ? tutorialFailureText(n.failReason) : "MISS",p.x,p.y-18,COLORS.miss);
+    mobileHaptic("MISS");
     addParticles(p.x,p.y,COLORS.miss,isScratch?14:8,.65);
     addWave(a,COLORS.miss);
   }
@@ -3515,6 +3563,12 @@ endpointCaptured=${n.endpointCaptured===true}`);
     setAutoMode(!gameState.autoEnabled, source);
   }
 
+  function formatMobileQuality(){ return "MOBILE QUALITY " + getMobileQuality(); }
+  function formatHaptic(){ return "HAPTIC " + (inputSettings.haptic?"ON":"OFF"); }
+  function cycleMobileQuality(){ const i=MOBILE_QUALITY_MODES.indexOf(getMobileQuality()); inputSettings.mobileQuality=MOBILE_QUALITY_MODES[(i+1)%MOBILE_QUALITY_MODES.length]; saveInputSettings(); resize(); }
+  function toggleHaptic(){ inputSettings.haptic=!inputSettings.haptic; saveInputSettings(); }
+
+  function setTextIfChanged(el,value){ if(!el) return; const v=String(value); if(el.textContent!==v) el.textContent=v; }
   function updateButtons(){
     applyMusicVolume();
     autoBox.textContent=gameState.autoEnabled?"AUTO ON":"AUTO OFF";
@@ -3549,6 +3603,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(pauseSetEffectIntensity) pauseSetEffectIntensity.textContent = formatEffectIntensity();
     if(pauseSetJudgeGuide) pauseSetJudgeGuide.textContent = formatJudgeGuide();
     if(pauseSetAimStabilizer) pauseSetAimStabilizer.textContent = formatAimStabilizer();
+    if(pauseSetMobileQuality) pauseSetMobileQuality.textContent = formatMobileQuality();
+    if(pauseSetHaptic) pauseSetHaptic.textContent = formatHaptic();
     if(typeof safeRefresh === "function") safeRefresh();
   }
 
@@ -3871,6 +3927,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function showPause(message=""){
+    releaseMobilePointers();
     if(!running) return;
     if(!paused){
       paused=true;
@@ -3884,6 +3941,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function resumeGame(){
+    releaseMobilePointers();
     if(!paused) return;
     paused=false;
     if(pauseOverlay) pauseOverlay.classList.remove("show");
@@ -3995,12 +4053,15 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
     const liveStats = calculateScoreStats();
     score = tutorialMode ? 0 : liveStats.score;
-    scoreBox.textContent=Math.floor(score);
-    comboBox.textContent=combo;
-    if(accuracyBox){
-      accuracyBox.textContent = (liveStats.accuracy * 100).toFixed(2) + "%";
+    const hudNow=performance.now();
+    if(hudNow-hudCache.lastAt>66 || hudCache.score!==Math.floor(score) || hudCache.combo!==combo){
+      hudCache.lastAt=hudNow;
+      hudCache.score=Math.floor(score); hudCache.combo=combo; hudCache.accuracy=(liveStats.accuracy*100).toFixed(2)+"%";
+      setTextIfChanged(scoreBox,hudCache.score);
+      setTextIfChanged(comboBox,hudCache.combo);
+      setTextIfChanged(accuracyBox,hudCache.accuracy);
+      updateButtons();
     }
-    updateButtons();
     if(editorMode) updateEditorStatus();
     raf=requestAnimationFrame(frame);
   }
@@ -4217,6 +4278,8 @@ settingsOrigin=${settingsOrigin}`);
     if(pauseSetEffectIntensity) pauseSetEffectIntensity.textContent = formatEffectIntensity();
     if(pauseSetJudgeGuide) pauseSetJudgeGuide.textContent = formatJudgeGuide();
     if(pauseSetAimStabilizer) pauseSetAimStabilizer.textContent = formatAimStabilizer();
+    if(pauseSetMobileQuality) pauseSetMobileQuality.textContent = formatMobileQuality();
+    if(pauseSetHaptic) pauseSetHaptic.textContent = formatHaptic();
     if(pauseSetAuto){
       pauseSetAuto.textContent = gameState.autoEnabled ? "AUTO PLAY ON" : "AUTO PLAY OFF";
       pauseSetAuto.classList.toggle("on", gameState.autoEnabled);
@@ -4444,6 +4507,8 @@ settingsOrigin=${settingsOrigin}`);
   bindPress(pauseSetEffectIntensity,()=>{cycleVisualSetting("effectIntensity");syncPauseSettingsUI();});
   bindPress(pauseSetJudgeGuide,()=>{cycleVisualSetting("judgeGuide");syncPauseSettingsUI();});
   bindPress(pauseSetAimStabilizer,()=>{cycleAimStabilizer();syncPauseSettingsUI();});
+  bindPress(pauseSetMobileQuality,()=>{cycleMobileQuality();syncPauseSettingsUI();});
+  bindPress(pauseSetHaptic,()=>{toggleHaptic();syncPauseSettingsUI();});
   bindPress(addCutBtn,()=>addEditorNote("cut"));bindPress(addSwingCWBtn,()=>addEditorNote("swingCW"));bindPress(addSwingCCWBtn,()=>addEditorNote("swingCCW"));bindPress(addFxBtn,()=>addEditorNote("fx"));bindPress(addSlideCWBtn,()=>addEditorNote("slideCW"));bindPress(addSlideCCWBtn,()=>addEditorNote("slideCCW"));bindPress(addScratchCWBtn,()=>addEditorNote("scratchCW"));bindPress(addScratchCCWBtn,()=>addEditorNote("scratchCCW"));
   bindPress(seekBackBtn,()=>{song.currentTime=Math.max(0,song.currentTime-1);updateEditorStatus();});
   bindPress(seekFwdBtn,()=>{song.currentTime=Math.min(song.duration||999,song.currentTime+1);updateEditorStatus();});
@@ -4475,17 +4540,34 @@ settingsOrigin=${settingsOrigin}`);
     }
   }
   if(window.PointerEvent){
-    window.addEventListener("pointermove",e=>updateGameplayPointerFromEvent(e,e.pointerType==="touch"?"touch":"pointer"),{passive:true});
+    window.addEventListener("pointermove",e=>{ if(!(isCoarsePointerMobile()&&e.pointerType==="touch")) updateGameplayPointerFromEvent(e,e.pointerType==="touch"?"touch":"pointer"); },{passive:true});
   }else{
     window.addEventListener("mousemove",e=>updateGameplayPointerFromEvent(e,"pointer"),{passive:true});
-    window.addEventListener("touchmove",e=>updateGameplayPointerFromEvent(e,"touch"),{passive:true});
+    window.addEventListener("touchmove",e=>{ if(!isCoarsePointerMobile()) updateGameplayPointerFromEvent(e,"touch"); },{passive:true});
   }
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
-  function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start"));}
+  function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start,.mobileGameplayControls"));}
+  function releaseMobilePointers(){ mobileAimPointerId=null; mobileActionPointerId=null; mobileScratchPointerId=null; keys.MouseLeft=false; scratchHeld=false; filterHeld=false; mouseDownRight=false; }
+  function handleMobileAimPointer(e){ if(e.pointerId!==mobileAimPointerId) return; updateGameplayPointerFromEvent(e,"touch"); }
+  if(window.PointerEvent){
+    canvas.addEventListener("pointerdown",e=>{ if(!isCoarsePointerMobile()||e.pointerType!=="touch"||isUiInputTarget(e.target)||mobileAimPointerId!==null) return; mobileAimPointerId=e.pointerId; try{canvas.setPointerCapture(e.pointerId);}catch(err){} updateGameplayPointerFromEvent(e,"touch"); e.preventDefault(); },{passive:false});
+    canvas.addEventListener("pointermove",e=>{ if(isCoarsePointerMobile()&&e.pointerType==="touch"){ handleMobileAimPointer(e); e.preventDefault(); } },{passive:false});
+    const endAim=e=>{ if(e.pointerId===mobileAimPointerId) mobileAimPointerId=null; };
+    canvas.addEventListener("pointerup",endAim,{passive:true}); canvas.addEventListener("pointercancel",endAim,{passive:true});
+  }
   window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerSource="pointer"; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
   window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;}});
-  window.addEventListener("touchstart",e=>{if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerSource="touch";} if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
-  window.addEventListener("touchend",e=>{if(!e.touches||e.touches.length<2){mouseDownRight=false;scratchHeld=false;} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
+  window.addEventListener("touchstart",e=>{ if(isCoarsePointerMobile()) return; if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerSource="touch";} if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
+  window.addEventListener("touchend",e=>{ if(isCoarsePointerMobile()) return; if(!e.touches||e.touches.length<2){mouseDownRight=false;scratchHeld=false;} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
+  function bindMobileGameButton(btn,role){
+    if(!btn||!window.PointerEvent)return;
+    btn.addEventListener("pointerdown",e=>{ if(!isCoarsePointerMobile()||e.pointerType!=="touch")return; e.preventDefault(); e.stopPropagation(); try{btn.setPointerCapture(e.pointerId);}catch(err){} if(role==="action"&&mobileActionPointerId===null){ mobileActionPointerId=e.pointerId; keys.MouseLeft=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(running)onCut(); } if(role==="scratch"&&mobileScratchPointerId===null){ mobileScratchPointerId=e.pointerId; scratchHeld=true; filterHeld=true; mouseDownRight=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; } },{passive:false});
+    const release=e=>{ if(role==="action"&&e.pointerId===mobileActionPointerId){ keys.MouseLeft=false; mobileActionPointerId=null; } if(role==="scratch"&&e.pointerId===mobileScratchPointerId){ scratchHeld=false; filterHeld=false; mouseDownRight=false; mobileScratchPointerId=null; } };
+    btn.addEventListener("pointerup",release,{passive:true}); btn.addEventListener("pointercancel",release,{passive:true});
+  }
+  bindMobileGameButton(mobileActionBtn,"action"); bindMobileGameButton(mobileScratchBtn,"scratch");
+  window.addEventListener("pointercancel",releaseMobilePointers,{passive:true});
+  document.addEventListener("visibilitychange",()=>{ if(document.hidden){ releaseMobilePointers(); if(running && !paused) showPause(); } });
 
   function sortedChangelogEntries(){
     return [...changelogEntries].sort((a,b)=>String(b.date || b.version || "").localeCompare(String(a.date || a.version || "")));
@@ -5037,8 +5119,8 @@ running=${running}`);
   bindPress(songSelectBack,()=>showTitleMenu());
   bindPress(songPlayBtn,(e)=>startSelectedSong(e));
 
-  window.addEventListener("resize", handlePlayOrientation);
-  window.addEventListener("orientationchange", () => setTimeout(handlePlayOrientation, 80));
+  window.addEventListener("resize",()=>{ releaseMobilePointers(); handlePlayOrientation(); });
+  window.addEventListener("orientationchange", () => { releaseMobilePointers(); setTimeout(handlePlayOrientation, 80); });
 
 
   // Mobile fullscreen lifecycle handling is intentionally kept in this document so song select, play, and pause are scene changes instead of navigations.
