@@ -7,6 +7,15 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.7.3",
+    date: "2026-07-18",
+    title: "Tutorial STATIC TRACE Render Fix",
+    summary: "10단계 STATIC TRACE 진행 게이지 좌표 오류 수정",
+    changes: [
+      { category: "FIX", text: "10단계 STATIC TRACE 진행 게이지 좌표 오류 수정" }
+    ]
+  },
+  {
     version: "0.7.2",
     date: "2026-07-17",
     title: "Input, Local Labels & ANiMA Slide Fixes",
