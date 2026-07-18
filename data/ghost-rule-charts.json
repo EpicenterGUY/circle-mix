@@ -497,8 +497,8 @@
         {
           "type": "traceCW",
           "beat": 143.997,
-          "angle": 135,
-          "endAngle": 270,
+          "angle": 330,
+          "endAngle": 105,
           "durationBeat": 2.5,
           "signedSweepAngle": 135
         },
@@ -745,8 +745,8 @@
         {
           "type": "traceCCW",
           "beat": 208.999,
-          "angle": 315,
-          "endAngle": 165,
+          "angle": 60,
+          "endAngle": 270,
           "durationBeat": 0.55,
           "signedSweepAngle": -150
         },
@@ -1247,8 +1247,8 @@
         {
           "type": "traceCW",
           "beat": 383,
-          "angle": 0,
-          "endAngle": 15,
+          "angle": 120,
+          "endAngle": 120,
           "durationBeat": 2,
           "signedSweepAngle": 360
         },
@@ -1784,16 +1784,16 @@
         {
           "type": "traceCCW",
           "beat": 574.997,
-          "angle": 315,
-          "endAngle": 180,
+          "angle": 60,
+          "endAngle": 285,
           "durationBeat": 0.55,
           "signedSweepAngle": -135
         },
         {
           "type": "traceCCW",
           "beat": 575.998,
-          "angle": 180,
-          "endAngle": 165,
+          "angle": 285,
+          "endAngle": 285,
           "durationBeat": 2,
           "signedSweepAngle": -360
         },
@@ -2290,8 +2290,8 @@
         {
           "type": "traceCW",
           "beat": 64.998,
-          "angle": 0,
-          "endAngle": 157.5,
+          "angle": 112.5,
+          "endAngle": 270,
           "durationBeat": 0.55,
           "signedSweepAngle": 157.5
         },
@@ -2819,8 +2819,8 @@
         {
           "type": "traceCW",
           "beat": 151.998,
-          "angle": 67.5,
-          "endAngle": 168.75,
+          "angle": 225,
+          "endAngle": 326.25,
           "durationBeat": 3,
           "signedSweepAngle": 101.25
         },
@@ -3553,8 +3553,8 @@
         {
           "type": "traceCW",
           "beat": 327,
-          "angle": 67.5,
-          "endAngle": 123.75,
+          "angle": 270,
+          "endAngle": 326.25,
           "durationBeat": 3,
           "signedSweepAngle": 56.25
         },
@@ -3626,8 +3626,8 @@
         {
           "type": "traceCW",
           "beat": 351.998,
-          "angle": 247.5,
-          "endAngle": 348.75,
+          "angle": 45,
+          "endAngle": 146.25,
           "durationBeat": 3,
           "signedSweepAngle": 101.25
         },
@@ -4339,8 +4339,8 @@
         {
           "type": "traceCCW",
           "beat": 513,
-          "angle": 225,
-          "endAngle": 90,
+          "angle": 90,
+          "endAngle": 315,
           "durationBeat": 0.55,
           "signedSweepAngle": -135
         },
@@ -4759,8 +4759,8 @@
         {
           "type": "traceCW",
           "beat": 609,
-          "angle": 225,
-          "endAngle": 22.5,
+          "angle": 90,
+          "endAngle": 247.5,
           "durationBeat": 0.55,
           "signedSweepAngle": 157.5
         },
@@ -4902,8 +4902,8 @@
         {
           "type": "traceCCW",
           "beat": 633.997,
-          "angle": 270,
-          "endAngle": 90,
+          "angle": 168.75,
+          "endAngle": 348.75,
           "durationBeat": 1,
           "signedSweepAngle": -180
         },
@@ -5424,8 +5424,8 @@
         {
           "type": "traceCCW",
           "beat": 84,
-          "angle": 255,
-          "endAngle": 195,
+          "angle": 142.5,
+          "endAngle": 82.5,
           "durationBeat": 1,
           "signedSweepAngle": -60
         },
@@ -5854,8 +5854,8 @@
         {
           "type": "traceCCW",
           "beat": 135.999,
-          "angle": 300,
-          "endAngle": 217.5,
+          "angle": 90,
+          "endAngle": 7.5,
           "durationBeat": 1,
           "signedSweepAngle": -82.5
         },
@@ -5867,8 +5867,8 @@
         {
           "type": "traceCW",
           "beat": 137.998,
-          "angle": 45,
-          "endAngle": 120,
+          "angle": 165,
+          "endAngle": 240,
           "durationBeat": 1,
           "signedSweepAngle": 75
         },
@@ -5920,8 +5920,8 @@
         {
           "type": "traceCW",
           "beat": 143.997,
-          "angle": 15,
-          "endAngle": 157.5,
+          "angle": 210,
+          "endAngle": 352.5,
           "durationBeat": 1,
           "signedSweepAngle": 142.5
         },
@@ -5963,8 +5963,8 @@
         {
           "type": "traceCCW",
           "beat": 149.999,
-          "angle": 210,
-          "endAngle": 142.5,
+          "angle": 15,
+          "endAngle": 307.5,
           "durationBeat": 1,
           "signedSweepAngle": -67.5
         },
@@ -5988,8 +5988,8 @@
         {
           "type": "traceCCW",
           "beat": 154,
-          "angle": 150,
-          "endAngle": 15,
+          "angle": 52.5,
+          "endAngle": 277.5,
           "durationBeat": 1,
           "signedSweepAngle": -135
         },
@@ -6686,8 +6686,8 @@
         {
           "type": "traceCCW",
           "beat": 273.497,
-          "angle": 60,
-          "endAngle": 30,
+          "angle": 285,
+          "endAngle": 255,
           "durationBeat": 1,
           "signedSweepAngle": -30
         },
@@ -6699,16 +6699,16 @@
         {
           "type": "traceCCW",
           "beat": 275.499,
-          "angle": 75,
-          "endAngle": 270,
+          "angle": 300,
+          "endAngle": 135,
           "durationBeat": 1,
           "signedSweepAngle": -165
         },
         {
           "type": "traceCW",
           "beat": 276.997,
-          "angle": 240,
-          "endAngle": 247.5,
+          "angle": 135,
+          "endAngle": 315,
           "durationBeat": 1,
           "signedSweepAngle": -180
         },
@@ -7024,8 +7024,8 @@
         {
           "type": "traceCCW",
           "beat": 336,
-          "angle": 285,
-          "endAngle": 195,
+          "angle": 52.5,
+          "endAngle": 322.5,
           "durationBeat": 1,
           "signedSweepAngle": -90
         },
@@ -7154,8 +7154,8 @@
         {
           "type": "traceCW",
           "beat": 360.498,
-          "angle": 315,
-          "endAngle": 315,
+          "angle": 210,
+          "endAngle": 30,
           "durationBeat": 5.25,
           "signedSweepAngle": 540
         },
@@ -7777,8 +7777,8 @@
         {
           "type": "traceCW",
           "beat": 486.5,
-          "angle": 75,
-          "endAngle": 75,
+          "angle": 285,
+          "endAngle": 105,
           "durationBeat": 1,
           "signedSweepAngle": 180
         },
@@ -9100,8 +9100,8 @@
         {
           "type": "traceCW",
           "beat": 689.5,
-          "angle": 0,
-          "endAngle": 37.5,
+          "angle": 135,
+          "endAngle": 172.5,
           "durationBeat": 1,
           "signedSweepAngle": 37.5
         },

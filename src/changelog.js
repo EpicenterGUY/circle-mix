@@ -7,6 +7,16 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.2",
+    date: "2026-07-18",
+    title: "Ghost Rule TRACE Entry Polish",
+    summary: "Ghost Rule HARD/EXPERT/MASTER TRACE 진입 동선을 다듬어 짧은 간격의 반대편 시작과 급반전 패턴을 완화",
+    changes: [
+      { category: "CHART", text: "Ghost Rule HARD/EXPERT/MASTER에서 TRACE 시작점을 직전 포인터 종료 위치에 가깝게 회전해 순간 이동 요구를 제거" },
+      { category: "TEST", text: "Ghost Rule TRACE 전환 audit를 추가해 severe start jump와 blind reverse jump 회귀를 검사" }
+    ]
+  },
+  {
     version: "0.9.1",
     date: "2026-07-18",
     title: "PWA Install Icon Hotfix",
