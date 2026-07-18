@@ -129,11 +129,22 @@ async function dismissStartupOverlays(page){
     assert.ok(Number.isFinite(symmetry.slow.result), 'slow LOW probe returns a finite aim angle');
     assert.equal(symmetry.offFast.disengaged, true, 'OFF disables magnet regardless of velocity');
     const beforeUiHover = await page.evaluate(() => window.CircleMixTestApi.state());
-    await page.hover('#tutorialSkipStep');
+    const skipBox = await page.locator('#tutorialSkipStep').boundingBox();
+    assert.ok(skipBox, 'SKIP button has a bounding box');
+    const expectedSkipX = skipBox.x + skipBox.width / 2;
+    const expectedSkipY = skipBox.y + skipBox.height / 2;
+    await page.mouse.move(expectedSkipX, expectedSkipY);
     const uiPointer = await page.evaluate(() => window.CircleMixTestApi.state());
     assert.equal(uiPointer.pointerActive, true, 'UI hover keeps pointer tracking active');
     assert.equal(uiPointer.lastPointerSource, 'pointer');
-    assert.notEqual(uiPointer.mouseX, beforeUiHover.mouseX, 'UI hover updates mouseX');
+    assert.ok(
+      Math.abs(uiPointer.mouseX - expectedSkipX) < 3,
+      `UI hover mouseX ${uiPointer.mouseX}, expected ${expectedSkipX}; before=${JSON.stringify({x: beforeUiHover.mouseX, y: beforeUiHover.mouseY})}`
+    );
+    assert.ok(
+      Math.abs(uiPointer.mouseY - expectedSkipY) < 3,
+      `UI hover mouseY ${uiPointer.mouseY}, expected ${expectedSkipY}; before=${JSON.stringify({x: beforeUiHover.mouseX, y: beforeUiHover.mouseY})}`
+    );
     assert.equal(uiPointer.tutorialStepIndex, beforeUiHover.tutorialStepIndex, 'button hover alone does not advance tutorial');
     assert.equal(uiPointer.tutorialSuccessCount, beforeUiHover.tutorialSuccessCount, 'button hover does not add tutorial success');
     assert.equal(uiPointer.tutorialValidUserInputCount, beforeUiHover.tutorialValidUserInputCount, 'button hover does not add valid input');
