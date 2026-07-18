@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.8.4",
+    date: "2026-07-18",
+    title: "Mobile Control Layout Tools",
+    summary: "모바일 ACTION/SCRATCH 레이아웃 편집, 설정 내보내기, 입력 점검 화면을 추가",
+    changes: [
+      { category: "MOBILE", text: "STANDARD, LEFT_HANDED, RIGHT_HANDED, CUSTOM 프리셋과 크기, 투명도, safe-area 정규화 좌표 저장을 추가" },
+      { category: "UI", text: "PAUSE SETTINGS에서 전체 화면 모바일 레이아웃 편집 오버레이와 JSON 내보내기/초기화를 제공" },
+      { category: "INPUT", text: "독립 모바일 입력 테스트 화면과 포인터 상태 기반 ACTION/SCRATCH 누름 피드백을 추가" }
+    ]
+  },
+  {
     version: "0.8.3",
     date: "2026-07-18",
     title: "Offline Data Integrity Hotfix",

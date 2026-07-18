@@ -1,6 +1,6 @@
 (function(){
   "use strict";
-  const VERSION="0.8.3";
+  const VERSION="0.8.4";
   const OFFLINE_KEY=`circleMixOfflineReady.${VERSION}`;
   let deferredInstallPrompt=null, waitingWorker=null, refreshing=false;
   let running=false, paused=false, wakeLock=null;
