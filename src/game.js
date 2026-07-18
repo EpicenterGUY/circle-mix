@@ -420,9 +420,7 @@
       endAngle:endAngleDeg!==undefined?chartAngleToRad(endAngleDeg):extra.endAngle,
       endAngleDeg,
       hitTime,spawnTime:hitTime-APPROACH,
-      duration:extra.duration||0,done:false,missed:false,hold:0,
-      tutorialStaticTrace:!!extra.tutorialStaticTrace,
-      tutorialModeType:extra.tutorialModeType || (extra.tutorialStaticTrace ? "staticTrace" : undefined)
+      duration:extra.duration||0,done:false,missed:false,hold:0
     };
     if(type.startsWith("slide") || type.startsWith("trace")){
       n.duration=extra.duration||BEAT*(type.startsWith("trace")?1.5:1.7);
@@ -1675,7 +1673,7 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle, tutorialStaticTrace:n.tutorialStaticTrace, tutorialModeType:n.tutorialModeType }); }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); }
 
   function generateChart(){
     if(useCustomChart){
@@ -2138,14 +2136,9 @@
     const isSwing=n.type&&n.type.startsWith("swing");
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
 
-    if(tutorialMode && n.tutorialStaticTrace){
-      addFeedback("OK",p.x,p.y-16,color);
-      addParticles(p.x,p.y,color,5,.32);
-    }else{
-      addFeedback(label,p.x,p.y-18,color);
-      addParticles(p.x,p.y,color,isScratch?16:(isSwing?22:14),isScratch?.85:(isSwing?1.35:1));
-      addWave((isScratch||isSwing)?a:a,color);
-    }
+    addFeedback(label,p.x,p.y-18,color);
+    addParticles(p.x,p.y,color,isScratch?16:(isSwing?22:14),isScratch?.85:(isSwing?1.35:1));
+    addWave((isScratch||isSwing)?a:a,color);
 
     if(isScratch){
       const d=slideDelta(n);
@@ -2204,15 +2197,9 @@
     if(n.type?.startsWith("trace")) a=resolveTraceMotion(n).finalAngle;
     const isScratch=n.type&&n.type.startsWith("scratch");
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
-    if(tutorialMode && n.tutorialStaticTrace){
-      addFeedback("MISS",p.x,p.y-20,COLORS.miss);
-      addFeedback("판정 호 안에 에임을 더 오래 유지하세요",cx,cy+baseR*.46,COLORS.miss);
-      addParticles(p.x,p.y,COLORS.miss,4,.35);
-    }else{
-      addFeedback(tutorialMode ? tutorialFailureText(n.failReason) : "MISS",p.x,p.y-18,COLORS.miss);
-      addParticles(p.x,p.y,COLORS.miss,isScratch?14:8,.65);
-      addWave(a,COLORS.miss);
-    }
+    addFeedback(tutorialMode ? tutorialFailureText(n.failReason) : "MISS",p.x,p.y-18,COLORS.miss);
+    addParticles(p.x,p.y,COLORS.miss,isScratch?14:8,.65);
+    addWave(a,COLORS.miss);
   }
 
   function updateSwingGesture(n){
@@ -2483,9 +2470,6 @@
           n.completed=passed;
           if(debugMode || tutorialMode){
             n.failReason=traceFailureFeedback(n,needed);
-            if(debugMode && n.tutorialStaticTrace){
-              console.log(`[Tutorial Static Trace]\nphase=${t<=end?"ACTIVE":"RESULT"}\nangle=${(a*180/Math.PI).toFixed(1)}\ninside=${!!n.lastTraceRegion?.inside}\nvalidTrackedTime=${(n.validTrackedTime||0).toFixed(3)}\nactiveDuration=${(n.activeTraceDuration||0).toFixed(3)}\nquality=${quality.toFixed(3)}\nbuttonHeld=${!!(filterHeld||keyA||keyD||keys.MouseLeft)}\nresult=${passed?"PASS":"MISS"}`);
-            }
             console.log(`[Trace Result]
 coverage=${coverage.toFixed(2)}
 endpoint=${n.endpointCaptured===true}
@@ -2511,9 +2495,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
           }
           if(passed){
             const perfect=quality>=profile.perfectQuality && n.endpointCaptured===true;
-            if(!n.tutorialStaticTrace){
-              addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END");
-            }
+            addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END");
             judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
           }else miss(n,n.failReason||"STAY ON THE PATH LONGER");
         }
@@ -2949,7 +2931,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const futureAlpha=clamp((active?.22:.18)*pathScale,.10,.28);
     const pastAlpha=clamp(.10*pathScale,.06,.18);
     const hotAlpha=focus?.98:.88;
-    const fullDelta=n.tutorialStaticTrace?0:(Math.abs(d)>.03?d:dir*Math.PI*.26);
+    const fullDelta=Math.abs(d)>.03?d:dir*Math.PI*.26;
     const region=getTraceJudgementRegion(n,t,traceProfile());
     const activeHalf=region.outerAngularTolerance;
     const innerHalf=region.innerAngularTolerance;
@@ -2961,24 +2943,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const farDelta=active?(motion.finalUnwrappedAngle-(motion.startAngle+d*ratio)):fullDelta;
     if(Math.abs(farDelta)>0.003) drawDirectedArcSegments(r,farStart,farDelta,`rgba(35,240,197,${futureAlpha})`,7,1,null,0);
     if(active){
-      if(n.tutorialStaticTrace){
-        drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,"rgba(102,217,255,.20)",9,1,null,0);
-        drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,"rgba(235,252,255,.76)",4.5,1,null,0);
-      }else{
-        drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.22})`,activeWidth,1,null,0);
-        drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,`rgba(255,255,255,${hotAlpha*.42})`,innerWidth,1,COLORS.trace,3*visualScale("effect"));
-      }
-    }
-    if(n.tutorialStaticTrace && active){
-      const staticProgress=clamp((n.traceQualityTime||0)/Math.max(dur,.001),0,1);
-      const gaugeR=r+11;
-      if(debugMode && !n.staticTraceRenderLogged){
-        n.staticTraceRenderLogged=true;
-        const transform=ctx.getTransform?.();
-        console.log(`[Static Trace Render]\ncx=${cx.toFixed(2)}\ncy=${cy.toFixed(2)}\ncurrAngle=${curr.toFixed(4)}\nradius=${gaugeR.toFixed(2)}\ncanvasTransform=${transform ? `a=${transform.a.toFixed(3)}, b=${transform.b.toFixed(3)}, c=${transform.c.toFixed(3)}, d=${transform.d.toFixed(3)}, e=${transform.e.toFixed(2)}, f=${transform.f.toFixed(2)}` : "unavailable"}`);
-      }
-      drawDirectedArcSegments(gaugeR,curr-activeHalf,activeHalf*2,"rgba(255,255,255,.12)",3,1,null,0);
-      if(staticProgress>0) drawDirectedArcSegments(gaugeR,curr-activeHalf,activeHalf*2*staticProgress,"rgba(196,250,255,.88)",3,1,null,0);
+      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.22})`,activeWidth,1,null,0);
+      drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,`rgba(255,255,255,${hotAlpha*.42})`,innerWidth,1,COLORS.trace,3*visualScale("effect"));
     }
 
     // Local trace decorations below are drawn after translating to the playfield center.
@@ -2988,26 +2954,22 @@ endpointCaptured=${n.endpointCaptured===true}`);
     ctx.lineCap="round";
     ctx.shadowBlur=4*visualScale("effect");
     ctx.shadowColor=COLORS.trace;
-    if(!n.tutorialStaticTrace){
-      ctx.lineWidth=2;
-      ctx.strokeStyle=`rgba(53,240,197,${focus?.9:.72})`;
-      ctx.beginPath();ctx.arc(Math.cos(motion.startAngle)*r,Math.sin(motion.startAngle)*r,7,0,TAU);ctx.stroke();
-      ctx.strokeStyle=`rgba(255,225,90,${focus?.98:.86})`;
-      ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,5,0,TAU);ctx.stroke();
-      ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,10,0,TAU);ctx.stroke();
-    }
+    ctx.lineWidth=2;
+    ctx.strokeStyle=`rgba(53,240,197,${focus?.9:.72})`;
+    ctx.beginPath();ctx.arc(Math.cos(motion.startAngle)*r,Math.sin(motion.startAngle)*r,7,0,TAU);ctx.stroke();
+    ctx.strokeStyle=`rgba(255,225,90,${focus?.98:.86})`;
+    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,5,0,TAU);ctx.stroke();
+    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,10,0,TAU);ctx.stroke();
 
     const tx=Math.cos(curr)*r, ty=Math.sin(curr)*r;
     const pointerInside=insideTraceTarget(n,t).inside;
     const pulse=.5+.5*Math.sin(t*24);
-    ctx.fillStyle="#ffffff"; ctx.beginPath();ctx.arc(tx,ty,n.tutorialStaticTrace?4.5:(focus?4.8:4.0),0,TAU);ctx.fill();
-    if(!n.tutorialStaticTrace){
-      ctx.strokeStyle=pointerInside?"rgba(255,243,106,.98)":`rgba(53,240,197,${focus?.98:.86})`;
-      ctx.lineWidth=pointerInside?2.4:2;
-      ctx.beginPath();ctx.arc(tx,ty,(pointerInside?10:13)+(focus?pulse*1.5:0),0,TAU);ctx.stroke();
-    }
+    ctx.fillStyle="#ffffff"; ctx.beginPath();ctx.arc(tx,ty,focus?4.8:4.0,0,TAU);ctx.fill();
+    ctx.strokeStyle=pointerInside?"rgba(255,243,106,.98)":`rgba(53,240,197,${focus?.98:.86})`;
+    ctx.lineWidth=pointerInside?2.4:2;
+    ctx.beginPath();ctx.arc(tx,ty,(pointerInside?10:13)+(focus?pulse*1.5:0),0,TAU);ctx.stroke();
 
-    const arrowCount=n.tutorialStaticTrace?0:(focus?2:1);
+    const arrowCount=focus?2:1;
     for(let i=1;i<=arrowCount;i++){
       const aa=curr+dir*(Math.PI*.055*i);
       const ar=Math.max(hitR-18,r-8);
@@ -3017,7 +2979,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     }
     if(!active && n.hitTime-t<.8){
       ctx.fillStyle="rgba(53,240,197,.88)"; ctx.font="900 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText(n.tutorialStaticTrace?"STATIC TRACE":"TRACE",Math.cos(n.angle)*(r-26),Math.sin(n.angle)*(r-26));
+      ctx.fillText("TRACE",Math.cos(n.angle)*(r-26),Math.sin(n.angle)*(r-26));
     }
     ctx.restore();
   }
@@ -3680,7 +3642,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     {name:"HOLD · 실전 표시",kind:"hold",phase:"standard",desc:"일반 표시 상태에서 HOLD 두 개를 끝까지 유지하세요.",notes:[{type:"fx",beat:4,lane:1,durationBeat:2.5},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
     {name:"SLIDE · 가이드",kind:"slide",phase:"guided",desc:"버튼을 누른 상태와 현재 목표 위치를 따로 확인하며 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4},{type:"slideCCW",beat:10,lane:2,endLane:6,durationBeat:4}]},
     {name:"SLIDE · 흐린 가이드",kind:"slide",phase:"faded",desc:"버튼을 누른 채 흐린 목표를 끝까지 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:3.2},{type:"slideCCW",beat:9,lane:2,endLane:6,durationBeat:3.2}]},
-    {name:"TRACE · 정지 목표",kind:"trace",phase:"guided",desc:"실제 TRACE 활성 호가 정지해 있습니다. 버튼을 누르지 말고 판정 호 안에 에임을 유지하세요.",notes:[{type:"traceCW",beat:3.5,lane:7,endLane:7,durationBeat:2.4,signedSweepAngle:0,tutorialStaticTrace:true,tutorialModeType:"staticTrace"}]},
+    {name:"TRACE · 45° 입문",kind:"trace",phase:"guided",desc:"버튼을 누르지 말고 천천히 움직이는 목표를 따라가세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:0,durationBeat:3.2}]},
     {name:"TRACE · 90° 가이드",kind:"trace",phase:"guided",desc:"밝게 움직이는 현재 목표를 따라 90도 이동하세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:1,durationBeat:3}]},
     {name:"TRACE · 180° 가이드",kind:"trace",phase:"guided",desc:"현재 목표는 밝게, 앞으로 갈 경로는 흐리게 표시됩니다.",notes:[{type:"traceCCW",beat:4,lane:3,endLane:7,durationBeat:3.4}]},
     {name:"TRACE · 180° 흐린 가이드",kind:"trace",phase:"faded",desc:"현재 목표와 짧은 활성 호를 보며 끝까지 따라가세요.",notes:[{type:"traceCW",beat:4,lane:6,endLane:2,durationBeat:2.8}]},
