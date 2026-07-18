@@ -1,8 +1,11 @@
 (function(){
   "use strict";
-  const VERSION="0.9.0";
+  const VERSION="0.9.1";
   const OFFLINE_KEY=`circleMixOfflineReady.${VERSION}`;
+  const INSTALL_HELP_TEXT="Android Chrome / Edge / Samsung Internet: 브라우저 메뉴에서 '앱 설치' 또는 '홈 화면에 추가'를 선택하세요.\n\niPhone / iPad Safari: 공유 버튼을 누르고 '홈 화면에 추가'를 선택하세요.";
+  const PWA_DEBUG=new URLSearchParams(window.location.search).get("pwaDebug")==="1";
   let deferredInstallPrompt=null, waitingWorker=null, refreshing=false;
+  let beforeInstallPromptReceived=false, appInstalledReceived=false;
   let running=false, paused=false, wakeLock=null;
   const $=id=>document.getElementById(id);
   function standalone(){ return window.matchMedia?.("(display-mode: standalone)").matches || window.matchMedia?.("(display-mode: fullscreen)").matches || window.navigator.standalone===true; }
@@ -10,6 +13,23 @@
   function offlineReady(){ try{return localStorage.getItem(OFFLINE_KEY)==="ready";}catch(e){return false;} }
   function rememberOfflineReady(ready){ try{ ready ? localStorage.setItem(OFFLINE_KEY,"ready") : localStorage.removeItem(OFFLINE_KEY); }catch(e){} }
   function formatMissing(count){ return `${count} FILE${count===1?"":"S"} MISSING`; }
+  function setInstallHelp(visible){ const help=$("installHelp"); if(!help) return; help.textContent=INSTALL_HELP_TEXT; help.hidden=standalone() || !visible; }
+  function manifestUrl(){ const link=document.querySelector('link[rel="manifest"]'); return link ? new URL(link.getAttribute("href"), document.baseURI).href : ""; }
+  function updatePwaDebug(){
+    if(!PWA_DEBUG) return;
+    let panel=$("pwaDebugPanel");
+    if(!panel){ panel=document.createElement("pre"); panel.id="pwaDebugPanel"; panel.setAttribute("aria-label","PWA debug status"); panel.style.cssText="position:fixed;left:8px;bottom:8px;z-index:10000;max-width:min(92vw,720px);max-height:40vh;overflow:auto;margin:0;padding:8px;border:1px solid #38d5ff;background:rgba(0,0,0,.82);color:#d8f7ff;font:12px/1.4 monospace;white-space:pre-wrap;"; document.body.appendChild(panel); }
+    panel.textContent=JSON.stringify({
+      serviceWorkerSupported:"serviceWorker" in navigator,
+      serviceWorkerController:!!navigator.serviceWorker?.controller,
+      manifestUrl:manifestUrl(),
+      standalone:standalone(),
+      beforeinstallpromptReceived:beforeInstallPromptReceived,
+      appinstalledReceived:appInstalledReceived,
+      userAgent:navigator.userAgent,
+      onLine:navigator.onLine
+    }, null, 2);
+  }
   function setOfflineState(state,progress,detail){
     const online=navigator.onLine!==false;
     let label=state;
@@ -19,6 +39,7 @@
     setText("pwaNetworkState", online ? label : `OFFLINE · ${label}`);
     setText("offlineDataStatus", label);
     if(progress!=null) setText("offlineDataProgress", `${Math.round(progress)}%`);
+    updatePwaDebug();
   }
   function postToSW(msg){ if(navigator.serviceWorker?.controller) navigator.serviceWorker.controller.postMessage(msg); }
   async function refreshOfflineStatus(){
@@ -42,16 +63,16 @@
     };
     postToSW({type:"DOWNLOAD_OFFLINE", version:VERSION, port:channel.port2});
   }
-  function updateInstallUi(){ const btn=$("installAppBtn"), help=$("installHelp"); if(btn) btn.hidden=standalone() || !deferredInstallPrompt; if(help) help.hidden=standalone() || !!deferredInstallPrompt; document.body.classList.toggle("pwaStandalone", standalone()); }
-  async function promptInstall(){ if(!deferredInstallPrompt){ const h=$("installHelp"); if(h) h.hidden=!h.hidden; return; } const promptEvent=deferredInstallPrompt; deferredInstallPrompt=null; updateInstallUi(); try{ await promptEvent.prompt(); await promptEvent.userChoice; }catch(e){} updateInstallUi(); }
+  function updateInstallUi(){ const btn=$("installAppBtn"); if(btn){ btn.hidden=standalone(); btn.disabled=false; btn.setAttribute("aria-disabled","false"); } if(deferredInstallPrompt) setInstallHelp(false); document.body.classList.toggle("pwaStandalone", standalone()); updatePwaDebug(); }
+  async function promptInstall(){ if(standalone()){ updateInstallUi(); return; } if(!deferredInstallPrompt){ setInstallHelp(true); return; } const promptEvent=deferredInstallPrompt; deferredInstallPrompt=null; updateInstallUi(); try{ await promptEvent.prompt(); await promptEvent.userChoice; }catch(e){} updateInstallUi(); }
   function showUpdateReady(worker){ waitingWorker=worker||waitingWorker; const row=$("pwaUpdateRow"), btn=$("pwaUpdateBtn"); if(row) row.hidden=false; if(btn) btn.hidden=false; setOfflineState("UPDATE REQUIRED"); }
   function applyUpdate(){ if(!waitingWorker || running) return; waitingWorker.postMessage({type:"SKIP_WAITING"}); }
   async function requestWakeLock(){ if(!running||paused||document.hidden||!("wakeLock" in navigator)) return; try{ wakeLock=await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release",()=>{ wakeLock=null; }); }catch(e){} }
   async function releaseWakeLock(){ const lock=wakeLock; wakeLock=null; if(lock){ try{ await lock.release(); }catch(e){} } }
   window.addEventListener("circlemix:gameplay-state",e=>{ running=!!e.detail?.running; paused=!!e.detail?.paused; if(running&&!paused) requestWakeLock(); else releaseWakeLock(); });
   document.addEventListener("visibilitychange",()=>{ if(document.hidden) releaseWakeLock(); else if(running&&!paused) requestWakeLock(); });
-  window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); deferredInstallPrompt=e; updateInstallUi(); });
-  window.addEventListener("appinstalled",()=>{ deferredInstallPrompt=null; updateInstallUi(); });
+  window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); beforeInstallPromptReceived=true; deferredInstallPrompt=e; updateInstallUi(); });
+  window.addEventListener("appinstalled",()=>{ appInstalledReceived=true; deferredInstallPrompt=null; updateInstallUi(); });
   window.addEventListener("online",()=>setOfflineState()); window.addEventListener("offline",()=>setOfflineState());
   if("serviceWorker" in navigator){
     window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").then(reg=>{
@@ -62,5 +83,5 @@
     navigator.serviceWorker.addEventListener("controllerchange",()=>{ if(refreshing) return; refreshing=true; window.location.reload(); });
   }
   window.CircleMixPWA={setGameplayState(detail){ window.dispatchEvent(new CustomEvent("circlemix:gameplay-state",{detail})); }, canApplyUpdate(){return !running;}};
-  document.addEventListener("DOMContentLoaded",()=>{ $("offlineDataBtn")?.addEventListener("click",downloadOffline); $("installAppBtn")?.addEventListener("click",promptInstall); $("pwaUpdateBtn")?.addEventListener("click",applyUpdate); setOfflineState(); updateInstallUi(); });
+  document.addEventListener("DOMContentLoaded",()=>{ $("offlineDataBtn")?.addEventListener("click",downloadOffline); $("installAppBtn")?.addEventListener("click",promptInstall); $("pwaUpdateBtn")?.addEventListener("click",applyUpdate); setInstallHelp(false); setOfflineState(); updateInstallUi(); });
 })();

@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.1",
+    date: "2026-07-18",
+    title: "PWA Install Icon Hotfix",
+    summary: "Chromium 설치 판정을 위한 PNG 아이콘 manifest 등록과 INSTALL APP 안내 UI를 보강",
+    changes: [
+      { category: "PWA", text: "manifest에 192x192, 512x512, maskable 512 PNG 아이콘을 등록하고 Apple touch icon을 실제 PNG로 변경" },
+      { category: "PWA", text: "standalone이 아닌 상태에서는 INSTALL APP 버튼을 표시하고 beforeinstallprompt 미수신 브라우저에는 수동 설치 안내를 제공" },
+      { category: "DEBUG", text: "?pwaDebug=1에서만 서비스 워커, manifest, 설치 이벤트, UA, 온라인 상태 진단 패널을 표시" }
+    ]
+  },
+  {
     version: "0.9.0",
     date: "2026-07-18",
     title: "Ghost Rule Built-in Track",
