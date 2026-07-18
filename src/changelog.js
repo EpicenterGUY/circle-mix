@@ -7,6 +7,15 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.7.5",
+    date: "2026-07-18",
+    title: "Tutorial 45° TRACE Intro",
+    summary: "튜토리얼 10단계의 STATIC TRACE를 실제 45° TRACE 입문 단계로 교체",
+    changes: [
+      { category: "TUTORIAL", text: "튜토리얼 10단계의 STATIC TRACE를 실제 45° TRACE 입문 단계로 교체" }
+    ]
+  },
+  {
     version: "0.7.4",
     date: "2026-07-18",
     title: "Tutorial STATIC TRACE Readability",
