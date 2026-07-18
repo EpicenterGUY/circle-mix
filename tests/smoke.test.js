@@ -172,6 +172,15 @@ assert.equal(JSON.stringify(mirror.charts[difficulty].notes), JSON.stringify(bun
 }
 });
 
+test("index and service worker use the same PWA cache query", () => {
+const index = fs.readFileSync("index.html", "utf8");
+const sw = fs.readFileSync("service-worker.js", "utf8");
+assert.match(index, /20260718-pwa-offline-port-fix-1/);
+assert.match(sw, /20260718-pwa-offline-port-fix-1/);
+assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
+assert.doesNotMatch(sw, /20260718-mobile-play-hotfix-1/);
+});
+
 test("service worker offline integrity contract", () => {
 const sw = fs.readFileSync("service-worker.js", "utf8");
 assert.match(sw, /const APP_SHELL_URLS = \[/);
@@ -187,6 +196,43 @@ assert.match(sw, /Content-Range/);
 assert.match(sw, /status:206/);
 assert.doesNotMatch(sw, /cacheExisting\([\s\S]*catch\(\)=>/);
 });
+
+test("PWA offline messages transfer MessagePort and clean status timeout", () => {
+const pwa = fs.readFileSync("src/pwa.js", "utf8");
+assert.match(pwa, /postToSW\(\{type:"OFFLINE_STATUS", version:VERSION\}, \[channel\.port2\]\)/);
+assert.match(pwa, /postToSW\(\{type:"DOWNLOAD_OFFLINE", version:VERSION\}, \[channel\.port2\]\)/);
+assert.match(pwa, /clearTimeout\(timeoutId\)/);
+assert.match(pwa, /closePort\(channel\.port1\)/);
+assert.match(pwa, /closePort\(channel\.port2\)|finishOfflineDownload\(session\)/);
+});
+
+test("service worker responds over event.ports[0] and emits offline lifecycle messages", () => {
+const sw = fs.readFileSync("service-worker.js", "utf8");
+assert.match(sw, /const port=event\.ports\?\.\[0\]/);
+assert.doesNotMatch(sw, /data\.port/);
+assert.match(sw, /safePost\(port,\{type:"OFFLINE_PROGRESS"|port\.postMessage\(\{type:"OFFLINE_PROGRESS"/);
+assert.match(sw, /OFFLINE_VERIFYING/);
+assert.match(sw, /safePost\(port,\{type:"OFFLINE_COMPLETE"/);
+});
+
+test("PWA offline postMessage failures and duplicate clicks are handled", () => {
+const pwa = fs.readFileSync("src/pwa.js", "utf8");
+assert.match(pwa, /catch\(error\)\{ console\.warn\("OFFLINE_STATUS postMessage failed"/);
+assert.match(pwa, /catch\(error\)\{ console\.warn\("DOWNLOAD_OFFLINE postMessage failed"/);
+assert.match(pwa, /setOfflineState\("FAILED"\)/);
+assert.match(pwa, /if\(offlineDownloadSession\) return/);
+assert.match(pwa, /offlineDownloadSession=session/);
+assert.match(pwa, /finishOfflineDownload\(session\)/);
+});
+
+test("service worker records missing response ports as handled errors", () => {
+const sw = fs.readFileSync("service-worker.js", "utf8");
+assert.match(sw, /missingPortStatus/);
+assert.match(sw, /missing-message-port/);
+assert.match(sw, /DOWNLOAD_OFFLINE missing MessagePort/);
+assert.match(sw, /OFFLINE_STATUS missing MessagePort/);
+});
+
 
 test("manifest references installable PNG and SVG icons", () => {
 const manifest = JSON.parse(fs.readFileSync("manifest.webmanifest", "utf8"));

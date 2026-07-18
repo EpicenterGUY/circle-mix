@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.4",
+    date: "2026-07-18",
+    title: "PWA Offline Download Port Fix",
+    summary: "모바일 OFFLINE DATA 다운로드가 멈추지 않도록 MessageChannel 전달과 실패 정리를 수정",
+    changes: [
+      { category: "PWA", text: "OFFLINE_STATUS와 DOWNLOAD_OFFLINE 요청에서 MessagePort를 transfer list로 전달하고 서비스 워커는 event.ports[0]으로 응답" },
+      { category: "PWA", text: "postMessage 예외, 상태 조회 timeout, 다운로드 완료·실패 시 포트와 진행 상태를 정리해 UI가 FAILED 또는 fallback으로 전환" },
+      { category: "PWA", text: "OFFLINE DATA 버튼 중복 클릭으로 여러 다운로드 세션이 겹치지 않게 차단" }
+    ]
+  },
+  {
     version: "0.9.3",
     date: "2026-07-18",
     title: "Mobile Play Regression Hotfix",
