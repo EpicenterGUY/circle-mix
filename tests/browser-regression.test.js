@@ -101,6 +101,7 @@ async function collectErrors(page){
     });
     assert.ok(symmetry.bothDisengaged && symmetry.absEqual, `CW/CCW magnet disengage symmetry ${JSON.stringify(symmetry)}`);
     assert.equal(symmetry.slow.disengaged, false, 'slow LOW velocity does not force disengage');
+    assert.ok(Number.isFinite(symmetry.slow.result), 'slow LOW probe returns a finite aim angle');
     assert.equal(symmetry.offFast.disengaged, true, 'OFF disables magnet regardless of velocity');
     const beforeUiHover = await page.evaluate(() => window.CircleMixTestApi.state());
     await page.hover('#tutorialSkipStep');
@@ -136,6 +137,8 @@ async function collectErrors(page){
     const afterSkipClick = await page.evaluate(() => window.CircleMixTestApi.state());
     assert.equal(afterSkipClick.tutorialSuccessCount, beforeSkipClick.tutorialSuccessCount, 'SKIP does not add CUT success');
     assert.equal(afterSkipClick.tutorialValidUserInputCount, beforeSkipClick.tutorialValidUserInputCount, 'SKIP does not add valid CUT input');
+    assert.equal(afterSkipClick.tutorialLastAdvanceReason, 'SKIP_BUTTON');
+    assert.equal(afterSkipClick.tutorialLastAdvanceSource, 'skip');
     const skipLoop = await measureLoop(page, 500);
     assert.ok(skipLoop.frameDelta > 5 && skipLoop.renderDelta > 5 && skipLoop.timeDelta > 0.2, `SKIP click loop ${JSON.stringify(skipLoop)}`);
 
