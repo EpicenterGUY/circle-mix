@@ -39,6 +39,21 @@ async function collectErrors(page){
   return errors;
 }
 
+async function dismissStartupOverlays(page){
+  const updateLog = page.locator('#updateLogOverlay');
+  if(await updateLog.isVisible().catch(() => false)){
+    await page.locator('#updateLogClose').click();
+    await page.waitForFunction(() => {
+      const overlay = document.getElementById('updateLogOverlay');
+      return !overlay || overlay.hidden || !overlay.classList.contains('show');
+    });
+  }
+  assert.equal(await page.evaluate(() => {
+    const overlay = document.getElementById('updateLogOverlay');
+    return !!overlay && !overlay.hidden && overlay.classList.contains('show');
+  }), false, 'startup update log overlay is dismissed');
+}
+
 (async()=>{
   const server = spawn(process.execPath, ['-e', "require('http').createServer((req,res)=>{const fs=require('fs'),path=require('path');let u=new URL(req.url,'http://x').pathname;if(u==='/')u='/index.html';const f=path.join(process.cwd(),u);fs.readFile(f,(e,d)=>{if(e){res.statusCode=404;res.end('not found')}else{res.end(d)}})}).listen(4173)"], {cwd: process.cwd(), stdio:'inherit'});
   try{
@@ -49,6 +64,7 @@ async function collectErrors(page){
     const errors = await collectErrors(page);
     await page.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
     await waitFor(page, () => !!window.CircleMixTestApi, 'desktop test api');
+    await dismissStartupOverlays(page);
 
     await page.evaluate(() => window.CircleMixTestApi.startTutorial());
     await waitFor(page, () => window.CircleMixTestApi.state().tutorialMode, 'tutorial mode');
@@ -160,6 +176,7 @@ async function collectErrors(page){
     const mobileErrors = await collectErrors(mobilePage);
     await mobilePage.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
     await waitFor(mobilePage, () => !!window.CircleMixTestApi, 'mobile test api');
+    await dismissStartupOverlays(mobilePage);
     await mobilePage.evaluate(() => window.CircleMixTestApi.startTutorial());
     await waitFor(mobilePage, () => window.CircleMixTestApi.state().tutorialMode, 'mobile tutorial');
     await waitFor(mobilePage, () => !document.getElementById('rotateOverlay')?.classList.contains('show'), 'mobile rotate overlay hidden');
