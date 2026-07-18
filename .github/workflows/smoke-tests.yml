@@ -15,5 +15,14 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Run smoke tests
         run: npm test
+
+      - name: Run browser regression tests
+        run: npm run test:browser

@@ -2,5 +2,8 @@
   "scripts": {
     "test": "node --check src/game.js && node --check src/version.js && node --check src/changelog.js && node --check src/pwa.js && node --check service-worker.js && node tests/smoke.test.js",
     "test:browser": "node tests/browser-regression.test.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.54.0"
   }
 }
