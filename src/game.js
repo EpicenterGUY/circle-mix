@@ -2138,9 +2138,14 @@
     const isSwing=n.type&&n.type.startsWith("swing");
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
 
-    addFeedback(label,p.x,p.y-18,color);
-    addParticles(p.x,p.y,color,isScratch?16:(isSwing?22:14),isScratch?.85:(isSwing?1.35:1));
-    addWave((isScratch||isSwing)?a:a,color);
+    if(tutorialMode && n.tutorialStaticTrace){
+      addFeedback("OK",p.x,p.y-16,color);
+      addParticles(p.x,p.y,color,5,.32);
+    }else{
+      addFeedback(label,p.x,p.y-18,color);
+      addParticles(p.x,p.y,color,isScratch?16:(isSwing?22:14),isScratch?.85:(isSwing?1.35:1));
+      addWave((isScratch||isSwing)?a:a,color);
+    }
 
     if(isScratch){
       const d=slideDelta(n);
@@ -2199,9 +2204,15 @@
     if(n.type?.startsWith("trace")) a=resolveTraceMotion(n).finalAngle;
     const isScratch=n.type&&n.type.startsWith("scratch");
     const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
-    addFeedback(tutorialMode ? tutorialFailureText(n.failReason) : "MISS",p.x,p.y-18,COLORS.miss);
-    addParticles(p.x,p.y,COLORS.miss,isScratch?14:8,.65);
-    addWave(a,COLORS.miss);
+    if(tutorialMode && n.tutorialStaticTrace){
+      addFeedback("MISS",p.x,p.y-20,COLORS.miss);
+      addFeedback("판정 호 안에 에임을 더 오래 유지하세요",cx,cy+baseR*.46,COLORS.miss);
+      addParticles(p.x,p.y,COLORS.miss,4,.35);
+    }else{
+      addFeedback(tutorialMode ? tutorialFailureText(n.failReason) : "MISS",p.x,p.y-18,COLORS.miss);
+      addParticles(p.x,p.y,COLORS.miss,isScratch?14:8,.65);
+      addWave(a,COLORS.miss);
+    }
   }
 
   function updateSwingGesture(n){
@@ -2500,7 +2511,10 @@ endpointCaptured=${n.endpointCaptured===true}`);
           }
           if(passed){
             const perfect=quality>=profile.perfectQuality && n.endpointCaptured===true;
-            addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
+            if(!n.tutorialStaticTrace){
+              addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END");
+            }
+            judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
           }else miss(n,n.failReason||"STAY ON THE PATH LONGER");
         }
         continue;
@@ -2947,17 +2961,24 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const farDelta=active?(motion.finalUnwrappedAngle-(motion.startAngle+d*ratio)):fullDelta;
     if(Math.abs(farDelta)>0.003) drawDirectedArcSegments(r,farStart,farDelta,`rgba(35,240,197,${futureAlpha})`,7,1,null,0);
     if(active){
-      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.22})`,activeWidth,1,null,0);
-      drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,`rgba(255,255,255,${hotAlpha*.42})`,innerWidth,1,COLORS.trace,3*visualScale("effect"));
+      if(n.tutorialStaticTrace){
+        drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,"rgba(102,217,255,.20)",9,1,null,0);
+        drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,"rgba(235,252,255,.76)",4.5,1,null,0);
+      }else{
+        drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.22})`,activeWidth,1,null,0);
+        drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,`rgba(255,255,255,${hotAlpha*.42})`,innerWidth,1,COLORS.trace,3*visualScale("effect"));
+      }
     }
     if(n.tutorialStaticTrace && active){
       const staticProgress=clamp((n.traceQualityTime||0)/Math.max(dur,.001),0,1);
+      const gaugeR=r+11;
       if(debugMode && !n.staticTraceRenderLogged){
         n.staticTraceRenderLogged=true;
         const transform=ctx.getTransform?.();
-        console.log(`[Static Trace Render]\ncx=${cx.toFixed(2)}\ncy=${cy.toFixed(2)}\ncurrAngle=${curr.toFixed(4)}\nradius=${(r+18).toFixed(2)}\ncanvasTransform=${transform ? `a=${transform.a.toFixed(3)}, b=${transform.b.toFixed(3)}, c=${transform.c.toFixed(3)}, d=${transform.d.toFixed(3)}, e=${transform.e.toFixed(2)}, f=${transform.f.toFixed(2)}` : "unavailable"}`);
+        console.log(`[Static Trace Render]\ncx=${cx.toFixed(2)}\ncy=${cy.toFixed(2)}\ncurrAngle=${curr.toFixed(4)}\nradius=${gaugeR.toFixed(2)}\ncanvasTransform=${transform ? `a=${transform.a.toFixed(3)}, b=${transform.b.toFixed(3)}, c=${transform.c.toFixed(3)}, d=${transform.d.toFixed(3)}, e=${transform.e.toFixed(2)}, f=${transform.f.toFixed(2)}` : "unavailable"}`);
       }
-      drawDirectedArcSegments(r+18,curr-activeHalf,activeHalf*2*staticProgress,`rgba(255,255,255,.72)`,4,1,null,0);
+      drawDirectedArcSegments(gaugeR,curr-activeHalf,activeHalf*2,"rgba(255,255,255,.12)",3,1,null,0);
+      if(staticProgress>0) drawDirectedArcSegments(gaugeR,curr-activeHalf,activeHalf*2*staticProgress,"rgba(196,250,255,.88)",3,1,null,0);
     }
 
     // Local trace decorations below are drawn after translating to the playfield center.
@@ -2979,10 +3000,12 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const tx=Math.cos(curr)*r, ty=Math.sin(curr)*r;
     const pointerInside=insideTraceTarget(n,t).inside;
     const pulse=.5+.5*Math.sin(t*24);
-    ctx.fillStyle="#ffffff"; ctx.beginPath();ctx.arc(tx,ty,focus?4.8:4.0,0,TAU);ctx.fill();
-    ctx.strokeStyle=pointerInside?"rgba(255,243,106,.98)":`rgba(53,240,197,${focus?.98:.86})`;
-    ctx.lineWidth=pointerInside?2.4:2;
-    ctx.beginPath();ctx.arc(tx,ty,(pointerInside?10:13)+(focus?pulse*1.5:0),0,TAU);ctx.stroke();
+    ctx.fillStyle="#ffffff"; ctx.beginPath();ctx.arc(tx,ty,n.tutorialStaticTrace?4.5:(focus?4.8:4.0),0,TAU);ctx.fill();
+    if(!n.tutorialStaticTrace){
+      ctx.strokeStyle=pointerInside?"rgba(255,243,106,.98)":`rgba(53,240,197,${focus?.98:.86})`;
+      ctx.lineWidth=pointerInside?2.4:2;
+      ctx.beginPath();ctx.arc(tx,ty,(pointerInside?10:13)+(focus?pulse*1.5:0),0,TAU);ctx.stroke();
+    }
 
     const arrowCount=n.tutorialStaticTrace?0:(focus?2:1);
     for(let i=1;i<=arrowCount;i++){
@@ -2992,7 +3015,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
       ctx.fillStyle=`rgba(53,240,197,${focus?.82:.62})`;
       const size=7; ctx.beginPath();ctx.moveTo(size,0);ctx.lineTo(-size*.55,-size*.55);ctx.lineTo(-size*.25,0);ctx.lineTo(-size*.55,size*.55);ctx.closePath();ctx.fill();ctx.restore();
     }
-    if((!active && n.hitTime-t<.8) || n.tutorialStaticTrace){
+    if(!active && n.hitTime-t<.8){
       ctx.fillStyle="rgba(53,240,197,.88)"; ctx.font="900 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText(n.tutorialStaticTrace?"STATIC TRACE":"TRACE",Math.cos(n.angle)*(r-26),Math.sin(n.angle)*(r-26));
     }
