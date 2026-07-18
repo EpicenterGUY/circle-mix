@@ -4938,6 +4938,8 @@ settingsOrigin=${settingsOrigin}`);
     circleMixDevMode=false;
     const btn=document.getElementById("safeUpdateLogBtn");
     if(btn) btn.hidden=false;
+    const devOffBtn=document.getElementById("updateLogDevOff");
+    if(devOffBtn) devOffBtn.hidden=true;
     closeUpdateLog();
   }
 

@@ -301,6 +301,16 @@ assert.doesNotMatch(game, /safeUpdateLogBtn[\s\S]{0,140}hidden=!circleMixDevMode
 assert.match(fs.readFileSync("index.html", "utf8"), /id="safeSetUpdateLog"[\s\S]*UPDATE LOG[\s\S]*id="pauseSetUpdateLog"/);
 });
 
+
+test("turning off dev mode immediately hides only DEV MODE OFF", () => {
+const game = fs.readFileSync("src/game.js", "utf8");
+const disableBody = game.match(/function disableCircleMixDevMode\(\)\{([\s\S]*?)\n  \}/)[1];
+assert.match(disableBody, /circleMixDevMode=false/);
+assert.match(disableBody, /const btn=document\.getElementById\("safeUpdateLogBtn"\);\n    if\(btn\) btn\.hidden=false;/);
+assert.match(disableBody, /const devOffBtn=document\.getElementById\("updateLogDevOff"\);\n    if\(devOffBtn\) devOffBtn\.hidden=true;/);
+assert.doesNotMatch(disableBody, /safeUpdateLogBtn[\s\S]{0,120}hidden=true/);
+});
+
 test("automatic update log only opens on the title screen", () => {
 const game = fs.readFileSync("src/game.js", "utf8");
 assert.match(game, /currentVersionString\(\) !== lastSeen && activeSceneName\(\) === "title"/);
