@@ -95,9 +95,13 @@ async function collectErrors(page){
     const symmetry = await page.evaluate(() => {
       const cw = window.CircleMixTestApi.magnetProbe('LOW', 99);
       const ccw = window.CircleMixTestApi.magnetProbe('LOW', -99);
-      return {cw, ccw, bothDisengaged: cw.disengaged && ccw.disengaged, absEqual: Math.abs(Math.abs(cw.velocity)-Math.abs(ccw.velocity)) < 1e-9};
+      const slow = window.CircleMixTestApi.magnetProbe('LOW', 0);
+      const offFast = window.CircleMixTestApi.magnetProbe('OFF', 99);
+      return {cw, ccw, slow, offFast, bothDisengaged: cw.disengaged && ccw.disengaged, absEqual: Math.abs(Math.abs(cw.velocity)-Math.abs(ccw.velocity)) < 1e-9};
     });
     assert.ok(symmetry.bothDisengaged && symmetry.absEqual, `CW/CCW magnet disengage symmetry ${JSON.stringify(symmetry)}`);
+    assert.equal(symmetry.slow.disengaged, false, 'slow LOW velocity does not force disengage');
+    assert.equal(symmetry.offFast.disengaged, true, 'OFF disables magnet regardless of velocity');
     const beforeUiHover = await page.evaluate(() => window.CircleMixTestApi.state());
     await page.hover('#tutorialSkipStep');
     const uiPointer = await page.evaluate(() => window.CircleMixTestApi.state());
@@ -105,13 +109,35 @@ async function collectErrors(page){
     assert.equal(uiPointer.lastPointerSource, 'pointer');
     assert.notEqual(uiPointer.mouseX, beforeUiHover.mouseX, 'UI hover updates mouseX');
     assert.equal(uiPointer.tutorialStepIndex, beforeUiHover.tutorialStepIndex, 'button hover alone does not advance tutorial');
+    assert.equal(uiPointer.tutorialSuccessCount, beforeUiHover.tutorialSuccessCount, 'button hover does not add tutorial success');
+    assert.equal(uiPointer.tutorialValidUserInputCount, beforeUiHover.tutorialValidUserInputCount, 'button hover does not add valid input');
+    const hoverLoop = await measureLoop(page, 500);
+    assert.ok(hoverLoop.frameDelta > 5 && hoverLoop.renderDelta > 5 && hoverLoop.timeDelta > 0.2, `SKIP hover loop ${JSON.stringify(hoverLoop)}`);
+
+    const beforeHudClick = await page.evaluate(() => window.CircleMixTestApi.state());
+    const hudBox = await page.locator('#tutorialHud').boundingBox();
+    await page.mouse.move(hudBox.x + 12, hudBox.y + 12);
     await page.mouse.down();
     await page.mouse.up();
     await wait(200);
-    const afterUiClick = await page.evaluate(() => window.CircleMixTestApi.state());
-    assert.equal(afterUiClick.tutorialStepIndex, uiPointer.tutorialStepIndex, 'button click is not treated as CUT judgement');
-    const uiLoop = await measureLoop(page, 500);
-    assert.ok(uiLoop.frameDelta > 5 && uiLoop.renderDelta > 5 && uiLoop.timeDelta > 0.2, `UI hover/click loop ${JSON.stringify(uiLoop)}`);
+    const afterHudClick = await page.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(afterHudClick.tutorialStepIndex, beforeHudClick.tutorialStepIndex, 'plain HUD click does not advance tutorial');
+    assert.equal(afterHudClick.tutorialSuccessCount, beforeHudClick.tutorialSuccessCount, 'plain HUD click does not add success');
+    assert.equal(afterHudClick.tutorialValidUserInputCount, beforeHudClick.tutorialValidUserInputCount, 'plain HUD click does not add CUT judgement');
+    const hudClickLoop = await measureLoop(page, 500);
+    assert.ok(hudClickLoop.frameDelta > 5 && hudClickLoop.renderDelta > 5 && hudClickLoop.timeDelta > 0.2, `HUD click loop ${JSON.stringify(hudClickLoop)}`);
+
+    const beforeSkipClick = await page.evaluate(() => window.CircleMixTestApi.state());
+    await page.click('#tutorialSkipStep');
+    await waitFor(page, before => {
+      const st = window.CircleMixTestApi.state();
+      return st.tutorialStepIndex === before.tutorialStepIndex + 1;
+    }, 'SKIP button advances exactly one tutorial step', 3000, beforeSkipClick);
+    const afterSkipClick = await page.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(afterSkipClick.tutorialSuccessCount, beforeSkipClick.tutorialSuccessCount, 'SKIP does not add CUT success');
+    assert.equal(afterSkipClick.tutorialValidUserInputCount, beforeSkipClick.tutorialValidUserInputCount, 'SKIP does not add valid CUT input');
+    const skipLoop = await measureLoop(page, 500);
+    assert.ok(skipLoop.frameDelta > 5 && skipLoop.renderDelta > 5 && skipLoop.timeDelta > 0.2, `SKIP click loop ${JSON.stringify(skipLoop)}`);
 
     const songResults = {};
     for (const [song, difficulty] of [['anima','tech'], ['ghost-rule','hard']]) {
