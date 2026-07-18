@@ -7,6 +7,15 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.7.4",
+    date: "2026-07-18",
+    title: "Tutorial STATIC TRACE Readability",
+    summary: "튜토리얼 STATIC TRACE 목표와 진행 표시 가독성 개선",
+    changes: [
+      { category: "TUTORIAL", text: "튜토리얼 STATIC TRACE 목표와 진행 표시 가독성 개선" }
+    ]
+  },
+  {
     version: "0.7.3",
     date: "2026-07-18",
     title: "Tutorial STATIC TRACE Render Fix",
