@@ -261,7 +261,7 @@
   let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
   let tutorialSessionId=0, tutorialStepToken=0, tutorialAttemptId=0, tutorialTransitionGeneration=0;
   let tutorialLastAdvanceReason=null, tutorialLastAdvanceSource=null;
-  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,transitionState:"IDLE",completing:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],pendingSkipQueue:[],mixRetryScheduled:false,mixRetryCount:0,completeCount:0,inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
+  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,transitionState:"IDLE",completing:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],pendingSkipQueue:[],mixRetryScheduled:false,mixRetryCount:0,completeCount:0,chartFinalizationCount:0,lastChartFinalization:null,inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
@@ -3967,7 +3967,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
       delete n.swingGestureArmed; delete n.swingLastAngle; delete n.swingDirectedTravel;
     }
   }
-  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.mixRetryScheduled=false; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.mixRetryScheduled=false; tutorialState.chartFinalizationCount=0; tutorialState.lastChartFinalization=null; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
   function logTutorialAdvance(reason,extra={}){ if(!debugMode)return; const st=tutorialSteps[tutorialStepIndex]; console.log(`[Tutorial Advance]\nstep=${st?.kind||"-"}\nphase=${st?.phase||"-"}\nreason=${reason}\nsource=${extra.source||tutorialState.lastSource||"-"}\nsuccessCount=${tutorialState.successCount}\nsessionId=${tutorialSessionId}\nstepToken=${tutorialStepToken}\nattemptId=${tutorialAttemptId}\nfunction=${extra.fn||"-"}\ntimer=${!!extra.timer}\nnoteId=${extra.noteId||"-"}\npreviousStepToken=${extra.previousStepToken??tutorialStepToken}\ncurrentStepToken=${tutorialStepToken}`); }
   function tutorialHandleJudgement(ev){
     if(!tutorialMode || tutorialState.transitioning) return;
@@ -4090,6 +4090,21 @@ endpointCaptured=${n.endpointCaptured===true}`);
     }else{
       tutorialState.exploreInsideSince=0;
     }
+  }
+  function tutorialNoteFinalDeadline(n){
+    if(n.type==="cut") return n.hitTime+.22;
+    if(n.type.startsWith("swing") || n.type.startsWith("scratch")) return n.hitTime+.26;
+    return n.hitTime+(n.duration||0);
+  }
+  function tutorialChartFinalDeadline(){ return chart.reduce((latest,n)=>Math.max(latest,tutorialNoteFinalDeadline(n)),0); }
+  function finalizeExpiredTutorialNotes(t){
+    if(!tutorialMode || !chart.length || t<tutorialChartFinalDeadline()) return false;
+    const unresolved=chart.filter(n=>!n.done&&!n.missed);
+    if(!unresolved.length) return false;
+    for(const n of unresolved) miss(n,"CHART_END_UNRESOLVED");
+    tutorialState.chartFinalizationCount+=unresolved.length;
+    tutorialState.lastChartFinalization={attemptId:tutorialAttemptId,gameTime:t,noteTypes:unresolved.map(n=>n.type)};
+    return true;
   }
   function tutorialChartSettled(){ return chart.length>0 && chart.every(n=>n.done||n.missed); }
   function scheduleTutorialRetry(delay=700){
@@ -4329,7 +4344,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     testFrameCount++;
     const dt=Math.min(.033,(ms-lastMs)/1000||.016);
     lastMs=ms; const t=now();
-    if(tutorialMode){ updateTutorialAim(); setTutorialHud(); if(tutorialFailed()) return; }
+    if(tutorialMode){ updateTutorialAim(); setTutorialHud(); }
     const notesSettled = judgedCount >= chart.length || song.ended || t >= chartLastHitEnd + HIT_WINDOW + 0.25;
     if(!tutorialMode && (song.ended || t >= songEndTime()) && notesSettled){ scheduleCompletion(); }
     // Tutorial progression is event-driven by tutorialHandleJudgement().
@@ -4346,6 +4361,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     updateAuto(t);
     updateArm(dt);
     updateNotes(t,dt);
+    if(tutorialMode){ finalizeExpiredTutorialNotes(t); tutorialFailed(); }
 
     focusNote=currentFocusNote(t);
 
@@ -5532,7 +5548,7 @@ running=${running}`);
       completeTutorial:()=>completeTutorial(),
       markFirstPendingTutorialNoteMissed:()=>{ const n=chart.find(note=>!note.done&&!note.missed); if(n){ miss(n,"TEST_FORCED_MISS"); return true; } return false; },
       clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
-      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialFinalMixRetryScheduled:tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:tutorialState.mixRetryCount, tutorialCompleteCount:tutorialState.completeCount, tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], chartDoneStates:chart.map(n=>({type:n.type,hold:n.hold||0,missed:!!n.missed,done:!!n.done,completed:!!n.completed})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
+      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialFinalMixRetryScheduled:tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:tutorialState.mixRetryCount, tutorialChartFinalizationCount:tutorialState.chartFinalizationCount, tutorialLastChartFinalization:tutorialState.lastChartFinalization, tutorialChartSettled:tutorialChartSettled(), tutorialCompleteCount:tutorialState.completeCount, tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount, chartDoneStates:chart.map(n=>({type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
       lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
       setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
       magnetProbe:(mode,velocity)=>{ const previousMode=inputSettings.aimStabilizer, previousTarget=magnetTarget, previousError=magnetAngleError, previousFocus=focusNote; try{ const probeNow=now(); const probeNote={type:"cut", angle:0, done:false, missed:false, spawnTime:probeNow-1, hitTime:probeNow}; inputSettings.aimStabilizer=mode; focusNote=probeNote; magnetTarget=probeNote; magnetAngleError=0; const result=updateAimMagnet(0, velocity); const disengaged=magnetTarget===null; return {mode, velocity, disengaged, result, profile:aimStabilizerProfile()}; } finally { inputSettings.aimStabilizer=previousMode; magnetTarget=previousTarget; magnetAngleError=previousError; focusNote=previousFocus; } },

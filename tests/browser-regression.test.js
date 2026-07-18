@@ -148,6 +148,41 @@ async function runFinalMixMissRegression(page, label){
     return st.tutorialMode && st.tutorialStepIndex === 17 && st.tutorialFinalMixRetryCount === 1 && st.tutorialTimerCount === 0 && st.chartDoneStates.every(n => !n.done && !n.missed);
   }, `${label} final mix retries once`, 4000);
 }
+async function runFinalMixConsecutiveRetryRegression(page, label){
+  await reachFinalTutorialStep(page, `${label} consecutive retries`);
+  const attempts = [];
+  for(let expectedRetry=1; expectedRetry<=5; expectedRetry++){
+    const before = await page.evaluate(() => window.CircleMixTestApi.state());
+    await waitFor(page, () => {
+      const st = window.CircleMixTestApi.state();
+      return st.tutorialFinalMixRetryScheduled && st.tutorialChartSettled;
+    }, `${label} natural final mix chart settles ${expectedRetry}`, 12000);
+    const settled = await page.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(settled.tutorialFinalMixRetryCount, expectedRetry - 1, `${label} retry ${expectedRetry} is scheduled once after chart end`);
+    assert.ok(settled.chartDoneStates.every(note => note.done || note.missed), `${label} retry ${expectedRetry} leaves no unresolved note ${JSON.stringify(settled.chartDoneStates)}`);
+    for(const type of ['fx', 'slideCW', 'traceCCW', 'scratchCCW']){
+      const note = settled.chartDoneStates.find(candidate => candidate.type === type);
+      assert.ok(note && (note.done || note.missed), `${label} retry ${expectedRetry} finalizes ${type} ${JSON.stringify(note)}`);
+      assert.ok(!(note.completed && !note.done && !note.missed), `${label} retry ${expectedRetry} does not retain completed-only ${type} ${JSON.stringify(note)}`);
+    }
+    await waitFor(page, expected => {
+      const st = window.CircleMixTestApi.state();
+      return st.tutorialFinalMixRetryCount === expected && st.tutorialTransitionState === 'IDLE' && st.tutorialTimerCount === 0;
+    }, `${label} natural final mix retry ${expectedRetry}`, 12000, expectedRetry);
+    const after = await page.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(after.tutorialAttemptId, before.tutorialAttemptId + 1, `${label} retry ${expectedRetry} starts a new attempt`);
+    assert.equal(after.tutorialStepIndex, 17, `${label} retry ${expectedRetry} remains on final step`);
+    assert.equal(after.tutorialChartSettled, false, `${label} retry ${expectedRetry} has a fresh chart`);
+    assert.equal(after.tutorialChartFinalizationCount, 0, `${label} retry ${expectedRetry} has no carried finalization`);
+    assert.deepEqual(after.consumedNoteIds, [], `${label} retry ${expectedRetry} clears consumed note ids`);
+    assert.ok(after.chartDoneStates.every(note => !note.done && !note.missed && !note.completed && !note.hold), `${label} retry ${expectedRetry} resets note runtime ${JSON.stringify(after.chartDoneStates)}`);
+    attempts.push({retryCount:after.tutorialFinalMixRetryCount, attemptId:after.tutorialAttemptId, frameCount:after.frameCount, renderCount:after.renderCount});
+  }
+  const loop = await measureLoop(page, 500);
+  assert.ok(loop.frameDelta > 5 && loop.renderDelta > 5 && loop.timeDelta > .2, `${label} five retry loop remains live ${JSON.stringify(loop)}`);
+  assert.equal((await page.evaluate(() => window.CircleMixTestApi.state())).tutorialTimerCount, 0, `${label} five retries leave no stale timer`);
+  return attempts;
+}
 async function runSuccessfulFinalMixRegression(page, label){
   await reachFinalTutorialStep(page, `${label} success`);
   await page.evaluate(() => window.CircleMixTestApi.clearAndPerfectTutorialChart());
@@ -180,6 +215,7 @@ async function runFinalSkipCompletionRegression(page, label){
 }
 async function runFinalTutorialRegression(page, label){
   await runFinalMixMissRegression(page, label);
+  await runFinalMixConsecutiveRetryRegression(page, label);
   await runSuccessfulFinalMixRegression(page, label);
   await runFinalSkipCompletionRegression(page, label);
 }
