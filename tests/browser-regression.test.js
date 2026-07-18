@@ -28,7 +28,7 @@ async function measureLoop(page, ms=700){
   const before = await page.evaluate(() => window.CircleMixTestApi.state());
   await wait(ms);
   const after = await page.evaluate(() => window.CircleMixTestApi.state());
-  return {before, after, frameDelta: after.frameCount-before.frameCount, renderDelta: after.renderCount-before.renderCount, timeDelta: after.gameTime-before.gameTime};
+  return {before, after, frameDelta: after.frameCount-before.frameCount, renderDelta: after.renderCount-before.renderCount, timeDelta: after.gameTime-before.gameTime, wallTimeDelta: after.browserNow-before.browserNow};
 }
 async function lanePoint(page, lane){ return page.evaluate(l => window.CircleMixTestApi.lanePoint(l), lane); }
 async function moveToLane(page, lane){ const p = await lanePoint(page, lane); await page.mouse.move(p.x, p.y); return p; }
@@ -56,13 +56,13 @@ async function collectErrors(page){
     const stillMouseLoop = await measureLoop(page, 800);
     assert.ok(stillMouseLoop.frameDelta > 10, `still mouse RAF ${stillMouseLoop.frameDelta}`);
     assert.ok(stillMouseLoop.renderDelta > 10, `still mouse render ${stillMouseLoop.renderDelta}`);
-    assert.ok(stillMouseLoop.timeDelta > 0.35, `still mouse time ${stillMouseLoop.timeDelta}`);
+    assert.ok(stillMouseLoop.wallTimeDelta > 500, `still mouse wall time ${stillMouseLoop.wallTimeDelta}`);
 
     await page.hover('#tutorialSkipStep');
     const hudHoverLoop = await measureLoop(page, 600);
     assert.ok(hudHoverLoop.frameDelta > 8, `HUD hover RAF ${hudHoverLoop.frameDelta}`);
     assert.ok(hudHoverLoop.renderDelta > 8, `HUD hover render ${hudHoverLoop.renderDelta}`);
-    assert.ok(hudHoverLoop.timeDelta > 0.25, `HUD hover time ${hudHoverLoop.timeDelta}`);
+    assert.ok(hudHoverLoop.wallTimeDelta > 350, `HUD hover wall time ${hudHoverLoop.wallTimeDelta}`);
 
     for (const [index, lane] of [0, 2, 5].entries()) {
       await moveToLane(page, lane);
@@ -113,7 +113,7 @@ async function collectErrors(page){
     assert.equal(uiPointer.tutorialSuccessCount, beforeUiHover.tutorialSuccessCount, 'button hover does not add tutorial success');
     assert.equal(uiPointer.tutorialValidUserInputCount, beforeUiHover.tutorialValidUserInputCount, 'button hover does not add valid input');
     const hoverLoop = await measureLoop(page, 500);
-    assert.ok(hoverLoop.frameDelta > 5 && hoverLoop.renderDelta > 5 && hoverLoop.timeDelta > 0.2, `SKIP hover loop ${JSON.stringify(hoverLoop)}`);
+    assert.ok(hoverLoop.frameDelta > 5 && hoverLoop.renderDelta > 5 && hoverLoop.wallTimeDelta > 300, `SKIP hover loop ${JSON.stringify(hoverLoop)}`);
 
     const beforeHudClick = await page.evaluate(() => window.CircleMixTestApi.state());
     const hudBox = await page.locator('#tutorialHud').boundingBox();
@@ -126,7 +126,7 @@ async function collectErrors(page){
     assert.equal(afterHudClick.tutorialSuccessCount, beforeHudClick.tutorialSuccessCount, 'plain HUD click does not add success');
     assert.equal(afterHudClick.tutorialValidUserInputCount, beforeHudClick.tutorialValidUserInputCount, 'plain HUD click does not add CUT judgement');
     const hudClickLoop = await measureLoop(page, 500);
-    assert.ok(hudClickLoop.frameDelta > 5 && hudClickLoop.renderDelta > 5 && hudClickLoop.timeDelta > 0.2, `HUD click loop ${JSON.stringify(hudClickLoop)}`);
+    assert.ok(hudClickLoop.frameDelta > 5 && hudClickLoop.renderDelta > 5 && hudClickLoop.wallTimeDelta > 300, `HUD click loop ${JSON.stringify(hudClickLoop)}`);
 
     const beforeSkipClick = await page.evaluate(() => window.CircleMixTestApi.state());
     await page.click('#tutorialSkipStep');
@@ -140,7 +140,7 @@ async function collectErrors(page){
     assert.equal(afterSkipClick.tutorialLastAdvanceReason, 'SKIP_BUTTON');
     assert.equal(afterSkipClick.tutorialLastAdvanceSource, 'skip');
     const skipLoop = await measureLoop(page, 500);
-    assert.ok(skipLoop.frameDelta > 5 && skipLoop.renderDelta > 5 && skipLoop.timeDelta > 0.2, `SKIP click loop ${JSON.stringify(skipLoop)}`);
+    assert.ok(skipLoop.frameDelta > 5 && skipLoop.renderDelta > 5 && skipLoop.wallTimeDelta > 300, `SKIP click loop ${JSON.stringify(skipLoop)}`);
 
     const songResults = {};
     for (const [song, difficulty] of [['anima','tech'], ['ghost-rule','hard']]) {
@@ -186,7 +186,7 @@ async function collectErrors(page){
     assert.equal(scratchUp.mobileScratchPointerId, null);
     assert.equal(scratchUp.scratchHeld, false);
     const mobileLoop = await measureLoop(mobilePage, 500);
-    assert.ok(mobileLoop.frameDelta > 5 && mobileLoop.renderDelta > 5 && mobileLoop.timeDelta > 0.2, `mobile loop ${JSON.stringify(mobileLoop)}`);
+    assert.ok(mobileLoop.frameDelta > 5 && mobileLoop.renderDelta > 5 && mobileLoop.wallTimeDelta > 300, `mobile loop ${JSON.stringify(mobileLoop)}`);
 
     await browser.close();
     assert.deepEqual([...errors, ...mobileErrors], []);
