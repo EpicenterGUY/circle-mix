@@ -7,6 +7,16 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.6",
+    date: "2026-07-18",
+    title: "PC Gameplay Loop Hotfix",
+    summary: "PC 입력 런타임 예외가 튜토리얼과 일반곡의 update/render loop를 중단하지 않도록 복구",
+    changes: [
+      { category: "PC", text: "updateArm 실행을 안전 경계로 감싸 데스크톱 포인터 런타임 오류가 발생해도 타이머, 채보 업데이트, 캔버스 렌더링이 계속 진행되도록 수정" },
+      { category: "PWA", text: "앱 버전과 앱 셸 cache-bust query를 갱신해 수정된 game.js가 기존 서비스 워커 캐시에 갇히지 않도록 정리" }
+    ]
+  },
+  {
     version: "0.9.5",
     date: "2026-07-18",
     title: "Mobile PWA Update Log Hotfix",

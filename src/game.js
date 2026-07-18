@@ -2517,6 +2517,22 @@
     }
   }
 
+  function updateArmSafely(dt){
+    try{
+      updateArm(dt);
+      return;
+    }catch(err){
+      console.error("[PC input hotfix] updateArm failed; resetting desktop pointer runtime and continuing frame", err);
+      magnetTarget=null; centerDeadzoneActive=false; cursorRadius=hitR;
+      rawAngularVelocity=0; rawArmVel=0; armVel=0;
+      mouseX=cx; mouseY=cy-hitR;
+      armAngle=targetAngle=prevArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=lastRawAngleForVelocity=-Math.PI/2;
+      try{ updateArm(dt); }catch(retryErr){
+        console.error("[PC input hotfix] updateArm fallback failed; keeping game loop alive", retryErr);
+      }
+    }
+  }
+
   function updateArm(dt){
     const tNow = now();
     if(isAutoActive() && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
@@ -4288,7 +4304,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
     scratchCandidate=!!scratchHeld;
     updateAuto(t);
-    updateArm(dt);
+    updateArmSafely(dt);
     updateNotes(t,dt);
 
     focusNote=currentFocusNote(t);

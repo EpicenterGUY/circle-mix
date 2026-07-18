@@ -175,8 +175,8 @@ assert.equal(JSON.stringify(mirror.charts[difficulty].notes), JSON.stringify(bun
 test("index and service worker use the same PWA cache query", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260718-mobile-update-log-hotfix-1/);
-assert.match(sw, /20260718-mobile-update-log-hotfix-1/);
+assert.match(index, /20260718-pc-loop-hotfix-1/);
+assert.match(sw, /20260718-pc-loop-hotfix-1/);
 assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
@@ -258,15 +258,15 @@ assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOver
 });
 
 
-test("mobile hotfix versions are synchronized at 0.9.5", () => {
+test("PC loop hotfix versions are synchronized at 0.9.6", () => {
 const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.5"/);
-assert.match(pwa, /const VERSION="0\.9\.5"/);
-assert.match(sw, /const VERSION = "0\.9\.5"/);
-assert.match(changelog, /version:\s*"0\.9\.5"/);
+assert.match(version, /version:\s*"0\.9\.6"/);
+assert.match(pwa, /const VERSION="0\.9\.6"/);
+assert.match(sw, /const VERSION = "0\.9\.6"/);
+assert.match(changelog, /version:\s*"0\.9\.6"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {
@@ -325,6 +325,14 @@ const lastBodyRule = [...css.matchAll(/body\.safeTitle\{([^}]*)\}/g)].at(-1)[1];
 assert.match(lastBodyRule, /overflow:hidden/);
 assert.doesNotMatch(css.slice(css.lastIndexOf("body.safeTitle{")), /body\.safeTitle\{[^}]*overflow:auto/);
 assert.doesNotMatch(css.slice(css.lastIndexOf("body.safeTitle #safeMenu{")), /body\.safeTitle #safeMenu\{[^}]*overflow:auto/);
+});
+
+test("PC updateArm exceptions are contained inside the frame loop", () => {
+const game = fs.readFileSync("src/game.js", "utf8");
+assert.match(game, /function updateArmSafely\(dt\)\{/);
+assert.match(game, /console\.error\("\[PC input hotfix\] updateArm failed; resetting desktop pointer runtime and continuing frame", err\)/);
+assert.ok(game.includes("updateAuto(t);\n    updateArmSafely(dt);\n    updateNotes(t,dt);"));
+assert.ok(!game.includes("updateAuto(t);\n    updateArm(dt);\n    updateNotes(t,dt);"));
 });
 
 test("PC aim stabilizer defaults to OFF while preserving saved LOW/MEDIUM", () => {
