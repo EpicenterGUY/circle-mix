@@ -165,9 +165,14 @@ async function dismissStartupOverlays(page){
     await waitFor(page, () => window.CircleMixTestApi.state().tutorialMode, 'tutorial mode');
     assert.equal(await page.evaluate(() => window.CircleMixTestApi.state().chartLength), 0, 'first AIM tutorial step has no chart notes');
     const stillMouseLoop = await measureLoop(page, 800);
-    assert.ok(stillMouseLoop.frameDelta > 10, `still mouse RAF ${stillMouseLoop.frameDelta}`);
-    assert.ok(stillMouseLoop.renderDelta > 10, `still mouse render ${stillMouseLoop.renderDelta}`);
-    assert.ok(stillMouseLoop.wallTimeDelta > 500, `still mouse wall time ${stillMouseLoop.wallTimeDelta}`);
+    const stillMouseState = await page.evaluate(() => window.CircleMixTestApi.state());
+    const stillMouseDiagnostics = {stillMouseLoop, errors, state: stillMouseState};
+    if(stillMouseLoop.frameDelta <= 10 || stillMouseLoop.renderDelta <= 10 || stillMouseLoop.wallTimeDelta <= 500){
+      console.error('STILL_MOUSE_DIAGNOSTICS', JSON.stringify(stillMouseDiagnostics));
+    }
+    assert.ok(stillMouseLoop.frameDelta > 10, `still mouse RAF ${stillMouseLoop.frameDelta}; diagnostics=${JSON.stringify(stillMouseDiagnostics)}`);
+    assert.ok(stillMouseLoop.renderDelta > 10, `still mouse render ${stillMouseLoop.renderDelta}; diagnostics=${JSON.stringify(stillMouseDiagnostics)}`);
+    assert.ok(stillMouseLoop.wallTimeDelta > 500, `still mouse wall time ${stillMouseLoop.wallTimeDelta}; diagnostics=${JSON.stringify(stillMouseDiagnostics)}`);
 
     await page.hover('#tutorialSkipStep');
     const hudHoverLoop = await measureLoop(page, 600);
