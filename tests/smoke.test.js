@@ -37,6 +37,72 @@ return sandbox.window.__smoke;
 function normDeg(a){ return ((a % 360) + 360) % 360; }
 function shortestDeg(a,b){ return Math.abs(normDeg(a-b+180)-180); }
 
+function loadGhostRuleBundle(){
+const context = {window:{}}; vm.createContext(context);
+vm.runInContext(fs.readFileSync("src/charts/ghost-rule.js", "utf8"), context, {filename:"src/charts/ghost-rule.js"});
+return context.window.CircleMixGhostRuleBundle;
+}
+function traceEndAngle(note){
+if(note.signedSweepAngle !== undefined) return normDeg(Number(note.angle) + Number(note.signedSweepAngle));
+if(note.endAngle !== undefined) return normDeg(Number(note.endAngle));
+return normDeg(Number(note.angle));
+}
+function signedDelta(from, to){
+let delta = normDeg(Number(to)) - normDeg(Number(from));
+if(delta > 180) delta -= 360;
+if(delta <= -180) delta += 360;
+return delta;
+}
+function pointerDirection(note, previousEndAngle){
+if(!note) return 0;
+if(note.signedSweepAngle !== undefined && Number(note.signedSweepAngle) !== 0) return Math.sign(Number(note.signedSweepAngle));
+if(/CCW/.test(note.type) || String(note.direction).toUpperCase() === "CCW") return -1;
+if(/CW/.test(note.type) || String(note.direction).toUpperCase() === "CW") return 1;
+if(previousEndAngle !== undefined && note.angle !== undefined){
+const delta = signedDelta(previousEndAngle, note.angle);
+if(Math.abs(delta) > 1) return Math.sign(delta);
+}
+return 0;
+}
+function auditTraceTransitions(chart, bpm){
+const notes = chart.notes.map((note, index)=>({...note, index})).sort((a,b)=>a.beat-b.beat);
+const issues = [];
+let previous = null;
+let beforePrevious = null;
+for(const note of notes){
+if(String(note.type).startsWith("trace") && previous){
+const previousEndAngle = traceEndAngle(previous);
+const gapSeconds = (Number(note.beat) - (Number(previous.beat) + Number(previous.durationBeat || 0))) * 60 / bpm;
+const startJumpDeg = shortestDeg(previousEndAngle, Number(note.angle));
+const previousDirection = pointerDirection(previous, beforePrevious ? traceEndAngle(beforePrevious) : undefined);
+const traceDirection = pointerDirection(note, previousEndAngle);
+const reversed = previousDirection && traceDirection && previousDirection !== traceDirection;
+const pushIssue = issueType => issues.push({
+difficulty: chart.difficulty,
+previousNoteIndex: previous.index,
+traceNoteIndex: note.index,
+previousBeat: previous.beat,
+traceBeat: note.beat,
+gapSeconds,
+previousEndAngle,
+traceStartAngle: note.angle,
+startJumpDeg,
+previousDirection,
+traceDirection,
+issueType
+});
+if(gapSeconds < 0.50 && startJumpDeg > 90) pushIssue("TRACE_START_JUMP");
+if(gapSeconds < 0.30 && startJumpDeg > 120) pushIssue("SEVERE_TRACE_START_JUMP");
+if(reversed && gapSeconds < 0.20) pushIssue("ABRUPT_TRACE_REVERSAL");
+if(startJumpDeg > 90 && reversed && gapSeconds < 0.35) pushIssue("BLIND_REVERSE_JUMP");
+}
+beforePrevious = previous;
+previous = note;
+}
+return issues;
+}
+
+
 const api = loadGameExports();
 test("version.js and changelog latest version match", () => {
 const context = {window:{}}; vm.createContext(context);
@@ -83,6 +149,28 @@ assert.doesNotThrow(()=>api.difficultyViewForSong(local,"custom"));
 assert.doesNotThrow(()=>api.renderSongSelect());
 });
 
+
+
+test("Ghost Rule TRACE transition audit rejects severe and blind start jumps", () => {
+const bundle = loadGhostRuleBundle();
+const expectedTraceCounts = {hard: 53, expert: 35, master: 47};
+for(const difficulty of ["hard", "expert", "master"]){
+const chart = bundle.charts[difficulty];
+assert.equal(chart.notes.filter(note=>String(note.type).startsWith("trace")).length, expectedTraceCounts[difficulty], `${difficulty} trace count`);
+const issues = auditTraceTransitions(chart, chart.bpm || bundle.song.bpm);
+assert.equal(issues.filter(issue=>issue.issueType === "BLIND_REVERSE_JUMP").length, 0, `${difficulty} blind reverse jump`);
+if(difficulty !== "master") assert.equal(issues.filter(issue=>issue.issueType === "SEVERE_TRACE_START_JUMP").length, 0, `${difficulty} severe trace jump`);
+if(difficulty === "master") assert.equal(issues.filter(issue=>issue.issueType === "SEVERE_TRACE_START_JUMP").length, 0, "master severe trace jump");
+}
+});
+
+test("Ghost Rule chart JSON mirrors the runtime bundle notes", () => {
+const bundle = loadGhostRuleBundle();
+const mirror = JSON.parse(fs.readFileSync("data/ghost-rule-charts.json", "utf8"));
+for(const difficulty of ["hard", "expert", "master"]){
+assert.equal(JSON.stringify(mirror.charts[difficulty].notes), JSON.stringify(bundle.charts[difficulty].notes), `${difficulty} notes mirror`);
+}
+});
 
 test("service worker offline integrity contract", () => {
 const sw = fs.readFileSync("service-worker.js", "utf8");
