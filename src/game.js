@@ -2869,19 +2869,35 @@ endpointCaptured=${n.endpointCaptured===true}`);
     ctx.restore();
   }
 
+  function visualArmProfile(){
+    return {arcWidth:9, centerLineWidth:2.75, endpointRadius:6, underlayWidth:14, markerThresholdDegrees:2};
+  }
+
+  function judgementMarkerVisibleFor(visualAngle, judgementAngle, hasMagnet=false){
+    return !!hasMagnet || distAng(visualAngle,judgementAngle)>=visualArmProfile().markerThresholdDegrees*Math.PI/180;
+  }
+
+  function judgementMarkerVisible(){
+    return judgementMarkerVisibleFor(visualArmAngle,judgementAimAngle,magnetTarget);
+  }
+
   function drawArm(){
+    const profile=visualArmProfile();
     ctx.save(); ctx.translate(cx,cy); ctx.rotate(visualArmAngle);
     const c=filterHeld?COLORS.fx:"#5cfffb";
-    ctx.save(); ctx.shadowBlur=12*visualScale("effect"); ctx.shadowColor=c; ctx.lineCap="round";
-    ctx.strokeStyle="rgba(255,255,255,.22)"; ctx.lineWidth=21; ctx.beginPath(); ctx.arc(0,0,hitR,-DIAL_ARC_VISUAL,DIAL_ARC_VISUAL); ctx.stroke();
-    ctx.strokeStyle=c; ctx.lineWidth=13; ctx.beginPath(); ctx.arc(0,0,hitR,-DIAL_ARC_HALF,DIAL_ARC_HALF); ctx.stroke();
-    if(magnetTarget){ ctx.strokeStyle="rgba(255,255,255,.55)"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,hitR+10,-DIAL_ARC_HALF*.62,DIAL_ARC_HALF*.62); ctx.stroke(); }
-    ctx.fillStyle=c; ctx.beginPath(); ctx.arc(hitR,0,8,0,TAU); ctx.fill(); ctx.restore();
-    ctx.shadowBlur=9*visualScale("effect"); ctx.shadowColor=c; ctx.strokeStyle=c; ctx.lineWidth=5; ctx.lineCap="round";
+    ctx.save(); ctx.shadowBlur=5*visualScale("effect"); ctx.shadowColor=c; ctx.lineCap="round";
+    // A restrained underlay keeps the arm legible without becoming a second ring.
+    ctx.strokeStyle="rgba(255,255,255,.055)"; ctx.lineWidth=profile.underlayWidth; ctx.beginPath(); ctx.arc(0,0,hitR,-DIAL_ARC_VISUAL,DIAL_ARC_VISUAL); ctx.stroke();
+    ctx.strokeStyle=c; ctx.lineWidth=profile.arcWidth; ctx.beginPath(); ctx.arc(0,0,hitR,-DIAL_ARC_HALF,DIAL_ARC_HALF); ctx.stroke();
+    if(magnetTarget){ ctx.strokeStyle="rgba(255,255,255,.48)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,hitR+9,-DIAL_ARC_HALF*.62,DIAL_ARC_HALF*.62); ctx.stroke(); }
+    ctx.fillStyle=c; ctx.beginPath(); ctx.arc(hitR,0,profile.endpointRadius,0,TAU); ctx.fill(); ctx.restore();
+    ctx.shadowBlur=4*visualScale("effect"); ctx.shadowColor=c; ctx.strokeStyle=c; ctx.lineWidth=profile.centerLineWidth; ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(baseR*.33,0); ctx.lineTo(hitR*.93,0); ctx.stroke();
     ctx.restore();
-    // Small solid marker: this is the real judgement position, not the visual arm interpolation.
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(judgementAimAngle); ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(hitR,0,4.5,0,TAU); ctx.fill(); ctx.restore();
+    // Only distinguish the real judgement angle when it is meaningfully separate from the visible arm.
+    if(judgementMarkerVisible()){
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(judgementAimAngle); ctx.strokeStyle="rgba(255,255,255,.92)"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(hitR,0,5.5,0,TAU); ctx.stroke(); ctx.restore();
+    }
   }
 
   function currentFocusNote(t){
@@ -3138,6 +3154,11 @@ endpointCaptured=${n.endpointCaptured===true}`);
     drawRingLabel("CUT",n.angle,r,focus?"#ffffff":color,focus?12:10);
   }
 
+  function traceVisualProfile(){
+    const compact=isMobileViewport();
+    return {futureWidth:compact?4:5, pastWidth:3, activeOuterWidth:compact?18:21, activeInnerWidth:compact?6:8, targetDotRadius:6, targetRingRadius:12};
+  }
+
   function drawTrace(n,t){
     const active=t>=n.hitTime;
     const focus=n===focusNote;
@@ -3150,56 +3171,49 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const endA=motion.finalAngle;
     const dir=d>=0?1:-1;
     const pathScale=visualScale("path");
-    const futureAlpha=clamp((active?.22:.18)*pathScale,.10,.28);
-    const pastAlpha=clamp(.10*pathScale,.06,.18);
-    const hotAlpha=focus?.98:.88;
+    const futureAlpha=clamp((active?.40:.32)*pathScale,.14,.58);
+    const pastAlpha=clamp(.16*pathScale,.07,.25);
+    const hotAlpha=focus?.90:.82;
     const fullDelta=Math.abs(d)>.03?d:dir*Math.PI*.26;
     const region=getTraceJudgementRegion(n,t,traceProfile());
     const activeHalf=region.outerAngularTolerance;
     const innerHalf=region.innerAngularTolerance;
-    const activeWidth=Math.max(NOTE_WIDTHS.trace+8, region.outerRadialTolerance*2);
-    const innerWidth=Math.max(NOTE_WIDTHS.trace+6, region.innerRadialTolerance*2);
+    // These widths are rendering-only; TRACE judgement radial tolerances remain in getTraceJudgementRegion().
+    const visual=traceVisualProfile();
 
-    if(active && Math.abs(fullDelta*ratio)>0.003) drawDirectedArcSegments(r,motion.startAngle,fullDelta*ratio,`rgba(35,240,197,${pastAlpha})`,7,1,null,0);
+    if(active && Math.abs(fullDelta*ratio)>0.003) drawDirectedArcSegments(r,motion.startAngle,fullDelta*ratio,`rgba(35,240,197,${pastAlpha})`,visual.pastWidth,1,null,0);
     const farStart=active?curr:motion.startAngle;
     const farDelta=active?(motion.finalUnwrappedAngle-(motion.startAngle+d*ratio)):fullDelta;
-    if(Math.abs(farDelta)>0.003) drawDirectedArcSegments(r,farStart,farDelta,`rgba(35,240,197,${futureAlpha})`,7,1,null,0);
+    if(Math.abs(farDelta)>0.003) drawDirectedArcSegments(r,farStart,farDelta,`rgba(35,240,197,${futureAlpha})`,visual.futureWidth,1,null,0);
     if(active){
-      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.22})`,activeWidth,1,null,0);
-      drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,`rgba(255,255,255,${hotAlpha*.42})`,innerWidth,1,COLORS.trace,3*visualScale("effect"));
+      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.18})`,visual.activeOuterWidth,1,null,0);
+      drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,`rgba(255,255,255,${hotAlpha*.48})`,visual.activeInnerWidth,1,COLORS.trace,2*visualScale("effect"));
     }
 
-    // Local trace decorations below are drawn after translating to the playfield center.
-    // Do not call drawDirectedArcSegments in this translated block; it translates internally.
     ctx.save();
     ctx.translate(cx,cy);
     ctx.lineCap="round";
-    ctx.shadowBlur=4*visualScale("effect");
+    ctx.shadowBlur=2*visualScale("effect");
     ctx.shadowColor=COLORS.trace;
     ctx.lineWidth=2;
     ctx.strokeStyle=`rgba(53,240,197,${focus?.9:.72})`;
-    ctx.beginPath();ctx.arc(Math.cos(motion.startAngle)*r,Math.sin(motion.startAngle)*r,7,0,TAU);ctx.stroke();
+    ctx.beginPath();ctx.arc(Math.cos(motion.startAngle)*r,Math.sin(motion.startAngle)*r,6,0,TAU);ctx.stroke();
     ctx.strokeStyle=`rgba(255,225,90,${focus?.98:.86})`;
-    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,5,0,TAU);ctx.stroke();
-    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,10,0,TAU);ctx.stroke();
+    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,7,0,TAU);ctx.stroke();
 
     const tx=Math.cos(curr)*r, ty=Math.sin(curr)*r;
     const pointerInside=insideTraceTarget(n,t).inside;
-    const pulse=.5+.5*Math.sin(t*24);
-    ctx.fillStyle="#ffffff"; ctx.beginPath();ctx.arc(tx,ty,focus?4.8:4.0,0,TAU);ctx.fill();
+    ctx.fillStyle=pointerInside?"#fff36a":"#35f0c5"; ctx.beginPath();ctx.arc(tx,ty,visual.targetDotRadius,0,TAU);ctx.fill();
     ctx.strokeStyle=pointerInside?"rgba(255,243,106,.98)":`rgba(53,240,197,${focus?.98:.86})`;
-    ctx.lineWidth=pointerInside?2.4:2;
-    ctx.beginPath();ctx.arc(tx,ty,(pointerInside?10:13)+(focus?pulse*1.5:0),0,TAU);ctx.stroke();
+    ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(tx,ty,visual.targetRingRadius,0,TAU);ctx.stroke();
 
-    const arrowCount=focus?2:1;
-    for(let i=1;i<=arrowCount;i++){
-      const aa=curr+dir*(Math.PI*.055*i);
-      const ar=Math.max(hitR-18,r-8);
-      ctx.save();ctx.translate(Math.cos(aa)*ar,Math.sin(aa)*ar);ctx.rotate(aa+(dir>0?Math.PI/2:-Math.PI/2));
-      ctx.fillStyle=`rgba(53,240,197,${focus?.82:.62})`;
-      const size=7; ctx.beginPath();ctx.moveTo(size,0);ctx.lineTo(-size*.55,-size*.55);ctx.lineTo(-size*.25,0);ctx.lineTo(-size*.55,size*.55);ctx.closePath();ctx.fill();ctx.restore();
-    }
-    if(!active && n.hitTime-t<.8){
+    const aa=curr+dir*(Math.PI*.06);
+    const ar=Math.max(hitR-18,r-8);
+    ctx.save();ctx.translate(Math.cos(aa)*ar,Math.sin(aa)*ar);ctx.rotate(aa+(dir>0?Math.PI/2:-Math.PI/2));
+    ctx.fillStyle=`rgba(53,240,197,${focus?.82:.62})`;
+    const size=6; ctx.beginPath();ctx.moveTo(size,0);ctx.lineTo(-size*.55,-size*.55);ctx.lineTo(-size*.25,0);ctx.lineTo(-size*.55,size*.55);ctx.closePath();ctx.fill();ctx.restore();
+    if(tutorialMode && !active && n.hitTime-t<.8){
       ctx.fillStyle="rgba(53,240,197,.88)"; ctx.font="900 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText("TRACE",Math.cos(n.angle)*(r-26),Math.sin(n.angle)*(r-26));
     }
@@ -5602,6 +5616,10 @@ running=${running}`);
       clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
       state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialFinalMixRetryScheduled:tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:tutorialState.mixRetryCount, tutorialChartFinalizationCount:tutorialState.chartFinalizationCount, tutorialLastChartFinalization:tutorialState.lastChartFinalization, tutorialChartSettled:tutorialChartSettled(), tutorialCompleteCount:tutorialState.completeCount, tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount, chartDoneStates:chart.map(n=>({type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
       aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget}),
+      visualArmProfile:()=>visualArmProfile(),
+      traceVisualProfile:()=>traceVisualProfile(),
+      judgementMarkerVisible:()=>judgementMarkerVisible(),
+      judgementMarkerVisibleFor:(visualAngle,judgementAngle,hasMagnet=false)=>judgementMarkerVisibleFor(visualAngle,judgementAngle,hasMagnet),
       injectAimSamples:(samples,mode="OFF")=>{ resetAimInput(samples[0]?.angle??-Math.PI/2); const previous=inputSettings.aimStabilizer; inputSettings.aimStabilizer=mode; for(const sample of samples){ const angle=sample.angle, radius=sample.radius??Math.max(hitR,80); processAimSample(cx+Math.cos(angle)*radius,cy+Math.sin(angle)*radius,sample.timestamp??performance.now(),"pointer"); } updateArm(1/60); const result=window.CircleMixTestApi.aimInputState(); inputSettings.aimStabilizer=previous; return result; },
       injectImmediateAimSample:(angle,radius=Math.max(hitR,80),timestamp=performance.now())=>{ processAimSample(cx+Math.cos(angle)*radius,cy+Math.sin(angle)*radius,timestamp,"pointer"); return window.CircleMixTestApi.aimInputState(); },
       injectKeyboardRotation:(direction,dt=.02)=>{ resetAimInput(-Math.PI/2); keyD=direction>0; keyA=direction<0; updateArm(dt); keyA=keyD=false; return window.CircleMixTestApi.aimInputState(); },

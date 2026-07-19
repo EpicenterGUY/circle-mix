@@ -495,6 +495,16 @@ async function dismissStartupOverlays(page){
       songResults[song] = {chartLength: loop.after.chartLength, frameDelta: loop.frameDelta, renderDelta: loop.renderDelta, timeDelta: loop.timeDelta};
     }
 
+    const readability = await page.evaluate(() => ({
+      arm: window.CircleMixTestApi.visualArmProfile(),
+      trace: window.CircleMixTestApi.traceVisualProfile(),
+      markerAtMatch: window.CircleMixTestApi.judgementMarkerVisible()
+    }));
+    assert.ok(readability.trace.activeOuterWidth <= 24, `TRACE visual outer width ${JSON.stringify(readability)}`);
+    assert.equal(readability.markerAtMatch, false, `OFF matching arm has no duplicate marker ${JSON.stringify(readability)}`);
+    const separatedMarker = await page.evaluate(() => window.CircleMixTestApi.judgementMarkerVisibleFor(0, Math.PI/18));
+    assert.equal(separatedMarker, true, 'separated visual and judgement angles show the outline marker');
+
     const mobile = await browser.newContext({...devices['iPhone 12'], viewport:{width:844,height:390}, screen:{width:844,height:390}});
     const mobilePage = await mobile.newPage();
     const mobileErrors = await collectErrors(mobilePage);
