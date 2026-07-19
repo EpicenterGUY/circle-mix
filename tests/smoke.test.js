@@ -175,8 +175,8 @@ assert.equal(JSON.stringify(mirror.charts[difficulty].notes), JSON.stringify(bun
 test("index and service worker use the same PWA cache query", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260718-tutorial-skip-hotfix-1/);
-assert.match(sw, /20260718-tutorial-skip-hotfix-1/);
+assert.match(index, /20260719-aim-input-1/);
+assert.match(sw, /20260719-aim-input-1/);
 assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
@@ -258,15 +258,15 @@ assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOver
 });
 
 
-test("tutorial skip hotfix versions are synchronized at 0.9.7", () => {
+test("aim input release versions are synchronized at 0.9.8", () => {
 const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.7"/);
-assert.match(pwa, /const VERSION="0\.9\.7"/);
-assert.match(sw, /const VERSION = "0\.9\.7"/);
-assert.match(changelog, /version:\s*"0\.9\.7"/);
+assert.match(version, /version:\s*"0\.9\.8"/);
+assert.match(pwa, /const VERSION="0\.9\.8"/);
+assert.match(sw, /const VERSION = "0\.9\.8"/);
+assert.match(changelog, /version:\s*"0\.9\.8"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {

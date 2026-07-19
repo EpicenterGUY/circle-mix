@@ -346,6 +346,16 @@ async function dismissStartupOverlays(page){
     const errors = await collectErrors(page);
     await page.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
     await waitForStableCircleMixPage(page, 'desktop');
+    const releaseMetadata = await page.evaluate(async () => ({
+      version: window.CircleMixVersion?.version,
+      changelogVersion: window.CircleMixChangelog?.[0]?.version,
+      updateLogVisible: (() => { const overlay=document.getElementById('updateLogOverlay'); return !!overlay && !overlay.hidden && overlay.classList.contains('show'); })(),
+      cacheNames: await caches.keys()
+    }));
+    assert.equal(releaseMetadata.version, '0.9.8', `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
+    assert.equal(releaseMetadata.changelogVersion, '0.9.8', `latest changelog ${JSON.stringify(releaseMetadata)}`);
+    assert.equal(releaseMetadata.updateLogVisible, true, `new release auto-opens UPDATE LOG ${JSON.stringify(releaseMetadata)}`);
+    assert.ok(releaseMetadata.cacheNames.includes('circle-mix-v0.9.8-app'), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);
     await dismissStartupOverlays(page);
 
     await page.evaluate(() => {
