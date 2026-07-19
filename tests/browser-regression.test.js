@@ -629,8 +629,9 @@ async function dismissStartupOverlays(page){
     assert.equal(scratchDown.scratchHeld, true);
     await mobilePage.locator('#mobileScratchBtn').dispatchEvent('pointercancel', {pointerId:42, pointerType:'touch', isPrimary:true, bubbles:true});
     const scratchUp = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
-    assert.equal(scratchUp.mobileScratchPointerId, null);
-    assert.equal(scratchUp.scratchHeld, false);
+    assert.equal(scratchUp.mobileScratchPointerId, null, `mobile SCRATCH pointercancel clears pointer ${JSON.stringify({scratchDown, scratchUp})}`);
+    assert.equal(scratchUp.scratchHeld, false, `mobile SCRATCH pointercancel releases hold ${JSON.stringify({scratchDown, scratchUp})}`);
+    assert.equal(scratchUp.mouseDownRight, false, `mobile SCRATCH pointercancel releases right input ${JSON.stringify({scratchDown, scratchUp})}`);
     const mobileLoop = await measureLoop(mobilePage, 500);
     assert.ok(mobileLoop.frameDelta > 5 && mobileLoop.renderDelta > 5 && mobileLoop.wallTimeDelta > 300, `mobile loop ${JSON.stringify(mobileLoop)}`);
     await runRapidSkipRegression(mobilePage, 'mobile');
