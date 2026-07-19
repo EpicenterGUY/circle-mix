@@ -497,12 +497,57 @@ async function dismissStartupOverlays(page){
   }), false, 'startup update log overlay is dismissed');
 }
 
+function shortestAngleDifference(a, b){ return Math.atan2(Math.sin(a-b), Math.cos(a-b)); }
+async function runDeterministicAimAndCutRegression(browser){
+  const context = await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}, hasTouch:false, isMobile:false}));
+  const page = await context.newPage();
+  const errors = await collectErrors(page);
+  try {
+    await page.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
+    await waitForStableCircleMixPage(page, 'deterministic gameplay');
+    await dismissStartupOverlays(page);
+    const initial = await page.evaluate(() => window.CircleMixTestApi.startDeterministicChart());
+    assert.equal(initial.chartLength, 9, 'test-only deterministic chart has every supported gesture family');
+    assert.deepEqual(initial.chartDoneStates.map(note => note.id), ['test-cut-0','test-fx-0','test-swing-cw-0','test-swing-ccw-0','test-slide-cw-0','test-slide-ccw-0','test-trace-0','test-scratch-cw-0','test-scratch-ccw-0']);
+    for(const degrees of [0,45,90,135,180,225,270,315]){
+      const sample = await page.evaluate(deg => {
+        const st=window.CircleMixTestApi.state(), a=deg*Math.PI/180;
+        window.CircleMixTestApi.testInput.aim(st.cx+Math.cos(a)*st.hitR, st.cy+Math.sin(a)*st.hitR, performance.now(), 'mouse');
+        window.CircleMixTestApi.advanceTestClock(.02);
+        return window.CircleMixTestApi.state();
+      }, degrees);
+      assert.ok(Number.isFinite(sample.rawInputAngle) && Number.isFinite(sample.judgementAimAngle) && Number.isFinite(sample.visualArmAngle), `absolute ${degrees}° reports finite aim angles`);
+      assert.ok(Math.abs(shortestAngleDifference(sample.rawInputAngle, degrees*Math.PI/180)) < .02, `absolute ${degrees}° reaches raw input angle`);
+      assert.ok(Math.abs(shortestAngleDifference(sample.judgementAimAngle, degrees*Math.PI/180)) < .02, `absolute ${degrees}° reaches judgement angle`);
+    }
+    const locked = await page.evaluate(() => {
+      const api=window.CircleMixTestApi; api.setPcAimMode('LOCKED');
+      api.testInput.locked(0, 40, performance.now()); api.advanceTestClock(.02);
+      const before=api.state(); api.testInput.locked(0, 40, performance.now()+20); api.advanceTestClock(.02);
+      return {before, after:api.state()};
+    });
+    assert.ok(Number.isFinite(locked.after.lockedVirtualAngle) && Number.isFinite(locked.after.sampleAngularVelocity), `locked input diagnostics remain finite ${JSON.stringify(locked)}`);
+    assert.notEqual(locked.before.judgementAimAngle, locked.after.judgementAimAngle, `locked relative movement changes judgement aim ${JSON.stringify(locked)}`);
+    const cut = await page.evaluate(() => {
+      const api=window.CircleMixTestApi; api.startDeterministicChart(); api.setPcAimMode('ABSOLUTE'); api.advanceTestClock(.8);
+      const st=api.state(), note=st.chartDoneStates.find(n=>n.id==='test-cut-0');
+      api.testInput.aim(st.cx+Math.cos(-Math.PI/2)*st.hitR, st.cy+Math.sin(-Math.PI/2)*st.hitR, performance.now(), 'mouse');
+      api.testInput.action(); return api.state();
+    });
+    assert.equal(cut.judgedCount, 1, `ACTION uses onCut production path ${JSON.stringify(cut)}`);
+    assert.equal(cut.combo, 1, 'successful CUT increments combo');
+    assert.equal(cut.chartDoneStates.find(n=>n.id==='test-cut-0').done, true, 'successful CUT completes its chart note');
+    assert.deepEqual(errors, [], `deterministic gameplay errors ${JSON.stringify(errors)}`);
+  } finally { unregisterDiagnosticContext(context, page); await context.close(); }
+}
+
 (async()=>{
   const server = startStaticServer(process.cwd());
   try{
     await waitForServer('http://127.0.0.1:4173/index.html');
     const browser = await chromium.launch({headless:true});
     activeBrowser = browser;
+    await runDeterministicAimAndCutRegression(browser);
     const freshDesktopLoop = await runFreshDirectPlayRegression(
       browser,
       {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
