@@ -4507,18 +4507,22 @@ settingsOrigin=${settingsOrigin}`);
     score=0; combo=0; maxCombo=0; judgedCount=0; perfectCount=0; greatCount=0; missCount=0; actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0);
     feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
     running=true;
-    setGameplayScrollLocked(true);
-    notifyPwaGameplay();
     closeSettingsOverlayOnly();
     safeSetState("game", "start runtime init");
     setCleanGameplay(true);
+    if(tutorialPrompt) tutorialPrompt.hidden=true;
+    if(tutorialComplete) tutorialComplete.hidden=true;
+    if(songSelect) songSelect.hidden=true;
+    startLayer.style.display="none";
+    resize();
+    setGameplayScrollLocked(true);
+    notifyPwaGameplay();
     pauseSong("pause");
     try{ setSongCurrentTime(0,"reset"); }catch(e){}
     if(song.ended){ try{ loadSong("load"); setSongCurrentTime(0,"reset"); }catch(e){} }
     startMs=performance.now();
     audioStartedAt=startMs;
     lastMs=startMs;
-    startLayer.style.display="none";
     mouseX=cx; mouseY=cy-hitR;
     resetAimInput(-Math.PI/2); armAngle=targetAngle=prevArmAngle=-Math.PI/2; armVel=rawArmVel=0; magnetTarget=null;
     filterHeld=false; forceReleaseScratch(); mouseDownRight=false;
@@ -4528,6 +4532,7 @@ settingsOrigin=${settingsOrigin}`);
     if(editorMode) updateEditorStatus();
 
     applyMusicVolume();
+    raf=requestAnimationFrame(frame);
 
     const keepGameScene = () => {
       if(startToken !== playSessionToken) return false;
@@ -4539,14 +4544,10 @@ settingsOrigin=${settingsOrigin}`);
     };
     playSong("start-game").then(()=>{
       if(!keepGameScene()) return;
-      if(raf) cancelAnimationFrame(raf);
-      raf=requestAnimationFrame(frame);
     }).catch(err=>{
       console.warn("audio play failed", err);
       // 재생 실패해도 화면은 돌리되, 사용자가 P나 에디터 PLAY로 다시 재생 가능.
       if(!keepGameScene()) return;
-      if(raf) cancelAnimationFrame(raf);
-      raf=requestAnimationFrame(frame);
     });
     keepGameScene();
     return true;

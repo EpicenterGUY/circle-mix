@@ -7,6 +7,16 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.10",
+    date: "2026-07-19",
+    title: "Direct Play Startup Fix",
+    summary: "튜토리얼을 실행하지 않은 새 세션에서도 일반 곡이 독립적으로 게임 화면과 루프를 완전히 시작하도록 수정",
+    changes: [
+      { category: "GAMEPLAY", text: "일반 곡 시작이 게임 scene, clean HUD, overlay 정리, canvas resize, 스크롤 잠금과 RAF 시작을 튜토리얼 초기화 없이 직접 완료" },
+      { category: "TEST", text: "새 데스크톱·모바일 세션과 튜토리얼 안내 응답 완료/미완료 상태에서 직접 곡 시작 화면 및 게임 루프를 브라우저 회귀 테스트로 검증" }
+    ]
+  },
+  {
     version: "0.9.9",
     date: "2026-07-19",
     title: "Playfield Readability Polish",
