@@ -3869,6 +3869,9 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function cleanupPlaySession({stopAudio=true, hideResultOverlay=true, abort=true}={}){
+    // A normal session transition must never leave a diagnostic surface above
+    // the title/start controls, including direct-play startup.
+    deactivateSelfTestSurface?.({releaseInputs:true});
     releasePointerLock();
     if(abort) abortingRun=true;
     completionPending=false;
@@ -4143,7 +4146,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(!raf) raf=requestAnimationFrame(frame);
   }
   function startTutorialStep(idx=tutorialStepIndex,{startMode="initial"}={}){ enterTutorialStep(idx,{source:startMode==="initial"?"replay":(startMode==="restart"?"retry":startMode),skipCountdown:startMode==="skip"}); }
-  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.completing=false; tutorialState.pendingSkipQueue=[]; tutorialState.mixRetryCount=0; tutorialState.completeCount=0; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
+  function startTutorial(){ deactivateSelfTestSurface?.({releaseInputs:true}); localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.completing=false; tutorialState.pendingSkipQueue=[]; tutorialState.mixRetryCount=0; tutorialState.completeCount=0; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
   function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
   function restoreTutorialAuto(){ tutorialState.autoSuppressed=false; setAutoPlayEnabled(!!tutorialState.previousAutoEnabled, "tutorial-restore"); }
@@ -5749,6 +5752,14 @@ running=${running}`);
   const selfTest={active:false,index:0,status:"WAITING",results:[],device:"unknown",startedAt:0,failReason:null,aimTarget:0,aimIndex:0,sessionId:0};
   const selfTestOverlay=document.getElementById("selfTestOverlay"), selfTestButton=document.getElementById("safeSelfTestBtn");
   const selfTestEls={label:document.getElementById("selfTestStepLabel"),instruction:document.getElementById("selfTestInstruction"),diagnostics:document.getElementById("selfTestDiagnostics"),start:document.getElementById("selfTestStart"),retry:document.getElementById("selfTestRetry"),next:document.getElementById("selfTestNext"),skip:document.getElementById("selfTestSkip"),restart:document.getElementById("selfTestRestart"),copy:document.getElementById("selfTestCopy"),exit:document.getElementById("selfTestExit")};
+  function deactivateSelfTestSurface({releaseInputs=false}={}){
+    selfTest.active=false;
+    if(releaseInputs){ releasePointerLock(); releaseMobilePointers(); keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; }
+    if(selfTestOverlay){ selfTestOverlay.hidden=true; selfTestOverlay.setAttribute("aria-hidden","true"); }
+  }
+  // The panel is never route-driven: initialize it closed before any user
+  // interaction and keep developer mode limited to the Settings entry button.
+  deactivateSelfTestSurface({releaseInputs:true});
   function selfTestNumber(value){ return Number.isFinite(value)?Number(value.toFixed(4)):null; }
   function selfTestSnapshot(){ const n=chart.find(note=>!note.done&&!note.missed)||null, target=selfTest.active?(SELF_TEST_STEPS[selfTest.index]?.type? n?.angle:selfTest.aimTarget):null; return {stepId:SELF_TEST_STEPS[selfTest.index]?.id||null,stepName:SELF_TEST_STEPS[selfTest.index]?.name||null,status:selfTest.status,device:selfTest.device,pcAimMode:inputSettings.pcAimMode,pointerLockActive:!!pointerLockActive(),rawInputAngle:selfTestNumber(rawInputAngle),judgementAimAngle:selfTestNumber(judgementAimAngle),visualArmAngle:selfTestNumber(visualArmAngle),angularVelocity:selfTestNumber(aimInput.sampleAngularVelocity),targetAngle:selfTestNumber(target),shortestAngleError:target==null?null:selfTestNumber(norm(judgementAimAngle-target)),note:n?{id:String(n.id||""),type:String(n.type||"")}:null,score:Number(score),combo:Number(combo),judgedCount:Number(judgedCount),actionHeld:!!keys.MouseLeft,scratchHeld:!!scratchHeld,mouseDownRight:!!mouseDownRight,slideProgress:n?selfTestNumber(n.slideProgress||0):0,traceCoverage:n?selfTestNumber(n.coverageRatio||0):0,traceQuality:n?selfTestNumber(n.traceQuality||0):0,failReason:selfTest.failReason||null}; }
   function selfTestResult(status){ const s=selfTestSnapshot(), ended=performance.now(); return {...s,status,startedAt:selfTest.startedAt||null,completedAt:ended,duration:selfTest.startedAt?Math.max(0,ended-selfTest.startedAt):0,expectedAction:SELF_TEST_STEPS[selfTest.index]?.action||"",actualJudgement:chart.find(n=>n.done)?.judgement||null}; }
@@ -5761,8 +5772,8 @@ running=${running}`);
     const n=make(step.type,2,0,{duration:step.duration,endLane:step.endLane}); n.id=`selftest-${step.id}-0`; n.hitTime=now()+1; n.spawnTime=n.hitTime-APPROACH; chart=[n]; chartLastHitEnd=n.hitTime+(n.duration||0); score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=noteWeight(n);
   }
   function selfTestTick(){ if(!selfTest.active||selfTest.status!=="RUNNING")return; const step=SELF_TEST_STEPS[selfTest.index]; if(step.id==="absolute-aim"){ if(Number.isFinite(rawInputAngle)&&Number.isFinite(judgementAimAngle)&&Number.isFinite(visualArmAngle)&&Math.abs(norm(judgementAimAngle-selfTest.aimTarget))<.16){ selfTest.aimIndex++; if(selfTest.aimIndex>=8)selfTest.status="PASS"; else selfTest.aimTarget=selfTest.aimIndex*Math.PI/4; } return; } if(step.id==="locked-aim"){ if(pointerLockActive() && aimInput.accumulatedCWTravel>=TAU && aimInput.accumulatedCCWTravel>=TAU)selfTest.status="PASS"; return; } const n=chart[0]; if(n?.done && judgedCount===1 && score>0 && combo>0)selfTest.status="PASS"; else if(n?.missed){selfTest.status="FAIL";selfTest.failReason=n.failReason||"NOTE MISSED";} }
-  function openSelfTest(){ if(!circleMixDevMode)return false; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=false; chart=[]; selfTest.active=true; selfTest.index=0; selfTest.results=[]; selfTest.sessionId++; selfTestOverlay.hidden=false; safeSetState("game","self-test"); running=true; paused=false; startMs=performance.now(); lastMs=startMs; browserTestClock=null; resize(); if(!raf)raf=requestAnimationFrame(frame); selfTestStartStep(); renderSelfTest(); return true; }
-  function exitSelfTest(){ if(!selfTest.active)return; selfTest.active=false; selfTestResetInput(); chart=[]; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); selfTestOverlay.hidden=true; showTitleMenu(); }
+  function openSelfTest(){ if(!circleMixDevMode)return false; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=false; chart=[]; selfTest.active=true; selfTest.index=0; selfTest.results=[]; selfTest.sessionId++; selfTestOverlay.hidden=false; selfTestOverlay.setAttribute("aria-hidden","false"); safeSetState("game","self-test"); running=true; paused=false; startMs=performance.now(); lastMs=startMs; browserTestClock=null; resize(); if(!raf)raf=requestAnimationFrame(frame); selfTestStartStep(); renderSelfTest(); return true; }
+  function exitSelfTest(){ if(!selfTest.active)return; selfTestResetInput(); chart=[]; deactivateSelfTestSurface({releaseInputs:true}); cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); showTitleMenu(); }
   function finishSelfTestStep(status){ if(!selfTest.active)return; selfTest.status=status; selfTest.results.push(selfTestResult(status)); }
   window.addEventListener("pointermove",e=>{ const device=["mouse","pen","touch"].includes(e.pointerType)?e.pointerType:"unknown"; if(selfTest.active&&device!==selfTest.device){ selfTest.device=device; selfTestResetInput(); } },{capture:true,passive:true});
   window.addEventListener("keydown",()=>{ if(selfTest.active)selfTest.device="keyboard"; },{capture:true});
@@ -5771,6 +5782,9 @@ running=${running}`);
   const productionUpdateNotes=updateNotes; updateNotes=function(t,dt){ productionUpdateNotes(t,dt); selfTestTick(); };
 
   installBrowserTestApi();
+  if(window.CircleMixTestApi){
+    window.CircleMixTestApi.selfTestState=()=>({active:!!selfTest.active, overlayHidden:!!selfTestOverlay?.hidden, overlayDisplay:selfTestOverlay?getComputedStyle(selfTestOverlay).display:null, buttonHidden:!!selfTestButton?.hidden, pointerLockActive:!!pointerLockActive(), actionHeld:!!keys.MouseLeft, scratchHeld:!!scratchHeld});
+  }
 
   updateModeButtons();
   updateButtons();
