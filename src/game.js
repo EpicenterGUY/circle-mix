@@ -5044,8 +5044,8 @@ settingsOrigin=${settingsOrigin}`);
     window.addEventListener("touchmove",e=>{ if(!isCoarsePointerMobile()) updateGameplayPointerFromEvent(e,"touch"); },{passive:true});
   }
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
-  function isAimPointerBlockedTarget(target){return !!(target && target.closest && target.closest("#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialComplete,.tuner,.editorPanel,.start,.mobileControls,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay"));}
-  function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay"));}
+  function isAimPointerBlockedTarget(target){return !!(target && target.closest && target.closest("#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialComplete,.tuner,.editorPanel,.start,.mobileControls,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay,.selfTestOverlay"));}
+  function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay,.selfTestOverlay"));}
   function releaseMobilePointers(){ mobileAimPointerId=null; mobileActionPointerId=null; mobileScratchPointerId=null; keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; mobileActionBtn?.classList.remove("mobileActionActive"); mobileScratchBtn?.classList.remove("mobileScratchActive"); }
   function handleMobileAimPointer(e){ if(e.pointerId!==mobileAimPointerId) return; updateGameplayPointerFromEvent(e,"touch"); }
   if(window.PointerEvent){
@@ -5728,6 +5728,47 @@ running=${running}`);
       resetCounters:()=>{ testFrameCount=0; testRenderCount=0; }
     };
   }
+
+  // This is intentionally separate from browserTestClock.  It is a developer
+  // diagnostic that uses the normal RAF/updateNotes/onCut input path and never
+  // registers its small charts as songs, records, or local charts.
+  const SELF_TEST_STEPS=[
+    {id:"absolute-aim",name:"A · ABSOLUTE AIM",action:"Move through the eight cyan targets (0° to 315°).",type:null},
+    {id:"locked-aim",name:"B · PC LOCKED AIM",action:"Mouse only: click START, accept Pointer Lock, then rotate CW and CCW.",type:null,mouseOnly:true},
+    {id:"cut",name:"C · CUT",action:"Aim at the note and press ACTION (Z/X/left click).",type:"cut"},
+    {id:"fx",name:"D · FX",action:"Use the displayed production FX hold input at the target.",type:"fx",duration:.45},
+    {id:"swing-cw",name:"E · SWING CW",action:"Move the aim quickly clockwise through the target.",type:"swingCW"},
+    {id:"swing-ccw",name:"E · SWING CCW",action:"Move the aim quickly counter-clockwise through the target.",type:"swingCCW"},
+    {id:"scratch-cw",name:"F · SCRATCH CW",action:"Hold SCRATCH (right click/Shift), then rotate clockwise.",type:"scratchCW"},
+    {id:"scratch-ccw",name:"F · SCRATCH CCW",action:"Hold SCRATCH (right click/Shift), then rotate counter-clockwise.",type:"scratchCCW"},
+    {id:"slide-cw",name:"G · SLIDE CW",action:"Hold ACTION from START and follow the yellow path to END.",type:"slideCW",duration:.8,endLane:3},
+    {id:"slide-ccw",name:"G · SLIDE CCW",action:"Hold ACTION from START and follow the yellow path to END.",type:"slideCCW",duration:.8,endLane:5},
+    {id:"trace",name:"H · TRACE",action:"Do not hold ACTION. Follow the thin cyan path using multiple samples.",type:"traceCW",duration:.8,endLane:3},
+    {id:"hold",name:"HOLD",action:"No independently playable HOLD note type is registered in this build.",unsupported:true}
+  ];
+  const selfTest={active:false,index:0,status:"WAITING",results:[],device:"unknown",startedAt:0,failReason:null,aimTarget:0,aimIndex:0,sessionId:0};
+  const selfTestOverlay=document.getElementById("selfTestOverlay"), selfTestButton=document.getElementById("safeSelfTestBtn");
+  const selfTestEls={label:document.getElementById("selfTestStepLabel"),instruction:document.getElementById("selfTestInstruction"),diagnostics:document.getElementById("selfTestDiagnostics"),start:document.getElementById("selfTestStart"),retry:document.getElementById("selfTestRetry"),next:document.getElementById("selfTestNext"),skip:document.getElementById("selfTestSkip"),restart:document.getElementById("selfTestRestart"),copy:document.getElementById("selfTestCopy"),exit:document.getElementById("selfTestExit")};
+  function selfTestNumber(value){ return Number.isFinite(value)?Number(value.toFixed(4)):null; }
+  function selfTestSnapshot(){ const n=chart.find(note=>!note.done&&!note.missed)||null, target=selfTest.active?(SELF_TEST_STEPS[selfTest.index]?.type? n?.angle:selfTest.aimTarget):null; return {stepId:SELF_TEST_STEPS[selfTest.index]?.id||null,stepName:SELF_TEST_STEPS[selfTest.index]?.name||null,status:selfTest.status,device:selfTest.device,pcAimMode:inputSettings.pcAimMode,pointerLockActive:!!pointerLockActive(),rawInputAngle:selfTestNumber(rawInputAngle),judgementAimAngle:selfTestNumber(judgementAimAngle),visualArmAngle:selfTestNumber(visualArmAngle),angularVelocity:selfTestNumber(aimInput.sampleAngularVelocity),targetAngle:selfTestNumber(target),shortestAngleError:target==null?null:selfTestNumber(norm(judgementAimAngle-target)),note:n?{id:String(n.id||""),type:String(n.type||"")}:null,score:Number(score),combo:Number(combo),judgedCount:Number(judgedCount),actionHeld:!!keys.MouseLeft,scratchHeld:!!scratchHeld,mouseDownRight:!!mouseDownRight,slideProgress:n?selfTestNumber(n.slideProgress||0):0,traceCoverage:n?selfTestNumber(n.coverageRatio||0):0,traceQuality:n?selfTestNumber(n.traceQuality||0):0,failReason:selfTest.failReason||null}; }
+  function selfTestResult(status){ const s=selfTestSnapshot(), ended=performance.now(); return {...s,status,startedAt:selfTest.startedAt||null,completedAt:ended,duration:selfTest.startedAt?Math.max(0,ended-selfTest.startedAt):0,expectedAction:SELF_TEST_STEPS[selfTest.index]?.action||"",actualJudgement:chart.find(n=>n.done)?.judgement||null}; }
+  function renderSelfTest(){ if(!selfTestOverlay||!selfTest.active)return; const step=SELF_TEST_STEPS[selfTest.index]; const s=selfTestSnapshot(); selfTestEls.label.textContent=`${selfTest.index+1}/${SELF_TEST_STEPS.length} · ${step.name} · ${selfTest.status}`; selfTestEls.instruction.textContent=step.action; selfTestEls.diagnostics.textContent=JSON.stringify(s,null,2); selfTestEls.next.disabled=selfTest.status!=="PASS"; requestAnimationFrame(renderSelfTest); }
+  function selfTestResetInput(){ releasePointerLock(); releaseMobilePointers(); keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; resetAimInput(-Math.PI/2); }
+  function selfTestStartStep(){ if(!circleMixDevMode||!selfTest.active)return; const step=SELF_TEST_STEPS[selfTest.index]; selfTestResetInput(); chart=[]; feedback=[]; selfTest.status=step.unsupported?"UNSUPPORTED":"RUNNING"; selfTest.failReason=null; selfTest.startedAt=performance.now(); selfTest.aimIndex=0; selfTest.aimTarget=0; if(step.unsupported)return;
+    if(step.mouseOnly && selfTest.device!=="mouse"){ selfTest.status="UNSUPPORTED"; return; }
+    if(step.id==="absolute-aim"){ selfTest.aimTarget=0; return; }
+    if(step.id==="locked-aim"){ if(!canvas?.requestPointerLock){selfTest.status="UNSUPPORTED";return;} requestPointerLockForAim({pointerType:"mouse"}); return; }
+    const n=make(step.type,2,0,{duration:step.duration,endLane:step.endLane}); n.id=`selftest-${step.id}-0`; n.hitTime=now()+1; n.spawnTime=n.hitTime-APPROACH; chart=[n]; chartLastHitEnd=n.hitTime+(n.duration||0); score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=noteWeight(n);
+  }
+  function selfTestTick(){ if(!selfTest.active||selfTest.status!=="RUNNING")return; const step=SELF_TEST_STEPS[selfTest.index]; if(step.id==="absolute-aim"){ if(Number.isFinite(rawInputAngle)&&Number.isFinite(judgementAimAngle)&&Number.isFinite(visualArmAngle)&&Math.abs(norm(judgementAimAngle-selfTest.aimTarget))<.16){ selfTest.aimIndex++; if(selfTest.aimIndex>=8)selfTest.status="PASS"; else selfTest.aimTarget=selfTest.aimIndex*Math.PI/4; } return; } if(step.id==="locked-aim"){ if(pointerLockActive() && aimInput.accumulatedCWTravel>=TAU && aimInput.accumulatedCCWTravel>=TAU)selfTest.status="PASS"; return; } const n=chart[0]; if(n?.done && judgedCount===1 && score>0 && combo>0)selfTest.status="PASS"; else if(n?.missed){selfTest.status="FAIL";selfTest.failReason=n.failReason||"NOTE MISSED";} }
+  function openSelfTest(){ if(!circleMixDevMode)return false; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); tutorialMode=false; chart=[]; selfTest.active=true; selfTest.index=0; selfTest.results=[]; selfTest.sessionId++; selfTestOverlay.hidden=false; safeSetState("game","self-test"); running=true; paused=false; startMs=performance.now(); lastMs=startMs; browserTestClock=null; resize(); if(!raf)raf=requestAnimationFrame(frame); selfTestStartStep(); renderSelfTest(); return true; }
+  function exitSelfTest(){ if(!selfTest.active)return; selfTest.active=false; selfTestResetInput(); chart=[]; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); selfTestOverlay.hidden=true; showTitleMenu(); }
+  function finishSelfTestStep(status){ if(!selfTest.active)return; selfTest.status=status; selfTest.results.push(selfTestResult(status)); }
+  window.addEventListener("pointermove",e=>{ const device=["mouse","pen","touch"].includes(e.pointerType)?e.pointerType:"unknown"; if(selfTest.active&&device!==selfTest.device){ selfTest.device=device; selfTestResetInput(); } },{capture:true,passive:true});
+  window.addEventListener("keydown",()=>{ if(selfTest.active)selfTest.device="keyboard"; },{capture:true});
+  if(selfTestButton){ selfTestButton.hidden=!circleMixDevMode; safeBind(selfTestButton,openSelfTest); }
+  safeBind(selfTestEls.start,selfTestStartStep); safeBind(selfTestEls.retry,selfTestStartStep); safeBind(selfTestEls.skip,()=>finishSelfTestStep("SKIPPED")); safeBind(selfTestEls.next,()=>{if(selfTest.status!=="PASS")return;finishSelfTestStep("PASS");if(selfTest.index<SELF_TEST_STEPS.length-1){selfTest.index++;selfTestStartStep();}}); safeBind(selfTestEls.restart,()=>{selfTest.results=[];selfTest.index=0;selfTestStartStep();}); safeBind(selfTestEls.exit,exitSelfTest); safeBind(selfTestEls.copy,async()=>{const report={version:currentVersionString(),userAgent:navigator.userAgent,viewport:{width:window.innerWidth,height:window.innerHeight},devicePixelRatio:window.devicePixelRatio||1,device:selfTest.device,steps:selfTest.results,lastDiagnostic:selfTestSnapshot(),errors:[]}; const text=JSON.stringify(report,null,2); try{await navigator.clipboard.writeText(text);}catch(_){ } selfTestEls.copy.textContent="COPIED";});
+  const productionUpdateNotes=updateNotes; updateNotes=function(t,dt){ productionUpdateNotes(t,dt); selfTestTick(); };
 
   installBrowserTestApi();
 
