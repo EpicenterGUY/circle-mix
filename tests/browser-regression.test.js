@@ -248,7 +248,15 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
     }));
     assert.equal(tutorialStorage.promptAnswered, 'true', `${label} tutorial prompt is answered without starting it`);
     assert.equal(tutorialStorage.completed, null, `${label} tutorial remains incomplete`);
-    await page.locator('#safeStart').click();
+    const startButton = page.locator('#safeStart');
+    await startButton.waitFor({state:'visible'});
+    assert.equal(await startButton.isEnabled(), true, `${label} START is enabled`);
+    const startBox = await startButton.boundingBox();
+    assert.ok(
+      startBox && startBox.width > 0 && startBox.height > 0,
+      `${label} START has a visible hit box ${JSON.stringify(startBox)}`
+    );
+    await startButton.click({force:true});
     await page.waitForFunction(() => !document.getElementById('songSelect')?.hidden);
     await page.locator('#songPlayBtn').click();
     await waitFor(page, () => {
