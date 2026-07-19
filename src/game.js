@@ -289,6 +289,7 @@
   let scratchCandidate=false;
   let scratchThresholdMet=false;
   let lastScratchResult="READY";
+  let scratchHoldEpoch=0, scratchHoldCW=0, scratchHoldCCW=0, scratchHoldWasActive=false;
   let autoInputDebug={
     z:false,x:false,space:false,lmb:false,rmb:false,shiftFallback:false,
     action:"NONE",targetAngle:null,targetDistance:null,scratchDirection:"NONE",
@@ -2398,25 +2399,42 @@
     const freshInput=!n.tutorialTraceSwingRuntime || performance.now()>=(n.swingArmedAt||0);
     return freshInput && freshAimSample() && enoughTravel && (n.swingReverseTravel||0)<Math.PI*.16 && Math.abs(aimInput.sampleAngularVelocity)>=SWING_FLICK_SPEED && Math.sign(aimInput.sampleAngularVelocity)===dir;
   }
+  function setScratchHeld(held){ scratchHeld=!!held; syncScratchHoldState(); }
+  function syncScratchHoldState(){
+    if(scratchHeld===scratchHoldWasActive)return;
+    scratchHoldWasActive=scratchHeld; scratchHoldEpoch++;
+    scratchHoldCW=aimInput.accumulatedCWTravel; scratchHoldCCW=aimInput.accumulatedCCWTravel;
+    if(!scratchHeld){
+      for(const note of chart){ delete note.scratchGestureEpoch; delete note.scratchGestureArmed; delete note.scratchDirectedTravel; delete note.scratchReverseTravel; }
+    }
+  }
   function updateScratchGesture(n){
-    if(!n.scratchGestureArmed){ n.scratchGestureArmed=true; n.scratchStartCW=aimInput.accumulatedCWTravel; n.scratchStartCCW=aimInput.accumulatedCCWTravel; n.scratchDirectedTravel=0; n.scratchReverseTravel=0; return; }
+    if(!scratchHeld)return false;
+    if(n.scratchGestureEpoch!==scratchHoldEpoch){
+      n.scratchGestureEpoch=scratchHoldEpoch; n.scratchGestureArmed=true;
+      // Baseline is captured on the false -> true hold transition, never before it.
+      n.scratchStartCW=scratchHoldCW; n.scratchStartCCW=scratchHoldCCW;
+      n.scratchDirectedTravel=0; n.scratchReverseTravel=0; return false;
+    }
     const dir=n.type==="scratchCW"?1:-1;
     const forward=dir>0 ? aimInput.accumulatedCWTravel-n.scratchStartCW : aimInput.accumulatedCCWTravel-n.scratchStartCCW;
     const reverse=dir>0 ? aimInput.accumulatedCCWTravel-n.scratchStartCCW : aimInput.accumulatedCWTravel-n.scratchStartCW;
     n.scratchReverseTravel=reverse;
     n.scratchDirectedTravel=Math.max(0,forward-reverse*.75);
+    return true;
   }
 
   function checkScratch(n, t){
     // SCRATCH = 우클릭을 누른 채 짧게 좌/우 또는 시계/반시계로 긁는 마찰 액션.
     // Shift는 보조 입력/fallback으로만 허용하며, SLIDE처럼 긴 경로를 추적하지 않는다.
     const dir=n.type==="scratchCW"?1:-1;
-    updateScratchGesture(n);
     scratchCandidate=!!(scratchHeld&&aligned(n.angle,.026));
+    if(!scratchHeld){ lastScratchResult="READY"; return false; }
+    const armed=updateScratchGesture(n);
     scratchMoveAmount=Math.abs(aimInput.lastSampleDelta);
     scratchSpeed=Math.abs(aimInput.sampleAngularVelocity);
     scratchThresholdMet=freshAimSample() && scratchSpeed>=SCRATCH_FLICK_SPEED;
-    if(!scratchHeld){lastScratchResult="READY";return false;}
+    if(!armed){lastScratchResult="ARMING";return false;}
     if(!aligned(n.angle,.026)){lastScratchResult="MISS";return false;}
     if(!scratchThresholdMet || (n.scratchDirectedTravel||0)<Math.PI*.035){lastScratchResult="TOO SLOW";return false;}
     if((n.scratchReverseTravel||0)>=Math.PI*.16){lastScratchResult="MISS";return false;}
@@ -3986,7 +4004,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
       delete n.scratchGestureArmed; delete n.scratchDirectedTravel; delete n.scratchReverseTravel;
     }
   }
-  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.mixRetryScheduled=false; tutorialState.chartFinalizationCount=0; tutorialState.lastChartFinalization=null; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.mixRetryScheduled=false; tutorialState.chartFinalizationCount=0; tutorialState.lastChartFinalization=null; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; scratchHoldEpoch=0; scratchHoldCW=scratchHoldCCW=0; scratchHoldWasActive=false; for(const k of Object.keys(keys)) keys[k]=false; }
   function resetRenderWindow(){ renderWindow.start=0; renderWindow.end=0; renderWindow.notes.length=0; }
   function logTutorialAdvance(reason,extra={}){ if(!debugMode)return; const st=tutorialSteps[tutorialStepIndex]; console.log(`[Tutorial Advance]\nstep=${st?.kind||"-"}\nphase=${st?.phase||"-"}\nreason=${reason}\nsource=${extra.source||tutorialState.lastSource||"-"}\nsuccessCount=${tutorialState.successCount}\nsessionId=${tutorialSessionId}\nstepToken=${tutorialStepToken}\nattemptId=${tutorialAttemptId}\nfunction=${extra.fn||"-"}\ntimer=${!!extra.timer}\nnoteId=${extra.noteId||"-"}\npreviousStepToken=${extra.previousStepToken??tutorialStepToken}\ncurrentStepToken=${tutorialStepToken}`); }
   function tutorialHandleJudgement(ev){
@@ -4380,6 +4398,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
     filterHeld = isAutoActive() || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
     scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
+    syncScratchHoldState();
     scratchMoveAmount=Math.abs(aimInput.lastSampleDelta);
     scratchSpeed=Math.abs(aimInput.sampleAngularVelocity);
     scratchThresholdMet=freshAimSample() && scratchSpeed>=SCRATCH_FLICK_SPEED;
@@ -4963,14 +4982,14 @@ settingsOrigin=${settingsOrigin}`);
     const endAim=e=>{ if(e.pointerId===mobileAimPointerId) mobileAimPointerId=null; };
     canvas.addEventListener("pointerup",endAim,{passive:true}); canvas.addEventListener("pointercancel",endAim,{passive:true});
   }
-  window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerSource="pointer"; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
-  window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;}});
-  window.addEventListener("touchstart",e=>{ if(isCoarsePointerMobile()) return; if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){ updateGameplayPointerFromEvent(e,"touch"); } if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
-  window.addEventListener("touchend",e=>{ if(isCoarsePointerMobile()) return; if(!e.touches||e.touches.length<2){mouseDownRight=false;scratchHeld=false;} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
+  window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerSource="pointer"; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;setScratchHeld(true);}});
+  window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;setScratchHeld(!!(keys.ShiftLeft||keys.ShiftRight));}});
+  window.addEventListener("touchstart",e=>{ if(isCoarsePointerMobile()) return; if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){ updateGameplayPointerFromEvent(e,"touch"); } if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;setScratchHeld(true);} else if(running)onCut();},{passive:true});
+  window.addEventListener("touchend",e=>{ if(isCoarsePointerMobile()) return; if(!e.touches||e.touches.length<2){mouseDownRight=false;setScratchHeld(false);} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
   function bindMobileGameButton(btn,role){
     if(!btn||!window.PointerEvent)return;
-    btn.addEventListener("pointerdown",e=>{ if(!isCoarsePointerMobile()||e.pointerType!=="touch")return; e.preventDefault(); e.stopPropagation(); try{btn.setPointerCapture(e.pointerId);}catch(err){} if(role==="action"&&mobileActionPointerId===null){ mobileActionPointerId=e.pointerId; keys.MouseLeft=true; btn.classList.add("mobileActionActive"); tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(running)onCut(); } if(role==="scratch"&&mobileScratchPointerId===null){ mobileScratchPointerId=e.pointerId; scratchHeld=true; btn.classList.add("mobileScratchActive"); filterHeld=true; mouseDownRight=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; } },{passive:false});
-    const release=e=>{ if(role==="action"&&e.pointerId===mobileActionPointerId){ keys.MouseLeft=false; mobileActionPointerId=null; btn.classList.remove("mobileActionActive"); } if(role==="scratch"&&e.pointerId===mobileScratchPointerId){ scratchHeld=false; filterHeld=false; mouseDownRight=false; mobileScratchPointerId=null; btn.classList.remove("mobileScratchActive"); } };
+    btn.addEventListener("pointerdown",e=>{ if(!isCoarsePointerMobile()||e.pointerType!=="touch")return; e.preventDefault(); e.stopPropagation(); try{btn.setPointerCapture(e.pointerId);}catch(err){} if(role==="action"&&mobileActionPointerId===null){ mobileActionPointerId=e.pointerId; keys.MouseLeft=true; btn.classList.add("mobileActionActive"); tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(running)onCut(); } if(role==="scratch"&&mobileScratchPointerId===null){ mobileScratchPointerId=e.pointerId; setScratchHeld(true); btn.classList.add("mobileScratchActive"); filterHeld=true; mouseDownRight=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; } },{passive:false});
+    const release=e=>{ if(role==="action"&&e.pointerId===mobileActionPointerId){ keys.MouseLeft=false; mobileActionPointerId=null; btn.classList.remove("mobileActionActive"); } if(role==="scratch"&&e.pointerId===mobileScratchPointerId){ setScratchHeld(false); filterHeld=false; mouseDownRight=false; mobileScratchPointerId=null; btn.classList.remove("mobileScratchActive"); } };
     btn.addEventListener("pointerup",release,{passive:true}); btn.addEventListener("pointercancel",release,{passive:true});
   }
   bindMobileGameButton(mobileActionBtn,"action"); bindMobileGameButton(mobileScratchBtn,"scratch");
@@ -5104,13 +5123,13 @@ settingsOrigin=${settingsOrigin}`);
     if(e.code==="KeyF"&&!e.repeat)requestFullscreenSafe();
     if(e.code==="KeyH"&&!e.repeat)toggleSettings();
     if(e.code==="KeyE"&&!e.repeat){toggleSettings(true); toggleEditor();}
-    if(e.code==="ShiftLeft"||e.code==="ShiftRight")scratchHeld=true;
+    if(e.code==="ShiftLeft"||e.code==="ShiftRight")setScratchHeld(true);
   });
   window.addEventListener("keyup",e=>{
     keys[e.code]=false;
     if(e.code==="KeyA")keyA=false;
     if(e.code==="KeyD")keyD=false;
-    if(e.code==="ShiftLeft"||e.code==="ShiftRight")scratchHeld=!!(mouseDownRight||keys.ShiftLeft||keys.ShiftRight);
+    if(e.code==="ShiftLeft"||e.code==="ShiftRight")setScratchHeld(!!(mouseDownRight||keys.ShiftLeft||keys.ShiftRight));
   });
 
   song.addEventListener("ended", ()=>scheduleCompletion());
