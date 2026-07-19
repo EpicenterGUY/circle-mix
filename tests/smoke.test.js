@@ -345,15 +345,14 @@ assert.equal(sanitized, saved);
 }
 });
 
-test("OFF PC mouse aim is direct atan2 without normal center deadzone or smoothing", () => {
+test("event aim input keeps OFF direct and exposes continuous state", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /const safetyRadius=1/);
-assert.match(src, /lastPointerSource!=="touch" && profile\.mode!=="OFF"[\s\S]*const enter=Math\.max\(24, hitR\*\.18\)/);
-assert.match(src, /else if\(cursorRadius<safetyRadius\)[\s\S]*rawTargetAngle=lastValidTargetAngle/);
-assert.match(src, /else\{\s*centerDeadzoneActive=false;\s*rawTargetAngle=Math\.atan2\(dy,dx\);\s*lastValidTargetAngle=rawTargetAngle;\s*\}/);
-assert.match(src, /if\(profile\.mode!=="OFF" && Math\.abs\(rawAngularVelocity\)<profile\.fastVel\)/);
-const dx = 0, dy = -0.5;
-assert.equal(Math.atan2(dy, dx), -Math.PI / 2);
+assert.match(src, /const aimInput=\{rawAngle:/);
+assert.match(src, /function processAimSample\(x,y,timestamp,source="pointer"\)/);
+assert.match(src, /const delta=norm\(angle-aimInput\.previousSampleAngle\)/);
+assert.match(src, /aimInput\.unwrappedAngle\+=delta/);
+assert.match(src, /judgementAimAngle=profile\.mode==="OFF" \? rawInputAngle : stabilizedTargetAngle/);
+assert.match(src, /getCoalescedEvents/);
 });
 
 test("LOW/MEDIUM keep center deadzone and magnet disengage is symmetric", () => {
@@ -391,7 +390,7 @@ const ccw = norm(-Math.PI / 2 - 0) / dt;
 assert.equal(Math.abs(cw), Math.abs(ccw));
 assert.equal(Math.sign(cw), -Math.sign(ccw));
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /n\.swingLastAngle=rawTargetAngle/);
-assert.match(src, /scratchSpeed=Math\.abs\(rawArmVel\)/);
+assert.match(src, /n\.swingStartCW=aimInput\.accumulatedCWTravel/);
+assert.match(src, /scratchSpeed=Math\.abs\(aimInput\.sampleAngularVelocity\)/);
 
 });

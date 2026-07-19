@@ -275,6 +275,9 @@
   let rawTargetAngle=-Math.PI/2, stabilizedTargetAngle=-Math.PI/2, lastValidTargetAngle=-Math.PI/2;
   let centerDeadzoneActive=false, cursorRadius=hitR, lastRawAngleForVelocity=-Math.PI/2;
   let rawAngularVelocity=0, magnetTarget=null, magnetAngleError=0;
+  // Pointer samples, not RAF cadence, are the authoritative aim input stream.
+  const aimInput={rawAngle:-Math.PI/2, unwrappedAngle:-Math.PI/2, previousSampleAngle:null, sampleAngularVelocity:0, accumulatedCWTravel:0, accumulatedCCWTravel:0, pointerRadius:0, sampleCount:0, lastSampleTimestamp:0, centerDeadzoneActive:false, rebasePending:true, pendingSamples:0, lastSampleDelta:0};
+  let rawInputAngle=-Math.PI/2, judgementAimAngle=-Math.PI/2, visualArmAngle=-Math.PI/2;
   let keyA=false, keyD=false, filterHeld=false, scratchHeld=false, mouseDownRight=false;
   let debugOverlayVisible=false;
   let debugOverlay=null;
@@ -1951,7 +1954,7 @@
     // may sit far inside/outside that ring, but drawArm() projects it onto hitR.
     // Judging the raw cursor radius while rendering the projected arm made a
     // player look perfectly aligned yet fail TRACE with MOVE CLOSER TO THE RING.
-    return {angle:armAngle, radius:hitR};
+    return {angle:judgementAimAngle, radius:hitR};
   }
   function insideTraceTarget(n,t){
     const region=getTraceJudgementRegion(n,t,traceProfile());
@@ -2111,7 +2114,7 @@
     if(n.type.startsWith("scratch"))return COLORS.scratch;
     return "#fff";
   }
-  function aligned(angle, extra=0){return distAng(armAngle,angle)<DIAL_ARC_HALF+Math.PI*extra;}
+  function aligned(angle, extra=0){return distAng(judgementAimAngle,angle)<DIAL_ARC_HALF+Math.PI*extra;}
   function isAimMagnetNote(n){ return !!n && (n.type==="cut"||n.type==="fx"||n.type.startsWith("swing")||n.type.startsWith("scratch")); }
   function aimStabilizerProfile(){
     const mode=inputSettings.aimStabilizer;
@@ -2378,28 +2381,18 @@
   }
 
   function updateSwingGesture(n){
+    // Read travel accumulated by pointer samples since this note armed, never RAF deltas.
     if(n.tutorialTraceSwingRuntime && performance.now() < (n.swingArmedAt||0)) return;
-    if(!n.swingGestureArmed){
-      n.swingGestureArmed=true;
-      n.swingLastAngle=rawTargetAngle;
-      n.swingDirectedTravel=0;
-      return;
-    }
+    if(!n.swingGestureArmed){ n.swingGestureArmed=true; n.swingStartCW=aimInput.accumulatedCWTravel; n.swingStartCCW=aimInput.accumulatedCCWTravel; return; }
     const dir=n.type==="swingCW"?1:-1;
-    const delta=norm(rawTargetAngle-n.swingLastAngle);
-    const directed=delta*dir;
-    if(directed>0) n.swingDirectedTravel+=directed;
-    else n.swingDirectedTravel=Math.max(0,n.swingDirectedTravel+directed*.35);
-    n.swingLastAngle=rawTargetAngle;
+    n.swingDirectedTravel=dir>0 ? aimInput.accumulatedCWTravel-n.swingStartCW : aimInput.accumulatedCCWTravel-n.swingStartCCW;
   }
 
   function checkSwing(n){
-    // SWING은 판정 창이 열린 뒤 새로 발생한 짧은 방향 이동만 인정한다.
-    // TRACE 중 남아 있던 이전 프레임 속도만으로 자동 판정되지 않게 한다.
     const dir=n.type==="swingCW"?1:-1;
-    const enoughTravel=(n.swingDirectedTravel||0)>=Math.PI*.035; // 약 6.3도
+    const enoughTravel=(n.swingDirectedTravel||0)>=Math.PI*.035;
     const freshInput=!n.tutorialTraceSwingRuntime || performance.now()>=(n.swingArmedAt||0);
-    return freshInput && enoughTravel && Math.abs(rawArmVel)>=SWING_FLICK_SPEED && Math.sign(rawArmVel)===dir;
+    return freshInput && enoughTravel && Math.abs(aimInput.sampleAngularVelocity)>=SWING_FLICK_SPEED && Math.sign(aimInput.sampleAngularVelocity)===dir;
   }
 
   function checkScratch(n, t){
@@ -2407,8 +2400,8 @@
     // Shift는 보조 입력/fallback으로만 허용하며, SLIDE처럼 긴 경로를 추적하지 않는다.
     const dir=n.type==="scratchCW"?1:-1;
     scratchCandidate=!!(scratchHeld&&aligned(n.angle,.026));
-    scratchMoveAmount=Math.abs(norm(armAngle-prevArmAngle));
-    scratchSpeed=Math.abs(rawArmVel);
+    scratchMoveAmount=Math.abs(aimInput.lastSampleDelta);
+    scratchSpeed=Math.abs(aimInput.sampleAngularVelocity);
     scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
     if(!scratchHeld){lastScratchResult="READY";return false;}
     if(!aligned(n.angle,.026)){lastScratchResult="MISS";return false;}
@@ -2519,71 +2512,61 @@
     }
   }
 
-  function updateArm(dt){
-    const tNow = now();
-    if(isAutoActive() && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)){
+  function resetAimInput(angle=-Math.PI/2){
+    Object.assign(aimInput,{rawAngle:angle,unwrappedAngle:angle,previousSampleAngle:null,sampleAngularVelocity:0,accumulatedCWTravel:0,accumulatedCCWTravel:0,pointerRadius:0,sampleCount:0,lastSampleTimestamp:0,centerDeadzoneActive:false,rebasePending:true,pendingSamples:0,lastSampleDelta:0});
+    rawInputAngle=judgementAimAngle=visualArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=angle; rawAngularVelocity=0; centerDeadzoneActive=false;
+  }
+  function processAimSample(x,y,timestamp,source="pointer"){
+    mouseX=x; mouseY=y; lastPointerSource=source;
+    const dx=x-cx, dy=y-cy, radius=Math.hypot(dx,dy);
+    const profile=source!=="touch"?aimStabilizerProfile():{mode:"OFF"};
+    const enter=profile.mode==="OFF" ? 1 : Math.max(24,hitR*.18);
+    const exit=profile.mode==="OFF" ? 2 : Math.max(24,hitR*.23);
+    aimInput.pointerRadius=cursorRadius=radius;
+    if(aimInput.centerDeadzoneActive ? radius<exit : radius<enter){
+      aimInput.centerDeadzoneActive=centerDeadzoneActive=true; aimInput.rebasePending=true;
       return;
     }
-
-    prevArmAngle=armAngle;
-
-    if(isAutoActive()){
-      const diff=norm(targetAngle-armAngle);
-      armAngle+=diff*clamp(1-Math.pow(.0001,dt),0,1);
-      rawArmVel=armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001);
-    }else if(keyA||keyD){
-      targetAngle += (keyD-keyA) * 9.5 * dt;
-      rawTargetAngle=targetAngle; stabilizedTargetAngle=targetAngle; lastValidTargetAngle=targetAngle;
-      const diff=norm(targetAngle-armAngle);
-      armAngle += diff * clamp(1-Math.pow(.00001,dt),0,1);
-      rawArmVel=armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001);
-      magnetTarget=null; centerDeadzoneActive=false; cursorRadius=hitR;
-    }else{
-      const dx=mouseX-cx, dy=mouseY-cy;
-      cursorRadius=Math.hypot(dx,dy);
-      const profile=lastPointerSource!=="touch"?aimStabilizerProfile():{mode:"OFF"};
-      const safetyRadius=1;
-      if(lastPointerSource!=="touch" && profile.mode!=="OFF"){
-        const enter=Math.max(24, hitR*.18), exit=Math.max(24, hitR*.23);
-        if(centerDeadzoneActive ? cursorRadius<exit : cursorRadius<enter){
-          centerDeadzoneActive=true;
-          rawTargetAngle=lastValidTargetAngle;
-        }else{
-          centerDeadzoneActive=false;
-          rawTargetAngle=Math.atan2(dy,dx);
-          lastValidTargetAngle=rawTargetAngle;
-        }
-      }else if(cursorRadius<safetyRadius){
-        centerDeadzoneActive=false;
-        rawTargetAngle=lastValidTargetAngle;
-      }else{
-        centerDeadzoneActive=false;
-        rawTargetAngle=Math.atan2(dy,dx);
-        lastValidTargetAngle=rawTargetAngle;
-      }
-      rawAngularVelocity=norm(rawTargetAngle-lastRawAngleForVelocity)/Math.max(dt,.001);
-      lastRawAngleForVelocity=rawTargetAngle;
-      targetAngle=rawTargetAngle;
-      let desired=targetAngle;
-      if(lastPointerSource!=="touch"){
-        desired=updateAimMagnet(desired, rawAngularVelocity);
-        if(profile.mode!=="OFF" && Math.abs(rawAngularVelocity)<profile.fastVel){
-          const slowFactor=clamp((profile.fastVel-Math.abs(rawAngularVelocity))/Math.max(profile.fastVel-profile.slowVel,.001),0,1);
-          const timeConstant=profile.slowTime*slowFactor;
-          if(timeConstant>0){
-            const alpha=1-Math.exp(-dt/timeConstant);
-            stabilizedTargetAngle=norm(stabilizedTargetAngle + norm(desired-stabilizedTargetAngle)*alpha);
-          }else stabilizedTargetAngle=desired;
-        }else stabilizedTargetAngle=desired;
-      }else{
-        magnetTarget=null; stabilizedTargetAngle=desired;
-      }
-      armAngle=stabilizedTargetAngle;
-      rawArmVel=rawAngularVelocity;
-      armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001);
+    const angle=Math.atan2(dy,dx);
+    rawInputAngle=rawTargetAngle=angle;
+    if(aimInput.rebasePending || aimInput.previousSampleAngle===null){
+      aimInput.previousSampleAngle=angle; aimInput.rawAngle=angle; aimInput.rebasePending=false;
+      aimInput.lastSampleTimestamp=timestamp; aimInput.centerDeadzoneActive=centerDeadzoneActive=false;
+      lastValidTargetAngle=angle; return;
     }
-
-    armAngle=norm(armAngle);
+    const delta=norm(angle-aimInput.previousSampleAngle);
+    const dt=Math.max((timestamp-aimInput.lastSampleTimestamp)/1000,.001);
+    aimInput.rawAngle=angle; aimInput.previousSampleAngle=angle; aimInput.unwrappedAngle+=delta;
+    aimInput.lastSampleDelta=delta; aimInput.sampleAngularVelocity=delta/dt; rawAngularVelocity=aimInput.sampleAngularVelocity;
+    if(delta>0) aimInput.accumulatedCWTravel+=delta; else aimInput.accumulatedCCWTravel+=-delta;
+    aimInput.sampleCount++; aimInput.pendingSamples++; aimInput.lastSampleTimestamp=timestamp;
+    aimInput.centerDeadzoneActive=centerDeadzoneActive=false; centerDeadzoneActive=false; lastValidTargetAngle=angle;
+  }
+  function updateArm(dt){
+    const tNow=now(); prevArmAngle=armAngle;
+    if(isAutoActive() && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)) return;
+    if(isAutoActive()||keyA||keyD){
+      if(keyA||keyD){ targetAngle+=(keyD-keyA)*9.5*dt; magnetTarget=null; }
+      const diff=norm(targetAngle-armAngle); armAngle=norm(armAngle+diff*clamp(1-Math.pow(.0001,dt),0,1));
+      judgementAimAngle=rawInputAngle=rawTargetAngle=armAngle; visualArmAngle=armAngle; rawArmVel=armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001); return;
+    }
+    const profile=lastPointerSource!=="touch"?aimStabilizerProfile():{mode:"OFF"};
+    targetAngle=rawInputAngle;
+    let desired=rawInputAngle;
+    if(lastPointerSource!=="touch" && profile.mode!=="OFF"){
+      desired=updateAimMagnet(desired,aimInput.sampleAngularVelocity);
+      if(Math.abs(aimInput.sampleAngularVelocity)<profile.fastVel && aimInput.pendingSamples){
+        const slowFactor=clamp((profile.fastVel-Math.abs(aimInput.sampleAngularVelocity))/Math.max(profile.fastVel-profile.slowVel,.001),0,1);
+        const alpha=1-Math.exp(-dt/Math.max(profile.slowTime*slowFactor,.001));
+        stabilizedTargetAngle=norm(stabilizedTargetAngle+norm(desired-stabilizedTargetAngle)*alpha);
+      } else stabilizedTargetAngle=desired;
+    } else { magnetTarget=null; stabilizedTargetAngle=desired; }
+    // OFF is deliberately direct outside its tiny crossing safety zone.
+    judgementAimAngle=profile.mode==="OFF" ? rawInputAngle : stabilizedTargetAngle;
+    armAngle=judgementAimAngle;
+    visualArmAngle=profile.mode==="OFF" ? rawInputAngle : stabilizedTargetAngle;
+    rawArmVel=rawAngularVelocity=aimInput.sampleAngularVelocity;
+    armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001); aimInput.pendingSamples=0;
   }
 
   function logAutoProcessing(n){
@@ -2835,7 +2818,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function drawArm(){
-    ctx.save(); ctx.translate(cx,cy); ctx.rotate(armAngle);
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(visualArmAngle);
     const c=filterHeld?COLORS.fx:"#5cfffb";
     ctx.save(); ctx.shadowBlur=12*visualScale("effect"); ctx.shadowColor=c; ctx.lineCap="round";
     ctx.strokeStyle="rgba(255,255,255,.22)"; ctx.lineWidth=21; ctx.beginPath(); ctx.arc(0,0,hitR,-DIAL_ARC_VISUAL,DIAL_ARC_VISUAL); ctx.stroke();
@@ -2845,6 +2828,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
     ctx.shadowBlur=9*visualScale("effect"); ctx.shadowColor=c; ctx.strokeStyle=c; ctx.lineWidth=5; ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(baseR*.33,0); ctx.lineTo(hitR*.93,0); ctx.stroke();
     ctx.restore();
+    // Small solid marker: this is the real judgement position, not the visual arm interpolation.
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(judgementAimAngle); ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(hitR,0,4.5,0,TAU); ctx.fill(); ctx.restore();
   }
 
   function currentFocusNote(t){
@@ -4357,8 +4342,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
     // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
     filterHeld = isAutoActive() || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
     scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
-    scratchMoveAmount=Math.abs(norm(armAngle-prevArmAngle));
-    scratchSpeed=Math.abs(rawArmVel);
+    scratchMoveAmount=Math.abs(aimInput.lastSampleDelta);
+    scratchSpeed=Math.abs(aimInput.sampleAngularVelocity);
     scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
     scratchCandidate=!!scratchHeld;
     updateAuto(t);
@@ -4563,12 +4548,14 @@ settingsOrigin=${settingsOrigin}`);
         <span>Mouse X/Y</span><strong>${mouseX.toFixed(0)}, ${mouseY.toFixed(0)}</strong>
         <span>Mouse/touch angle</span><strong>${formatAngle(mouseAngle)}</strong>
         <span>Distance from center</span><strong>${mouseDist.toFixed(1)}</strong>
-        <span>rawTargetAngle</span><strong>${formatAngle(rawTargetAngle)}</strong>
-        <span>stabilizedTargetAngle</span><strong>${formatAngle(stabilizedTargetAngle)}</strong>
-        <span>armAngle</span><strong>${formatAngle(armAngle)}</strong>
-        <span>cursorRadius</span><strong>${cursorRadius.toFixed(1)}</strong>
-        <span>centerDeadzone</span><strong>${formatBool(centerDeadzoneActive)}</strong>
-        <span>angularVelocity</span><strong>${formatNum(rawAngularVelocity,2)}</strong>
+        <span>rawInputAngle</span><strong>${formatAngle(rawInputAngle)}</strong>
+        <span>judgementAimAngle</span><strong>${formatAngle(judgementAimAngle)}</strong>
+        <span>visualArmAngle</span><strong>${formatAngle(visualArmAngle)}</strong>
+        <span>unwrappedAngle</span><strong>${formatNum(aimInput.unwrappedAngle,2)}</strong>
+        <span>pointerRadius</span><strong>${aimInput.pointerRadius.toFixed(1)}</strong>
+        <span>deadzone / rebase</span><strong>${formatBool(aimInput.centerDeadzoneActive)} / ${formatBool(aimInput.rebasePending)}</strong>
+        <span>sampleAngularVelocity</span><strong>${formatNum(aimInput.sampleAngularVelocity,2)}</strong>
+        <span>CW / CCW travel</span><strong>${formatNum(aimInput.accumulatedCWTravel,2)} / ${formatNum(aimInput.accumulatedCCWTravel,2)}</strong>
         <span>magnetTarget noteId</span><strong>${noteDebugId(magnetTarget)}</strong>
         <span>magnetAngleError</span><strong>${(magnetAngleError*180/Math.PI).toFixed(1)}°</strong>
         <span>stabilizer mode</span><strong>${inputSettings.aimStabilizer}</strong>
@@ -4911,15 +4898,14 @@ settingsOrigin=${settingsOrigin}`);
 
   function updateGameplayPointerFromEvent(e,source){
     if(isAimPointerBlockedTarget(e.target))return;
-    const point=e.touches?.[0] || e;
-    if(!Number.isFinite(point.clientX)||!Number.isFinite(point.clientY))return;
-    mouseX=point.clientX; mouseY=point.clientY;
-    lastPointerSource=source;
-    lastPointerMs=performance.now(); pointerActive=true;
-    if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){
-      tutorialState.pointerMoved=true;
-      tutorialState.lastSource=source;
+    const samples=typeof e.getCoalescedEvents==="function" ? e.getCoalescedEvents() : [e];
+    for(const point of samples.length?samples:[e]){
+      if(!Number.isFinite(point.clientX)||!Number.isFinite(point.clientY))continue;
+      // The gameplay canvas uses viewport CSS pixels, so client coordinates are its native coordinate system.
+      processAimSample(point.clientX,point.clientY,Number.isFinite(point.timeStamp)?point.timeStamp:performance.now(),source);
     }
+    lastPointerMs=performance.now(); pointerActive=true;
+    if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){ tutorialState.pointerMoved=true; tutorialState.lastSource=source; }
   }
   if(window.PointerEvent){
     window.addEventListener("pointermove",e=>{ if(!(isCoarsePointerMobile()&&e.pointerType==="touch")) updateGameplayPointerFromEvent(e,e.pointerType==="touch"?"touch":"pointer"); },{passive:true});
@@ -4940,7 +4926,7 @@ settingsOrigin=${settingsOrigin}`);
   }
   window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerSource="pointer"; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;}});
   window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;}});
-  window.addEventListener("touchstart",e=>{ if(isCoarsePointerMobile()) return; if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;lastPointerSource="touch";} if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
+  window.addEventListener("touchstart",e=>{ if(isCoarsePointerMobile()) return; if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){ updateGameplayPointerFromEvent(e,"touch"); } if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;scratchHeld=true;} else if(running)onCut();},{passive:true});
   window.addEventListener("touchend",e=>{ if(isCoarsePointerMobile()) return; if(!e.touches||e.touches.length<2){mouseDownRight=false;scratchHeld=false;} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
   function bindMobileGameButton(btn,role){
     if(!btn||!window.PointerEvent)return;
@@ -5552,6 +5538,8 @@ running=${running}`);
       markFirstPendingTutorialNoteMissed:()=>{ const n=chart.find(note=>!note.done&&!note.missed); if(n){ miss(n,"TEST_FORCED_MISS"); return true; } return false; },
       clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
       state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialFinalMixRetryScheduled:tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:tutorialState.mixRetryCount, tutorialChartFinalizationCount:tutorialState.chartFinalizationCount, tutorialLastChartFinalization:tutorialState.lastChartFinalization, tutorialChartSettled:tutorialChartSettled(), tutorialCompleteCount:tutorialState.completeCount, tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount, chartDoneStates:chart.map(n=>({type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
+      aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget}),
+      injectAimSamples:(samples,mode="OFF")=>{ resetAimInput(samples[0]?.angle??-Math.PI/2); const previous=inputSettings.aimStabilizer; inputSettings.aimStabilizer=mode; for(const sample of samples){ const angle=sample.angle, radius=sample.radius??Math.max(hitR,80); processAimSample(cx+Math.cos(angle)*radius,cy+Math.sin(angle)*radius,sample.timestamp??performance.now(),"pointer"); } updateArm(1/60); const result=window.CircleMixTestApi.aimInputState(); inputSettings.aimStabilizer=previous; return result; },
       lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
       setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
       magnetProbe:(mode,velocity)=>{ const previousMode=inputSettings.aimStabilizer, previousTarget=magnetTarget, previousError=magnetAngleError, previousFocus=focusNote; try{ const probeNow=now(); const probeNote={type:"cut", angle:0, done:false, missed:false, spawnTime:probeNow-1, hitTime:probeNow}; inputSettings.aimStabilizer=mode; focusNote=probeNote; magnetTarget=probeNote; magnetAngleError=0; const result=updateAimMagnet(0, velocity); const disengaged=magnetTarget===null; return {mode, velocity, disengaged, result, profile:aimStabilizerProfile()}; } finally { inputSettings.aimStabilizer=previousMode; magnetTarget=previousTarget; magnetAngleError=previousError; focusNote=previousFocus; } },

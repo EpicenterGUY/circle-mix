@@ -525,6 +525,24 @@ async function dismissStartupOverlays(page){
     await runRapidSkipRegression(mobilePage, 'mobile');
     await runFinalTutorialRegression(mobilePage, 'mobile');
 
+    const aimDiagnostics = await page.evaluate(() => {
+      const api=window.CircleMixTestApi, rad=Math.PI/180;
+      const seq=(degrees, radius=180) => api.injectAimSamples(degrees.map((d,i)=>({angle:d*rad,radius,timestamp:1000+i*10})), 'OFF');
+      const cw720=seq(Array.from({length:33},(_,i)=>i*22.5));
+      const ccw720=seq(Array.from({length:33},(_,i)=>-i*22.5));
+      const wrapCW=seq([359,1]), wrapCCW=seq([1,359]);
+      const jump=seq([0,180]);
+      const crossing=api.injectAimSamples([{angle:0,radius:180,timestamp:1},{angle:Math.PI,radius:.5,timestamp:2},{angle:Math.PI/2,radius:.5,timestamp:3},{angle:Math.PI,radius:180,timestamp:4},{angle:Math.PI+.1,radius:180,timestamp:5}], 'OFF');
+      return {cw720,ccw720,wrapCW,wrapCCW,jump,crossing};
+    });
+    const near=(a,b,e=.03)=>Math.abs(a-b)<e;
+    assert.ok(near(aimDiagnostics.cw720.accumulatedCWTravel,4*Math.PI,.05), `CW 720 ${JSON.stringify(aimDiagnostics.cw720)}`);
+    assert.ok(near(aimDiagnostics.ccw720.accumulatedCCWTravel,4*Math.PI,.05), `CCW 720 ${JSON.stringify(aimDiagnostics.ccw720)}`);
+    assert.ok(near(aimDiagnostics.wrapCW.unwrappedAngle-(359*Math.PI/180),2*Math.PI/180,.01), `359 -> 1 ${JSON.stringify(aimDiagnostics.wrapCW)}`);
+    assert.ok(near(aimDiagnostics.wrapCCW.unwrappedAngle-(Math.PI/180),-2*Math.PI/180,.01), `1 -> 359 ${JSON.stringify(aimDiagnostics.wrapCCW)}`);
+    assert.ok(near(aimDiagnostics.jump.judgementAimAngle,Math.PI,.01) && !aimDiagnostics.jump.magnetTarget, `OFF jump ${JSON.stringify(aimDiagnostics.jump)}`);
+    assert.ok(aimDiagnostics.crossing.accumulatedCWTravel<.2, `deadzone rebase ${JSON.stringify(aimDiagnostics.crossing)}`);
+
     await browser.close();
     assert.deepEqual([...errors, ...mobileErrors], []);
     console.log('PASS browser regression', {stillMouseLoop, hudHoverLoop, songResults, mobile:{frameDelta:mobileLoop.frameDelta}});
