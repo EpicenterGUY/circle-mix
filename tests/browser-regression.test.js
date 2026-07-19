@@ -91,14 +91,21 @@ async function runRapidSkipRegression(page, label){
     await clickSkipRapidly(page, 2, interval);
     await waitFor(page, arg => {
       const st = window.CircleMixTestApi.state();
-      return st.tutorialStepIndex >= Math.min(arg.beforeIndex + 2, 17) || !st.tutorialMode;
+      return !st.tutorialMode || (
+        st.tutorialStepIndex >= Math.min(arg.beforeIndex + 2, 17) &&
+        st.pendingTutorialSkipCount === 0 &&
+        st.tutorialTransitioning === false &&
+        st.tutorialTransitionState === 'IDLE'
+      );
     }, `${label} rapid skip ${interval}ms`, 8000, {beforeIndex:before.tutorialStepIndex});
     const after = await page.evaluate(() => window.CircleMixTestApi.state());
     assert.ok(after.tutorialStepIndex >= before.tutorialStepIndex, `${label} ${interval}ms monotonic ${JSON.stringify({before, after})}`);
     assert.equal(after.pendingTutorialSkipCount, 0, `${label} ${interval}ms queue drained`);
-    const loop = await measureLoop(page, 500);
+    const loop = await measureLoop(page, 700);
     assert.ok(loop.frameDelta > 5, `${label} ${interval}ms RAF survives ${JSON.stringify(loop)}`);
     assert.ok(loop.renderDelta > 5, `${label} ${interval}ms render survives ${JSON.stringify(loop)}`);
+    assert.ok(loop.timeDelta > 0.2, `${label} ${interval}ms game time advances ${JSON.stringify(loop)}`);
+    assert.ok(loop.wallTimeDelta > 500, `${label} ${interval}ms wall time advances ${JSON.stringify(loop)}`);
   }
 }
 async function reachFinalTutorialStep(page, label){
