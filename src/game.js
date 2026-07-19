@@ -466,13 +466,22 @@
     document.body.classList.toggle("mobileQualityAutoDegraded", mobile&&getMobileQuality()==="AUTO"&&(SESSION_QUALITY.autoDprCap<1.5||SESSION_QUALITY.effectMode==="PERFORMANCE"));
   }
 
+  function validViewportSize(value){
+    return !!value &&
+      Number.isFinite(Number(value.width)) &&
+      Number.isFinite(Number(value.height)) &&
+      Number(value.width)>0 &&
+      Number(value.height)>0;
+  }
   function resize(forcedSize=null){
     const dpr = getRenderDpr();
     currentRenderDpr = dpr;
     syncMobilePerformanceClass();
     const rectSource = document.fullscreenElement ? (gameRoot || document.documentElement) : null;
     const rect = rectSource ? rectSource.getBoundingClientRect() : null;
-    const viewport = forcedSize || getViewportSize();
+    const viewport = validViewportSize(forcedSize)
+      ? {width:Number(forcedSize.width), height:Number(forcedSize.height)}
+      : getViewportSize();
     W=Math.floor(rect && rect.width ? rect.width : viewport.width);
     H=Math.floor(rect && rect.height ? rect.height : viewport.height);
     if(W<=0 || H<=0){
@@ -518,10 +527,11 @@
     baseR = outerR / 1.86;
     hitR = baseR;
   }
-  window.addEventListener("resize", resize);
-  window.addEventListener("orientationchange", resize);
+  const handleViewportResize=()=>resize();
+  window.addEventListener("resize", handleViewportResize);
+  window.addEventListener("orientationchange", handleViewportResize);
   if(window.ResizeObserver){
-    new ResizeObserver(resize).observe(document.documentElement);
+    new ResizeObserver(handleViewportResize).observe(document.documentElement);
   }
   resize();
 
@@ -5615,7 +5625,7 @@ running=${running}`);
       completeTutorial:()=>completeTutorial(),
       markFirstPendingTutorialNoteMissed:()=>{ const n=chart.find(note=>!note.done&&!note.missed); if(n){ miss(n,"TEST_FORCED_MISS"); return true; } return false; },
       clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
-      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialFinalMixRetryScheduled:tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:tutorialState.mixRetryCount, tutorialChartFinalizationCount:tutorialState.chartFinalizationCount, tutorialLastChartFinalization:tutorialState.lastChartFinalization, tutorialChartSettled:tutorialChartSettled(), tutorialCompleteCount:tutorialState.completeCount, tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount, chartDoneStates:chart.map(n=>({type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld:!!scratchHeld, mouseDownRight}),
+      state:()=>({running:!!running, paused:!!paused, tutorialMode:!!tutorialMode, tutorialStepIndex:Number(tutorialStepIndex), tutorialTargetProgress:Number(tutorialSteps[tutorialStepIndex]?._hit||0), tutorialPointerMoved:!!tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince==null?null:Number(tutorialState.exploreInsideSince), tutorialInputEnabledAt:Number(tutorialState.inputEnabledAt), tutorialSuccessCount:Number(tutorialState.successCount), tutorialValidUserInputCount:Number(tutorialState.validUserInputCount), tutorialLastSource:tutorialState.lastSource||null, tutorialCurrentJudgement:tutorialState.currentJudgement||null, tutorialTransitioning:!!tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState||null, pendingTutorialSkipCount:Number(tutorialState.pendingSkipQueue.length), tutorialStepToken:Number(tutorialStepToken), tutorialAttemptId:Number(tutorialAttemptId), tutorialTimerCount:Number(tutorialState.timers.length), tutorialFinalMixRetryScheduled:!!tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:Number(tutorialState.mixRetryCount), tutorialChartFinalizationCount:Number(tutorialState.chartFinalizationCount), tutorialLastChartFinalization:tutorialState.lastChartFinalization||null, tutorialChartSettled:!!tutorialChartSettled(), tutorialCompleteCount:Number(tutorialState.completeCount), tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:Number(tutorialState.rafIds.length+(raf?1:0)), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount:Number(judgedCount), chartDoneStates:chart.map(n=>({type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:Number(chart.length), gameTime:Number(now()), browserNow:Number(performance.now()), frameCount:Number(testFrameCount), renderCount:Number(testRenderCount), W:Number(W), H:Number(H), lastPointerSource:lastPointerSource||null, pointerActive:!!pointerActive, mouseX:Number(mouseX), mouseY:Number(mouseY), armAngle:Number(armAngle), rawArmVel:Number(rawArmVel), rawAngularVelocity:Number(rawAngularVelocity), cx:Number(cx), cy:Number(cy), hitR:Number(hitR), selectedSongId:selectedSongId||null, selectedDifficultyId:selectedDifficultyId||null, mobileAimPointerId:mobileAimPointerId==null?null:Number(mobileAimPointerId), mobileActionPointerId:mobileActionPointerId==null?null:Number(mobileActionPointerId), mobileScratchPointerId:mobileScratchPointerId==null?null:Number(mobileScratchPointerId), actionHeld:!!keys.MouseLeft, scratchHeld:!!scratchHeld, mouseDownRight:!!mouseDownRight}),
       aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget}),
       visualArmProfile:()=>visualArmProfile(),
       traceVisualProfile:()=>traceVisualProfile(),
@@ -5628,6 +5638,7 @@ running=${running}`);
       lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
       setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
       magnetProbe:(mode,velocity)=>{ const previousMode=inputSettings.aimStabilizer, previousTarget=magnetTarget, previousError=magnetAngleError, previousFocus=focusNote; try{ const probeNow=now(); const probeNote={type:"cut", angle:0, done:false, missed:false, spawnTime:probeNow-1, hitTime:probeNow}; inputSettings.aimStabilizer=mode; focusNote=probeNote; magnetTarget=probeNote; magnetAngleError=0; const result=updateAimMagnet(0, velocity); const disengaged=magnetTarget===null; return {mode, velocity, disengaged, result, profile:aimStabilizerProfile()}; } finally { inputSettings.aimStabilizer=previousMode; magnetTarget=previousTarget; magnetAngleError=previousError; focusNote=previousFocus; } },
+      triggerViewportResizeObserverCallback:()=>{ handleViewportResize(); return window.CircleMixTestApi.state(); },
       resetCounters:()=>{ testFrameCount=0; testRenderCount=0; }
     };
   }

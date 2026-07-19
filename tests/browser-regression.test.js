@@ -4,6 +4,46 @@ const http = require('node:http');
 const path = require('node:path');
 const { chromium, devices } = require('playwright');
 
+const artifactDir = process.env.BROWSER_ARTIFACTS_DIR;
+const diagnosticContexts = new Set();
+const diagnosticPages = new Set();
+const diagnosticLogs = new Map();
+let activeBrowser = null;
+
+async function registerDiagnosticContext(context){
+  diagnosticContexts.add(context);
+  if(artifactDir) await context.tracing.start({screenshots:true, snapshots:true, sources:true});
+  return context;
+}
+function registerDiagnosticPage(page){ diagnosticPages.add(page); return page; }
+function unregisterDiagnosticContext(context, page){ diagnosticContexts.delete(context); if(page){ diagnosticPages.delete(page); diagnosticLogs.delete(page); } }
+async function captureFailureArtifacts(error){
+  if(!artifactDir) return;
+  fs.mkdirSync(artifactDir, {recursive:true});
+  const report = {error:{message:error?.message || String(error), stack:error?.stack || null}, pages:[]};
+  for(const [index, page] of [...diagnosticPages].entries()){
+    const prefix = `page-${index + 1}`;
+    try{
+      await page.screenshot({path:path.join(artifactDir, `${prefix}.png`), fullPage:true});
+      const snapshot = await page.evaluate(() => {
+        const visible = id => { const element=document.getElementById(id); if(!element) return null; const style=getComputedStyle(element); return !element.hidden && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0; };
+        return {
+          state: window.CircleMixTestApi?.state?.() ?? null,
+          url: location.href,
+          bodyClass: document.body?.className ?? null,
+          overlays: Object.fromEntries(['startLayer','tutorialPrompt','songSelect','updateLogOverlay','tutorialHud','tutorialComplete','rotateOverlay'].map(id => [id, visible(id)]))
+        };
+      });
+      fs.writeFileSync(path.join(artifactDir, `${prefix}-state.json`), JSON.stringify(snapshot, null, 2));
+      report.pages.push({prefix, ...snapshot, errors:diagnosticLogs.get(page) || []});
+    }catch(captureError){ report.pages.push({prefix, captureError:captureError.message}); }
+  }
+  for(const [index, context] of [...diagnosticContexts].entries()){
+    try{ await context.tracing.stop({path:path.join(artifactDir, `context-${index + 1}-trace.zip`)}); }catch(_){}
+  }
+  fs.writeFileSync(path.join(artifactDir, 'failure-report.json'), JSON.stringify(report, null, 2));
+}
+
 function wait(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
 function waitForServer(url, timeoutMs=5000){
   const deadline = Date.now() + timeoutMs;
@@ -57,7 +97,7 @@ async function waitForStableCircleMixPage(page, label){
         typeof api.startTutorial === 'function' &&
         (!('serviceWorker' in navigator) || !!navigator.serviceWorker.controller);
     }, beforeTimeOrigin).catch(() => false);
-    if(stable) return;
+    if(stable){ await assertStateContract(page, label); return; }
   }
   const state = await page.evaluate(() => ({
     readyState: document.readyState,
@@ -69,6 +109,28 @@ async function waitForStableCircleMixPage(page, label){
     timeOrigin: performance.timeOrigin
   })).catch(error => ({stateReadError:error.message}));
   throw new Error(`Timed out waiting for stable CIRCLE MIX page (${label}); state=${JSON.stringify(state)}`);
+}
+async function assertStateContract(page, label){
+  const state = await page.evaluate(() => window.CircleMixTestApi?.state?.());
+  assert.ok(state && typeof state === 'object', `${label} exposes CircleMixTestApi.state()`);
+  const booleans = ['running','paused','tutorialMode','tutorialPointerMoved','tutorialTransitioning','tutorialFinalMixRetryScheduled','tutorialChartSettled','tutorialHudHidden','tutorialCompleteVisible','inputEnabled','pointerActive','actionHeld','scratchHeld','mouseDownRight'];
+  const numbers = ['tutorialStepIndex','tutorialTargetProgress','tutorialInputEnabledAt','tutorialSuccessCount','tutorialValidUserInputCount','pendingTutorialSkipCount','tutorialStepToken','tutorialAttemptId','tutorialTimerCount','tutorialFinalMixRetryCount','tutorialChartFinalizationCount','tutorialCompleteCount','tutorialRafCount','judgedCount','chartLength','gameTime','browserNow','frameCount','renderCount','mouseX','mouseY','armAngle','rawArmVel','rawAngularVelocity','W','H','cx','cy','hitR'];
+  for(const key of booleans) assert.equal(typeof state[key], 'boolean', `${label} state.${key} must be an explicit boolean`);
+  for(const key of numbers) assert.ok(Number.isFinite(state[key]), `${label} state.${key} must be a finite explicit number`);
+  for(const key of ['tutorialExploreInsideSince','mobileAimPointerId','mobileActionPointerId','mobileScratchPointerId']) assert.ok(state[key] === null || typeof state[key] === 'number', `${label} state.${key} must be null or a number`);
+  return state;
+}
+async function assertViewportStateAfter(page, action, label){
+  await page.evaluate(action);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const state = await assertStateContract(page, label);
+  for(const key of ['W','H','cx','cy','hitR']) assert.ok(Number.isFinite(state[key]), `${label} state.${key} remains finite after viewport event`);
+}
+async function runViewportResizeRegression(page, label){
+  await assertStateContract(page, `${label} initial viewport`);
+  await assertViewportStateAfter(page, () => window.dispatchEvent(new Event('resize')), `${label} window resize`);
+  await assertViewportStateAfter(page, () => window.CircleMixTestApi.triggerViewportResizeObserverCallback(), `${label} ResizeObserver callback`);
+  await assertViewportStateAfter(page, () => window.dispatchEvent(new Event('orientationchange')), `${label} orientationchange`);
 }
 async function lanePoint(page, lane){ return page.evaluate(l => window.CircleMixTestApi.lanePoint(l), lane); }
 async function moveToLane(page, lane){ const p = await lanePoint(page, lane); await page.mouse.move(p.x, p.y); return p; }
@@ -228,15 +290,17 @@ async function runFinalTutorialRegression(page, label){
 }
 
 async function runFreshDirectPlayRegression(browser, contextOptions, label, {promptAnswered=false}={}){
-  const context = await browser.newContext(contextOptions);
+  const context = await registerDiagnosticContext(await browser.newContext(contextOptions));
   if(promptAnswered){
     await context.addInitScript(() => localStorage.setItem('circleMixTutorialPromptAnswered', 'true'));
   }
   const page = await context.newPage();
   const errors = await collectErrors(page);
+  let completed=false;
   try{
     await page.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
     await waitForStableCircleMixPage(page, `${label} direct play`);
+    await runViewportResizeRegression(page, `${label} direct play`);
     await dismissStartupOverlays(page);
     if(!promptAnswered){
       await page.locator('#tutorialPromptSkip').click();
@@ -289,14 +353,20 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
     assert.ok(loop.timeDelta > 0.2, `${label} direct game time advances ${JSON.stringify(loop)}`);
     assert.ok(loop.wallTimeDelta > 500, `${label} direct wall time advances ${JSON.stringify(loop)}`);
     assert.deepEqual(errors, [], `${label} direct startup errors`);
+    completed=true;
     return loop;
   } finally {
-    await context.close();
+    if(completed){
+      unregisterDiagnosticContext(context, page);
+      await context.close();
+    }
   }
 }
 
 async function collectErrors(page){
+  registerDiagnosticPage(page);
   const errors = [];
+  diagnosticLogs.set(page, errors);
   page.on('pageerror', error => errors.push(`pageerror: ${error.stack || error.message}`));
   page.on('console', msg => { if(msg.type() === 'error') errors.push(`console.error: ${msg.text()}`); });
   return errors;
@@ -416,6 +486,7 @@ async function dismissStartupOverlays(page){
   try{
     await waitForServer('http://127.0.0.1:4173/index.html');
     const browser = await chromium.launch({headless:true});
+    activeBrowser = browser;
     const freshDesktopLoop = await runFreshDirectPlayRegression(
       browser,
       {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
@@ -432,7 +503,7 @@ async function dismissStartupOverlays(page){
       {...devices['iPhone 12'], viewport:{width:844,height:390}, screen:{width:844,height:390}},
       'fresh mobile'
     );
-    const desktop = await browser.newContext({viewport:{width:1280,height:720}, hasTouch:false, isMobile:false});
+    const desktop = await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}, hasTouch:false, isMobile:false}));
     const page = await desktop.newPage();
     const errors = await collectErrors(page);
     await page.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
@@ -443,10 +514,10 @@ async function dismissStartupOverlays(page){
       updateLogVisible: (() => { const overlay=document.getElementById('updateLogOverlay'); return !!overlay && !overlay.hidden && overlay.classList.contains('show'); })(),
       cacheNames: await caches.keys()
     }));
-    assert.equal(releaseMetadata.version, '0.9.10', `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
-    assert.equal(releaseMetadata.changelogVersion, '0.9.10', `latest changelog ${JSON.stringify(releaseMetadata)}`);
+    assert.match(releaseMetadata.version || '', /^\d+\.\d+\.\d+$/, `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
+    assert.equal(releaseMetadata.changelogVersion, releaseMetadata.version, `latest changelog ${JSON.stringify(releaseMetadata)}`);
     assert.equal(releaseMetadata.updateLogVisible, true, `new release auto-opens UPDATE LOG ${JSON.stringify(releaseMetadata)}`);
-    assert.ok(releaseMetadata.cacheNames.includes('circle-mix-v0.9.10-app'), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);
+    assert.ok(releaseMetadata.cacheNames.includes(`circle-mix-v${releaseMetadata.version}-app`), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);
     await dismissStartupOverlays(page);
 
     await page.evaluate(() => {
@@ -596,7 +667,7 @@ async function dismissStartupOverlays(page){
     const separatedMarker = await page.evaluate(() => window.CircleMixTestApi.judgementMarkerVisibleFor(0, Math.PI/18));
     assert.equal(separatedMarker, true, 'separated visual and judgement angles show the outline marker');
 
-    const mobile = await browser.newContext({...devices['iPhone 12'], viewport:{width:844,height:390}, screen:{width:844,height:390}});
+    const mobile = await registerDiagnosticContext(await browser.newContext({...devices['iPhone 12'], viewport:{width:844,height:390}, screen:{width:844,height:390}}));
     const mobilePage = await mobile.newPage();
     const mobileErrors = await collectErrors(mobilePage);
     await mobilePage.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
@@ -670,10 +741,16 @@ async function dismissStartupOverlays(page){
     assert.equal(aimDiagnostics.stale.sampleAngularVelocity, 0, `stale velocity ${JSON.stringify(aimDiagnostics.stale)}`);
     assert.ok(aimDiagnostics.keyCW.accumulatedCWTravel>0 && aimDiagnostics.keyCCW.accumulatedCCWTravel>0, `keyboard travel ${JSON.stringify({keyCW:aimDiagnostics.keyCW,keyCCW:aimDiagnostics.keyCCW})}`);
 
-    await browser.close();
     assert.deepEqual([...errors, ...mobileErrors], []);
     console.log('PASS browser regression', {freshDesktopLoop, answeredDesktopLoop, freshMobileLoop, stillMouseLoop, hudHoverLoop, songResults, mobile:{frameDelta:mobileLoop.frameDelta}});
+    await browser.close();
+    activeBrowser = null;
   } finally {
     server.close();
   }
-})().catch(error => { console.error(error); process.exit(1); });
+})().catch(async error => {
+  console.error(error);
+  await captureFailureArtifacts(error);
+  await activeBrowser?.close().catch(() => {});
+  process.exit(1);
+});
