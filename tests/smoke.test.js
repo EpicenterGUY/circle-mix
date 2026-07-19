@@ -175,8 +175,8 @@ assert.equal(JSON.stringify(mirror.charts[difficulty].notes), JSON.stringify(bun
 test("index and service worker use the same PWA cache query", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260719-developer-self-test-1/);
-assert.match(sw, /20260719-developer-self-test-1/);
+assert.match(index, /20260719-aim-visual-1/);
+assert.match(sw, /20260719-aim-visual-1/);
 assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
@@ -263,10 +263,10 @@ const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.12"/);
-assert.match(pwa, /const VERSION="0\.9\.12"/);
-assert.match(sw, /const VERSION = "0\.9\.12"/);
-assert.match(changelog, /version:\s*"0\.9\.12"/);
+assert.match(version, /version:\s*"0\.9\.14"/);
+assert.match(pwa, /const VERSION="0\.9\.14"/);
+assert.match(sw, /const VERSION = "0\.9\.14"/);
+assert.match(changelog, /version:\s*"0\.9\.14"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {
@@ -326,6 +326,13 @@ assert.match(lastBodyRule, /overflow:hidden/);
 assert.doesNotMatch(css.slice(css.lastIndexOf("body.safeTitle{")), /body\.safeTitle\{[^}]*overflow:auto/);
 assert.doesNotMatch(css.slice(css.lastIndexOf("body.safeTitle #safeMenu{")), /body\.safeTitle #safeMenu\{[^}]*overflow:auto/);
 });
+test("AUTO PC aim resolves to ABSOLUTE and LOCKED remains explicit", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+assert.match(src, /function effectivePcAimMode\(\)\{ return inputSettings\.pcAimMode==="LOCKED" \? "LOCKED" : "ABSOLUTE"; \}/);
+assert.match(src, /function wantsLockedAim\(pointerType="mouse"\)\{ return pointerType==="mouse" && !isCoarsePointerMobile\(\) && inputSettings\.pcAimMode==="LOCKED" && !pointerLockFallback; \}/);
+assert.match(src, /PC AIM " \+ inputSettings\.pcAimMode \+ \(inputSettings\.pcAimMode==="AUTO" \? " · ABSOLUTE" : ""\)/);
+});
+
 test("PC input runtime has no broad updateArm exception suppression", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
 assert.doesNotMatch(src, /function updateArmSafely/);
