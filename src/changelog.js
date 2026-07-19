@@ -7,6 +7,26 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.14",
+    date: "2026-07-19",
+    title: "Aim Visual Mode",
+    summary: "판정 입력과 분리된 조준선 시각 보간 옵션을 추가",
+    changes: [
+      { category: "AIM", text: "AIM VISUAL DIRECT / SMOOTH 선택 추가: SMOOTH는 시각 조준선만 부드럽게 표시" },
+      { category: "INPUT", text: "빠른 이동·급반전·180도 이동은 SMOOTH도 즉시 현재 판정 위치를 표시" }
+    ]
+  },
+  {
+    version: "0.9.13",
+    date: "2026-07-19",
+    title: "PC Aim Mode Default",
+    summary: "데스크톱 AUTO 에임이 Pointer Lock을 강제하지 않고 ABSOLUTE 에임으로 동작하도록 정리",
+    changes: [
+      { category: "INPUT", text: "PC AIM AUTO는 일반 마우스에서 ABSOLUTE 입력을 사용하고 Pointer Lock을 요청하지 않음" },
+      { category: "INPUT", text: "LOCKED는 설정에서 명시적으로 선택한 경우에만 상대좌표 Pointer Lock을 활성화" }
+    ]
+  },
+  {
     version: "0.9.12",
     date: "2026-07-19",
     title: "Developer Input & Note Self Test",

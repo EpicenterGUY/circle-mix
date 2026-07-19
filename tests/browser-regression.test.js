@@ -540,6 +540,18 @@ async function runDeterministicAimAndCutRegression(browser){
     const initial = await page.evaluate(() => window.CircleMixTestApi.startDeterministicChart());
     assert.equal(initial.chartLength, 9, 'test-only deterministic chart has every supported gesture family');
     assert.deepEqual(initial.chartDoneStates.map(note => note.id), ['test-cut-0','test-fx-0','test-swing-cw-0','test-swing-ccw-0','test-slide-cw-0','test-slide-ccw-0','test-trace-0','test-scratch-cw-0','test-scratch-ccw-0']);
+    const pcAimModes = await page.evaluate(() => {
+      const api=window.CircleMixTestApi;
+      api.setPcAimMode('AUTO'); const auto=api.pcAimModeState();
+      api.setPcAimMode('ABSOLUTE'); const absolute=api.pcAimModeState();
+      api.setPcAimMode('LOCKED'); const locked=api.pcAimModeState();
+      return {auto,absolute,locked};
+    });
+    assert.deepEqual(pcAimModes.auto, {selected:'AUTO',effective:'ABSOLUTE',wantsLockedMouse:false,pointerLockRequested:false,pointerLockActive:false}, `AUTO keeps desktop mouse absolute ${JSON.stringify(pcAimModes)}`);
+    assert.deepEqual(pcAimModes.absolute, {selected:'ABSOLUTE',effective:'ABSOLUTE',wantsLockedMouse:false,pointerLockRequested:false,pointerLockActive:false}, `ABSOLUTE does not request pointer lock ${JSON.stringify(pcAimModes)}`);
+    assert.equal(pcAimModes.locked.selected, 'LOCKED');
+    assert.equal(pcAimModes.locked.effective, 'LOCKED');
+    assert.equal(pcAimModes.locked.wantsLockedMouse, true, `only explicit LOCKED enables pointer lock ${JSON.stringify(pcAimModes)}`);
     for(const degrees of [0,45,90,135,180,225,270,315]){
       const sample = await page.evaluate(deg => {
         const st=window.CircleMixTestApi.state(), a=deg*Math.PI/180;
@@ -551,6 +563,19 @@ async function runDeterministicAimAndCutRegression(browser){
       assert.ok(Math.abs(shortestAngleDifference(sample.rawInputAngle, degrees*Math.PI/180)) < .02, `absolute ${degrees}° reaches raw input angle`);
       assert.ok(Math.abs(shortestAngleDifference(sample.judgementAimAngle, degrees*Math.PI/180)) < .02, `absolute ${degrees}° reaches judgement angle`);
     }
+    const aimVisual = await page.evaluate(() => {
+      const api=window.CircleMixTestApi, st=api.state(), point=(a)=>[st.cx+Math.cos(a)*st.hitR,st.cy+Math.sin(a)*st.hitR];
+      api.setPcAimMode('ABSOLUTE'); api.setAimStabilizer('OFF'); api.setAimVisual('SMOOTH');
+      api.testInput.aim(...point(0),performance.now(),'mouse'); api.advanceTestClock(.02);
+      api.testInput.aim(...point(.12),performance.now()+200,'mouse'); api.advanceTestClock(.005); const fine=api.state();
+      api.testInput.aim(...point(Math.PI),performance.now()+400,'mouse'); const halfTurn=api.state();
+      api.setAimVisual('DIRECT'); api.testInput.aim(...point(-Math.PI/2),performance.now()+600,'mouse'); const direct=api.state();
+      return {fine,halfTurn,direct};
+    });
+    assert.ok(Math.abs(shortestAngleDifference(aimVisual.fine.rawInputAngle,.12))<.02 && Math.abs(shortestAngleDifference(aimVisual.fine.judgementAimAngle,.12))<.02, `SMOOTH does not delay raw or judgement ${JSON.stringify(aimVisual.fine)}`);
+    assert.ok(Math.abs(shortestAngleDifference(aimVisual.fine.visualArmAngle,.12))>.001, `SMOOTH only interpolates visual arm ${JSON.stringify(aimVisual.fine)}`);
+    assert.ok(Math.abs(shortestAngleDifference(aimVisual.halfTurn.visualArmAngle,Math.PI))<.02 && Math.abs(shortestAngleDifference(aimVisual.halfTurn.judgementAimAngle,Math.PI))<.02, `SMOOTH catches up on half turn ${JSON.stringify(aimVisual.halfTurn)}`);
+    assert.ok(Math.abs(shortestAngleDifference(aimVisual.direct.visualArmAngle,-Math.PI/2))<.02 && Math.abs(shortestAngleDifference(aimVisual.direct.judgementAimAngle,-Math.PI/2))<.02, `DIRECT visual remains immediate ${JSON.stringify(aimVisual.direct)}`);
     const locked = await page.evaluate(() => {
       const setup=()=>{
         const api=window.CircleMixTestApi; api.startDeterministicChart(); api.setPcAimMode('LOCKED');
