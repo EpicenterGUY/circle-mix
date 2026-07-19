@@ -566,15 +566,24 @@ async function runDeterministicAimAndCutRegression(browser){
     const aimVisual = await page.evaluate(() => {
       const api=window.CircleMixTestApi, st=api.state(), point=(a)=>[st.cx+Math.cos(a)*st.hitR,st.cy+Math.sin(a)*st.hitR];
       api.setPcAimMode('ABSOLUTE'); api.setAimStabilizer('OFF'); api.setAimVisual('SMOOTH');
+      api.setVisualResponse('FAST');
       api.testInput.aim(...point(0),performance.now(),'mouse'); api.advanceTestClock(.02);
       api.testInput.aim(...point(.12),performance.now()+200,'mouse'); api.advanceTestClock(.005); const fine=api.state();
-      api.testInput.aim(...point(Math.PI),performance.now()+400,'mouse'); const halfTurn=api.state();
+      const slow=[]; for(let i=1;i<=4;i++){ api.testInput.aim(...point(.12+i*.03),performance.now()+220+i*80,'mouse'); api.advanceTestClock(.016); slow.push(api.state().visualArmAngle); }
+      const threshold=[]; for(let i=0;i<6;i++){ api.testInput.aim(...point(.30+(i%2?.082:.078)),performance.now()+600+i*20,'mouse'); api.advanceTestClock(.016); threshold.push(api.state()); }
+      const responses={}; for(const response of ['FAST','NORMAL','SOFT']){ api.setVisualResponse(response); api.testInput.aim(...point(.4),performance.now()+800,'mouse'); api.testInput.aim(...point(.8),performance.now()+820,'mouse'); api.advanceTestClock(.016); responses[response]=api.state(); }
+      api.setVisualResponse('FAST'); api.testInput.aim(...point(Math.PI/2),performance.now()+900,'mouse'); api.advanceTestClock(.02); const quarterTurn=api.state();
+      api.testInput.aim(...point(-Math.PI/2),performance.now()+1000,'mouse'); const halfTurn=api.state();
       api.setAimVisual('DIRECT'); api.testInput.aim(...point(-Math.PI/2),performance.now()+600,'mouse'); const direct=api.state();
-      return {fine,halfTurn,direct};
+      return {fine,slow,threshold,responses,quarterTurn,halfTurn,direct};
     });
     assert.ok(Math.abs(shortestAngleDifference(aimVisual.fine.rawInputAngle,.12))<.02 && Math.abs(shortestAngleDifference(aimVisual.fine.judgementAimAngle,.12))<.02, `SMOOTH does not delay raw or judgement ${JSON.stringify(aimVisual.fine)}`);
     assert.ok(Math.abs(shortestAngleDifference(aimVisual.fine.visualArmAngle,.12))>.001, `SMOOTH only interpolates visual arm ${JSON.stringify(aimVisual.fine)}`);
-    assert.ok(Math.abs(shortestAngleDifference(aimVisual.halfTurn.visualArmAngle,Math.PI))<.02 && Math.abs(shortestAngleDifference(aimVisual.halfTurn.judgementAimAngle,Math.PI))<.02, `SMOOTH catches up on half turn ${JSON.stringify(aimVisual.halfTurn)}`);
+    assert.ok(aimVisual.slow.every((angle,index)=>index===0 || shortestAngleDifference(angle,aimVisual.slow[index-1])>0), `slow constant movement remains frame-continuous ${JSON.stringify(aimVisual.slow)}`);
+    assert.ok(aimVisual.threshold.every(sample=>Math.abs(shortestAngleDifference(sample.visualArmAngle,sample.judgementAimAngle))>.0001), `near-threshold movement never alternates into velocity snaps ${JSON.stringify(aimVisual.threshold)}`);
+    for(const [response,sample] of Object.entries(aimVisual.responses)) assert.ok(Math.abs(shortestAngleDifference(sample.rawInputAngle,.8))<.02 && Math.abs(shortestAngleDifference(sample.judgementAimAngle,.8))<.02, `${response} response leaves judgement immediate ${JSON.stringify(sample)}`);
+    assert.ok(Math.abs(shortestAngleDifference(aimVisual.quarterTurn.visualArmAngle,Math.PI/2))<.08, `FAST response avoids excessive 90° trail ${JSON.stringify(aimVisual.quarterTurn)}`);
+    assert.ok(Math.abs(shortestAngleDifference(aimVisual.halfTurn.visualArmAngle,-Math.PI/2))<.02 && Math.abs(shortestAngleDifference(aimVisual.halfTurn.judgementAimAngle,-Math.PI/2))<.02, `SMOOTH catches up on half turn ${JSON.stringify(aimVisual.halfTurn)}`);
     assert.ok(Math.abs(shortestAngleDifference(aimVisual.direct.visualArmAngle,-Math.PI/2))<.02 && Math.abs(shortestAngleDifference(aimVisual.direct.judgementAimAngle,-Math.PI/2))<.02, `DIRECT visual remains immediate ${JSON.stringify(aimVisual.direct)}`);
     const locked = await page.evaluate(() => {
       const setup=()=>{

@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.15",
+    date: "2026-07-19",
+    title: "Adaptive Aim Visual Smoothing",
+    summary: "시각 에임 보간을 연속 적응형 응답으로 개선",
+    changes: [
+      { category: "AIM", text: "SMOOTH에 FAST / NORMAL / SOFT VISUAL RESPONSE를 추가하고 FAST를 기본값으로 설정" },
+      { category: "AIM", text: "속도와 오차에 따라 연속적으로 빨라지도록 바꿔 임계값 부근의 스냅·보간 반복을 제거" },
+      { category: "INPUT", text: "ABSOLUTE 화면 가장자리 제한과 연속 회전에 적합한 명시적 LOCKED 선택을 설정에 안내" }
+    ]
+  },
+  {
     version: "0.9.14",
     date: "2026-07-19",
     title: "Aim Visual Mode",
