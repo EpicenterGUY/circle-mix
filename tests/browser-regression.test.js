@@ -497,12 +497,74 @@ async function dismissStartupOverlays(page){
   }), false, 'startup update log overlay is dismissed');
 }
 
+function shortestAngleDifference(a, b){ return Math.atan2(Math.sin(a-b), Math.cos(a-b)); }
+async function runDeterministicAimAndCutRegression(browser){
+  const context = await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}, hasTouch:false, isMobile:false}));
+  const page = await context.newPage();
+  const errors = await collectErrors(page);
+  try {
+    await page.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
+    await waitForStableCircleMixPage(page, 'deterministic gameplay');
+    await dismissStartupOverlays(page);
+    const initial = await page.evaluate(() => window.CircleMixTestApi.startDeterministicChart());
+    assert.equal(initial.chartLength, 9, 'test-only deterministic chart has every supported gesture family');
+    assert.deepEqual(initial.chartDoneStates.map(note => note.id), ['test-cut-0','test-fx-0','test-swing-cw-0','test-swing-ccw-0','test-slide-cw-0','test-slide-ccw-0','test-trace-0','test-scratch-cw-0','test-scratch-ccw-0']);
+    for(const degrees of [0,45,90,135,180,225,270,315]){
+      const sample = await page.evaluate(deg => {
+        const st=window.CircleMixTestApi.state(), a=deg*Math.PI/180;
+        window.CircleMixTestApi.testInput.aim(st.cx+Math.cos(a)*st.hitR, st.cy+Math.sin(a)*st.hitR, performance.now(), 'mouse');
+        window.CircleMixTestApi.advanceTestClock(.02);
+        return window.CircleMixTestApi.state();
+      }, degrees);
+      assert.ok(Number.isFinite(sample.rawInputAngle) && Number.isFinite(sample.judgementAimAngle) && Number.isFinite(sample.visualArmAngle), `absolute ${degrees}° reports finite aim angles`);
+      assert.ok(Math.abs(shortestAngleDifference(sample.rawInputAngle, degrees*Math.PI/180)) < .02, `absolute ${degrees}° reaches raw input angle`);
+      assert.ok(Math.abs(shortestAngleDifference(sample.judgementAimAngle, degrees*Math.PI/180)) < .02, `absolute ${degrees}° reaches judgement angle`);
+    }
+    const locked = await page.evaluate(() => {
+      const setup=()=>{
+        const api=window.CircleMixTestApi; api.startDeterministicChart(); api.setPcAimMode('LOCKED');
+        // Complete the production relative-input rebase before measuring.
+        api.testInput.locked(0, 0, performance.now()); api.advanceTestClock(.02);
+        return api;
+      };
+      const api=setup(); let timestamp=performance.now();
+      // At every virtual-ring angle, only the tangent component rotates aim:
+      // tangent = (-sin(theta), cos(theta)).  A vertical delta at 12 o'clock
+      // is radial and must therefore remain harmless.
+      const radialBefore=api.state(), radialTheta=radialBefore.lockedVirtualAngle; api.testInput.locked(Math.cos(radialTheta)*40, Math.sin(radialTheta)*40, timestamp+=20); api.advanceTestClock(.02);
+      const radialAfter=api.state();
+      const tangent=(sign, repeats=1)=>{ const input=setup(); let stamp=performance.now(), baseline=input.state(), after=baseline; for(let i=0;i<repeats;i++){ const theta=input.state().lockedVirtualAngle, magnitude=40*sign; input.testInput.locked(-Math.sin(theta)*magnitude, Math.cos(theta)*magnitude, stamp+=20); input.advanceTestClock(.02); after=input.state(); } return {baseline,after}; };
+      return {radialBefore, radialAfter, cw:tangent(1), ccw:tangent(-1), continued:tangent(1,2)};
+    });
+    const lockedDelta=(after,before)=>shortestAngleDifference(after.judgementAimAngle,before.judgementAimAngle);
+    const radialDelta=lockedDelta(locked.radialAfter,locked.radialBefore), radialVirtualDelta=shortestAngleDifference(locked.radialAfter.lockedVirtualAngle,locked.radialBefore.lockedVirtualAngle), cwDelta=lockedDelta(locked.cw.after,locked.cw.baseline), ccwDelta=lockedDelta(locked.ccw.after,locked.ccw.baseline), continuedDelta=lockedDelta(locked.continued.after,locked.continued.baseline);
+    for(const state of [locked.radialBefore,locked.radialAfter,locked.cw.baseline,locked.cw.after,locked.ccw.baseline,locked.ccw.after,locked.continued.after]) for(const key of ['rawInputAngle','judgementAimAngle','visualArmAngle','lockedVirtualAngle','sampleAngularVelocity']) assert.ok(Number.isFinite(state[key]), `locked ${key} is finite ${JSON.stringify(state)}`);
+    for(const state of [locked.radialBefore,locked.cw.baseline,locked.ccw.baseline]) assert.ok(Math.abs(shortestAngleDifference(state.rawInputAngle,state.lockedVirtualAngle))<.001 && Math.abs(shortestAngleDifference(state.judgementAimAngle,state.lockedVirtualAngle))<.001 && Math.abs(shortestAngleDifference(state.visualArmAngle,state.lockedVirtualAngle))<.001, `locked rebase aligns aim state ${JSON.stringify(state)}`);
+    assert.ok(Math.abs(radialDelta)<.02, `locked radial-only movement does not rotate aim ${JSON.stringify(locked)}`);
+    assert.ok(Math.abs(radialVirtualDelta)<.02, `locked radial-only movement does not rotate virtual angle ${JSON.stringify(locked)}`);
+    assert.ok(Math.abs(cwDelta)>.01 && Math.abs(cwDelta)<1, `locked tangent movement rotates aim by a bounded amount ${JSON.stringify(locked)}`);
+    assert.ok(Math.sign(cwDelta)===-Math.sign(ccwDelta), `locked tangent directions are opposite ${JSON.stringify(locked)}`);
+    assert.ok(Math.abs(continuedDelta)>Math.abs(cwDelta), `locked repeated tangent samples continue rotation ${JSON.stringify(locked)}`);
+    const cut = await page.evaluate(() => {
+      const api=window.CircleMixTestApi; api.startDeterministicChart(); api.setPcAimMode('ABSOLUTE'); api.advanceTestClock(.8);
+      const st=api.state(), note=st.chartDoneStates.find(n=>n.id==='test-cut-0');
+      api.testInput.aim(st.cx+Math.cos(-Math.PI/2)*st.hitR, st.cy+Math.sin(-Math.PI/2)*st.hitR, performance.now(), 'mouse');
+      api.testInput.action(); return api.state();
+    });
+    assert.equal(cut.judgedCount, 1, `ACTION uses onCut production path ${JSON.stringify(cut)}`);
+    assert.equal(cut.combo, 1, 'successful CUT increments combo');
+    assert.equal(cut.chartDoneStates.find(n=>n.id==='test-cut-0').done, true, 'successful CUT completes its chart note');
+    assert.deepEqual(errors, [], `deterministic gameplay errors ${JSON.stringify(errors)}`);
+  } finally { unregisterDiagnosticContext(context, page); await context.close(); }
+}
+
 (async()=>{
   const server = startStaticServer(process.cwd());
   try{
     await waitForServer('http://127.0.0.1:4173/index.html');
     const browser = await chromium.launch({headless:true});
     activeBrowser = browser;
+    await runDeterministicAimAndCutRegression(browser);
     const freshDesktopLoop = await runFreshDirectPlayRegression(
       browser,
       {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
