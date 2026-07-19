@@ -536,10 +536,12 @@ async function dismissStartupOverlays(page){
       const ccw720=seq(Array.from({length:33},(_,i)=>-i*22.5));
       const wrapCW=seq([359,1]), wrapCCW=seq([1,359]);
       const jump=seq([0,180]);
+      api.injectAimSamples([{angle:0,radius:180,timestamp:1}], 'OFF');
+      const immediateJump=api.injectImmediateAimSample(Math.PI,180,2);
       const crossing=api.injectAimSamples([{angle:0,radius:180,timestamp:1},{angle:Math.PI,radius:.5,timestamp:2},{angle:Math.PI/2,radius:.5,timestamp:3},{angle:Math.PI,radius:180,timestamp:4},{angle:Math.PI+.1,radius:180,timestamp:5}], 'OFF');
       const stale=api.expireAimInput();
       const keyCW=api.injectKeyboardRotation(1), keyCCW=api.injectKeyboardRotation(-1);
-      return {cw360,cw540,cw720,ccw360,ccw540,ccw720,wrapCW,wrapCCW,jump,crossing,stale,keyCW,keyCCW};
+      return {cw360,cw540,cw720,ccw360,ccw540,ccw720,wrapCW,wrapCCW,jump,immediateJump,crossing,stale,keyCW,keyCCW};
     });
     const near=(a,b,e=.03)=>Math.abs(a-b)<e;
     assert.ok(near(aimDiagnostics.cw360.accumulatedCWTravel,2*Math.PI,.05), `CW 360 ${JSON.stringify(aimDiagnostics.cw360)}`);
@@ -548,9 +550,10 @@ async function dismissStartupOverlays(page){
     assert.ok(near(aimDiagnostics.ccw360.accumulatedCCWTravel,2*Math.PI,.05), `CCW 360 ${JSON.stringify(aimDiagnostics.ccw360)}`);
     assert.ok(near(aimDiagnostics.ccw540.accumulatedCCWTravel,3*Math.PI,.05), `CCW 540 ${JSON.stringify(aimDiagnostics.ccw540)}`);
     assert.ok(near(aimDiagnostics.ccw720.accumulatedCCWTravel,4*Math.PI,.05), `CCW 720 ${JSON.stringify(aimDiagnostics.ccw720)}`);
-    assert.ok(near(aimDiagnostics.wrapCW.unwrappedAngle-(359*Math.PI/180),2*Math.PI/180,.01), `359 -> 1 ${JSON.stringify(aimDiagnostics.wrapCW)}`);
-    assert.ok(near(aimDiagnostics.wrapCCW.unwrappedAngle-(Math.PI/180),-2*Math.PI/180,.01), `1 -> 359 ${JSON.stringify(aimDiagnostics.wrapCCW)}`);
+    assert.ok(near(aimDiagnostics.wrapCW.accumulatedCWTravel,2*Math.PI/180,.01), `359 -> 1 ${JSON.stringify(aimDiagnostics.wrapCW)}`);
+    assert.ok(near(aimDiagnostics.wrapCCW.accumulatedCCWTravel,2*Math.PI/180,.01), `1 -> 359 ${JSON.stringify(aimDiagnostics.wrapCCW)}`);
     assert.ok(near(aimDiagnostics.jump.judgementAimAngle,Math.PI,.01) && !aimDiagnostics.jump.magnetTarget, `OFF jump ${JSON.stringify(aimDiagnostics.jump)}`);
+    assert.ok(near(aimDiagnostics.immediateJump.judgementAimAngle,Math.PI,.01), `immediate OFF jump ${JSON.stringify(aimDiagnostics.immediateJump)}`);
     assert.ok(aimDiagnostics.crossing.accumulatedCWTravel<.2, `deadzone rebase ${JSON.stringify(aimDiagnostics.crossing)}`);
     assert.equal(aimDiagnostics.stale.sampleAngularVelocity, 0, `stale velocity ${JSON.stringify(aimDiagnostics.stale)}`);
     assert.ok(aimDiagnostics.keyCW.accumulatedCWTravel>0 && aimDiagnostics.keyCCW.accumulatedCCWTravel>0, `keyboard travel ${JSON.stringify({keyCW:aimDiagnostics.keyCW,keyCCW:aimDiagnostics.keyCCW})}`);

@@ -2382,31 +2382,44 @@
   }
 
   function updateSwingGesture(n){
-    // Read travel accumulated by pointer samples since this note armed, never RAF deltas.
+    // Arm after the judgement window opens: only later travel contributes.
     if(n.tutorialTraceSwingRuntime && performance.now() < (n.swingArmedAt||0)) return;
-    if(!n.swingGestureArmed){ n.swingGestureArmed=true; n.swingStartCW=aimInput.accumulatedCWTravel; n.swingStartCCW=aimInput.accumulatedCCWTravel; return; }
+    if(!n.swingGestureArmed){ n.swingGestureArmed=true; n.swingStartCW=aimInput.accumulatedCWTravel; n.swingStartCCW=aimInput.accumulatedCCWTravel; n.swingDirectedTravel=0; n.swingReverseTravel=0; return; }
     const dir=n.type==="swingCW"?1:-1;
-    n.swingDirectedTravel=dir>0 ? aimInput.accumulatedCWTravel-n.swingStartCW : aimInput.accumulatedCCWTravel-n.swingStartCCW;
+    const forward=dir>0 ? aimInput.accumulatedCWTravel-n.swingStartCW : aimInput.accumulatedCCWTravel-n.swingStartCCW;
+    const reverse=dir>0 ? aimInput.accumulatedCCWTravel-n.swingStartCCW : aimInput.accumulatedCWTravel-n.swingStartCW;
+    n.swingReverseTravel=reverse;
+    n.swingDirectedTravel=Math.max(0,forward-reverse*.75);
   }
 
   function checkSwing(n){
     const dir=n.type==="swingCW"?1:-1;
     const enoughTravel=(n.swingDirectedTravel||0)>=Math.PI*.035;
     const freshInput=!n.tutorialTraceSwingRuntime || performance.now()>=(n.swingArmedAt||0);
-    return freshInput && freshAimSample() && enoughTravel && Math.abs(aimInput.sampleAngularVelocity)>=SWING_FLICK_SPEED && Math.sign(aimInput.sampleAngularVelocity)===dir;
+    return freshInput && freshAimSample() && enoughTravel && (n.swingReverseTravel||0)<Math.PI*.16 && Math.abs(aimInput.sampleAngularVelocity)>=SWING_FLICK_SPEED && Math.sign(aimInput.sampleAngularVelocity)===dir;
+  }
+  function updateScratchGesture(n){
+    if(!n.scratchGestureArmed){ n.scratchGestureArmed=true; n.scratchStartCW=aimInput.accumulatedCWTravel; n.scratchStartCCW=aimInput.accumulatedCCWTravel; n.scratchDirectedTravel=0; n.scratchReverseTravel=0; return; }
+    const dir=n.type==="scratchCW"?1:-1;
+    const forward=dir>0 ? aimInput.accumulatedCWTravel-n.scratchStartCW : aimInput.accumulatedCCWTravel-n.scratchStartCCW;
+    const reverse=dir>0 ? aimInput.accumulatedCCWTravel-n.scratchStartCCW : aimInput.accumulatedCWTravel-n.scratchStartCW;
+    n.scratchReverseTravel=reverse;
+    n.scratchDirectedTravel=Math.max(0,forward-reverse*.75);
   }
 
   function checkScratch(n, t){
     // SCRATCH = 우클릭을 누른 채 짧게 좌/우 또는 시계/반시계로 긁는 마찰 액션.
     // Shift는 보조 입력/fallback으로만 허용하며, SLIDE처럼 긴 경로를 추적하지 않는다.
     const dir=n.type==="scratchCW"?1:-1;
+    updateScratchGesture(n);
     scratchCandidate=!!(scratchHeld&&aligned(n.angle,.026));
     scratchMoveAmount=Math.abs(aimInput.lastSampleDelta);
     scratchSpeed=Math.abs(aimInput.sampleAngularVelocity);
     scratchThresholdMet=freshAimSample() && scratchSpeed>=SCRATCH_FLICK_SPEED;
     if(!scratchHeld){lastScratchResult="READY";return false;}
     if(!aligned(n.angle,.026)){lastScratchResult="MISS";return false;}
-    if(!scratchThresholdMet){lastScratchResult="TOO SLOW";return false;}
+    if(!scratchThresholdMet || (n.scratchDirectedTravel||0)<Math.PI*.035){lastScratchResult="TOO SLOW";return false;}
+    if((n.scratchReverseTravel||0)>=Math.PI*.16){lastScratchResult="MISS";return false;}
     const ok=Math.sign(rawArmVel)===dir;
     lastScratchResult=ok?"HIT":"MISS";
     return ok;
@@ -2526,10 +2539,13 @@
     aimInput.pointerRadius=cursorRadius=radius;
     if(aimInput.centerDeadzoneActive ? radius<exit : radius<enter){
       aimInput.centerDeadzoneActive=centerDeadzoneActive=true; aimInput.rebasePending=true;
+      aimInput.sampleAngularVelocity=aimInput.lastSampleDelta=rawAngularVelocity=0; magnetTarget=null; magnetAngleError=0;
       return;
     }
     const angle=Math.atan2(dy,dx);
     rawInputAngle=rawTargetAngle=angle;
+    // Direct modes must be usable by an input action before the next RAF.
+    if(profile.mode==="OFF" || source==="touch"){ judgementAimAngle=visualArmAngle=armAngle=angle; }
     if(aimInput.rebasePending || aimInput.previousSampleAngle===null){
       aimInput.previousSampleAngle=angle; aimInput.rawAngle=aimInput.unwrappedAngle=angle; aimInput.rebasePending=false;
       aimInput.sampleAngularVelocity=aimInput.lastSampleDelta=0; aimInput.lastSampleTimestamp=timestamp; aimInput.centerDeadzoneActive=centerDeadzoneActive=false;
@@ -3927,6 +3943,9 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function resetTraceSwingCarryover(){
     resetAimInput(rawInputAngle);
+    // Preserve a baseline so the first post-TRACE movement is not consumed as a rebase.
+    aimInput.previousSampleAngle=aimInput.rawAngle=aimInput.unwrappedAngle=rawInputAngle;
+    aimInput.rebasePending=false; aimInput.lastSampleTimestamp=performance.now();
     rawArmVel=0; armVel=0; rawAngularVelocity=0; lastRawAngleForVelocity=rawTargetAngle; prevArmAngle=armAngle; magnetTarget=null;
     for(const n of chart){ delete n.swingGestureArmed; delete n.swingDirectedTravel; n.swingLastAngle=rawTargetAngle; }
   }
@@ -3963,7 +3982,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
       delete n.validTrackedTime; delete n.traceQualityTime; delete n.activeTraceDuration; delete n.endpointInsideTime;
       delete n.endpointCaptured; delete n.enteredTrace; delete n.lateTraceStart; delete n.lastTraceRegion; delete n.lastTraceEndpointRegion;
       delete n.coverageRatio; delete n.traceQuality; delete n.failReason; delete n.lastTraceReason; delete n.autoProcessingLogged;
-      delete n.swingGestureArmed; delete n.swingLastAngle; delete n.swingDirectedTravel;
+      delete n.swingGestureArmed; delete n.swingLastAngle; delete n.swingDirectedTravel; delete n.swingReverseTravel;
+      delete n.scratchGestureArmed; delete n.scratchDirectedTravel; delete n.scratchReverseTravel;
     }
   }
   function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.mixRetryScheduled=false; tutorialState.chartFinalizationCount=0; tutorialState.lastChartFinalization=null; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
@@ -5559,6 +5579,7 @@ running=${running}`);
       state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialFinalMixRetryScheduled:tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:tutorialState.mixRetryCount, tutorialChartFinalizationCount:tutorialState.chartFinalizationCount, tutorialLastChartFinalization:tutorialState.lastChartFinalization, tutorialChartSettled:tutorialChartSettled(), tutorialCompleteCount:tutorialState.completeCount, tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount, chartDoneStates:chart.map(n=>({type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
       aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget}),
       injectAimSamples:(samples,mode="OFF")=>{ resetAimInput(samples[0]?.angle??-Math.PI/2); const previous=inputSettings.aimStabilizer; inputSettings.aimStabilizer=mode; for(const sample of samples){ const angle=sample.angle, radius=sample.radius??Math.max(hitR,80); processAimSample(cx+Math.cos(angle)*radius,cy+Math.sin(angle)*radius,sample.timestamp??performance.now(),"pointer"); } updateArm(1/60); const result=window.CircleMixTestApi.aimInputState(); inputSettings.aimStabilizer=previous; return result; },
+      injectImmediateAimSample:(angle,radius=Math.max(hitR,80),timestamp=performance.now())=>{ processAimSample(cx+Math.cos(angle)*radius,cy+Math.sin(angle)*radius,timestamp,"pointer"); return window.CircleMixTestApi.aimInputState(); },
       injectKeyboardRotation:(direction,dt=.02)=>{ resetAimInput(-Math.PI/2); keyD=direction>0; keyA=direction<0; updateArm(dt); keyA=keyD=false; return window.CircleMixTestApi.aimInputState(); },
       expireAimInput:()=>{ aimInput.lastSampleTimestamp=performance.now()-AIM_SAMPLE_FRESH_MS-1; freshAimSample(); return window.CircleMixTestApi.aimInputState(); },
       lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
