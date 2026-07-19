@@ -258,15 +258,15 @@ assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOver
 });
 
 
-test("direct play startup release versions are synchronized at 0.9.12", () => {
+test("direct play startup release versions are synchronized at 0.9.15", () => {
 const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.14"/);
-assert.match(pwa, /const VERSION="0\.9\.14"/);
-assert.match(sw, /const VERSION = "0\.9\.14"/);
-assert.match(changelog, /version:\s*"0\.9\.14"/);
+assert.match(version, /version:\s*"0\.9\.15"/);
+assert.match(pwa, /const VERSION="0\.9\.15"/);
+assert.match(sw, /const VERSION = "0\.9\.15"/);
+assert.match(changelog, /version:\s*"0\.9\.15"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {
@@ -331,6 +331,16 @@ const src = fs.readFileSync("src/game.js", "utf8");
 assert.match(src, /function effectivePcAimMode\(\)\{ return inputSettings\.pcAimMode==="LOCKED" \? "LOCKED" : "ABSOLUTE"; \}/);
 assert.match(src, /function wantsLockedAim\(pointerType="mouse"\)\{ return pointerType==="mouse" && !isCoarsePointerMobile\(\) && inputSettings\.pcAimMode==="LOCKED" && !pointerLockFallback; \}/);
 assert.match(src, /PC AIM " \+ inputSettings\.pcAimMode \+ \(inputSettings\.pcAimMode==="AUTO" \? " · ABSOLUTE" : ""\)/);
+});
+
+test("aim visual response is visual-only and has no velocity snap threshold", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+assert.match(src, /const AIM_VISUAL_RESPONSE_MODES = \["FAST","NORMAL","SOFT"\]/);
+assert.match(src, /aimVisualResponse:AIM_VISUAL_RESPONSE_MODES\.includes\(saved\.aimVisualResponse\)\?saved\.aimVisualResponse:"FAST"/);
+assert.match(src, /function updateVisualArmAngle\(visualTarget,dt\)/);
+assert.match(src, /const urgency=Math\.max\(1-Math\.exp\(-velocity\/3\.2\),1-Math\.exp\(-error\/\(Math\.PI\/5\)\)\)/);
+assert.doesNotMatch(src.match(/function updateArm\(dt\)\{[\s\S]*?\n  \}\n\n  function logAutoProcessing/)?.[0] || "", /sampleAngularVelocity\)>=4\.2\) visualArmAngle=/);
+assert.match(fs.readFileSync("index.html", "utf8"), /VISUAL RESPONSE FAST/);
 });
 
 test("PC input runtime has no broad updateArm exception suppression", () => {

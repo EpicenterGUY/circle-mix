@@ -1,4 +1,4 @@
-const VERSION = "0.9.14";
+const VERSION = "0.9.15";
 const CACHE_PREFIX = "circle-mix-v";
 const APP_CACHE = `${CACHE_PREFIX}${VERSION}-app`;
 const MEDIA_CACHE = `${CACHE_PREFIX}${VERSION}-media`;

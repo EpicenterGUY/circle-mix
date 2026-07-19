@@ -78,6 +78,7 @@
   const pauseSetJudgeGuide = document.getElementById("pauseSetJudgeGuide");
   const pauseSetAimStabilizer = document.getElementById("pauseSetAimStabilizer");
   const pauseSetAimVisual = document.getElementById("pauseSetAimVisual");
+  const pauseSetVisualResponse = document.getElementById("pauseSetVisualResponse");
   const pauseSetPcAim = document.getElementById("pauseSetPcAim");
   const pauseSetLockedSensitivity = document.getElementById("pauseSetLockedSensitivity");
   const pauseSetMobileQuality = document.getElementById("pauseSetMobileQuality");
@@ -209,6 +210,7 @@
   const MOBILE_QUALITY_MODES = ["AUTO","HIGH","PERFORMANCE"];
   const AIM_STABILIZER_MODES = ["OFF","LOW","MEDIUM"];
   const AIM_VISUAL_MODES = ["DIRECT","SMOOTH"];
+  const AIM_VISUAL_RESPONSE_MODES = ["FAST","NORMAL","SOFT"];
   const PC_AIM_MODES = ["AUTO","ABSOLUTE","LOCKED"];
   const VISUAL_CHOICES = { noteContrast:["NORMAL","HIGH"], pathBrightness:["LOW","NORMAL","HIGH"], effectIntensity:["LOW","NORMAL","HIGH"], judgeGuide:["OFF","BEGINNER","ALWAYS"] };
   const visualSettings = loadVisualSettings();
@@ -235,15 +237,15 @@
   function loadInputSettings(){
     try{
       const saved=JSON.parse(localStorage.getItem(INPUT_SETTINGS_KEY)||"{}");
-      return sanitizeInputSettings({...saved, aimStabilizer:AIM_STABILIZER_MODES.includes(saved.aimStabilizer)?saved.aimStabilizer:"OFF", aimVisual:AIM_VISUAL_MODES.includes(saved.aimVisual)?saved.aimVisual:"DIRECT", pcAimMode:PC_AIM_MODES.includes(saved.pcAimMode)?saved.pcAimMode:"AUTO", lockedAimSensitivity:saved.lockedAimSensitivity, mobileQuality:MOBILE_QUALITY_MODES.includes(saved.mobileQuality)?saved.mobileQuality:"AUTO", haptic:!!saved.haptic});
-    }catch(e){ return sanitizeInputSettings({aimStabilizer:"OFF", aimVisual:"DIRECT", pcAimMode:"AUTO", lockedAimSensitivity:1, mobileQuality:"AUTO", haptic:false}); }
+      return sanitizeInputSettings({...saved, aimStabilizer:AIM_STABILIZER_MODES.includes(saved.aimStabilizer)?saved.aimStabilizer:"OFF", aimVisual:AIM_VISUAL_MODES.includes(saved.aimVisual)?saved.aimVisual:"DIRECT", aimVisualResponse:AIM_VISUAL_RESPONSE_MODES.includes(saved.aimVisualResponse)?saved.aimVisualResponse:"FAST", pcAimMode:PC_AIM_MODES.includes(saved.pcAimMode)?saved.pcAimMode:"AUTO", lockedAimSensitivity:saved.lockedAimSensitivity, mobileQuality:MOBILE_QUALITY_MODES.includes(saved.mobileQuality)?saved.mobileQuality:"AUTO", haptic:!!saved.haptic});
+    }catch(e){ return sanitizeInputSettings({aimStabilizer:"OFF", aimVisual:"DIRECT", aimVisualResponse:"FAST", pcAimMode:"AUTO", lockedAimSensitivity:1, mobileQuality:"AUTO", haptic:false}); }
   }
   function finiteRange(v,min,max,fallback){ v=Number(v); return Number.isFinite(v)?Math.min(max,Math.max(min,v)):fallback; }
   function finite01(v,fallback){ v=Number(v); return Number.isFinite(v)?Math.min(1,Math.max(0,v)):fallback; }
   function sanitizeInputSettings(settings){
     const preset=MOBILE_CONTROL_PRESETS.includes(settings.mobileControlPreset)?settings.mobileControlPreset:"STANDARD";
-    const aimStabilizer=AIM_STABILIZER_MODES.includes(settings.aimStabilizer)?settings.aimStabilizer:"OFF", aimVisual=AIM_VISUAL_MODES.includes(settings.aimVisual)?settings.aimVisual:"DIRECT";
-    return {...settings, aimStabilizer, aimVisual, pcAimMode:PC_AIM_MODES.includes(settings.pcAimMode)?settings.pcAimMode:"AUTO", lockedAimSensitivity:finiteRange(settings.lockedAimSensitivity,.5,2,1), mobileControlPreset:preset, mobileActionSize:finiteRange(settings.mobileActionSize,64,124,88), mobileScratchSize:finiteRange(settings.mobileScratchSize,64,124,88), mobileButtonOpacity:finiteRange(settings.mobileButtonOpacity,.35,1,.68), mobileActionX:finite01(settings.mobileActionX,null), mobileActionY:finite01(settings.mobileActionY,null), mobileScratchX:finite01(settings.mobileScratchX,null), mobileScratchY:finite01(settings.mobileScratchY,null), mobileControlGap:finiteRange(settings.mobileControlGap,4,32,18)};
+    const aimStabilizer=AIM_STABILIZER_MODES.includes(settings.aimStabilizer)?settings.aimStabilizer:"OFF", aimVisual=AIM_VISUAL_MODES.includes(settings.aimVisual)?settings.aimVisual:"DIRECT", aimVisualResponse=AIM_VISUAL_RESPONSE_MODES.includes(settings.aimVisualResponse)?settings.aimVisualResponse:"FAST";
+    return {...settings, aimStabilizer, aimVisual, aimVisualResponse, pcAimMode:PC_AIM_MODES.includes(settings.pcAimMode)?settings.pcAimMode:"AUTO", lockedAimSensitivity:finiteRange(settings.lockedAimSensitivity,.5,2,1), mobileControlPreset:preset, mobileActionSize:finiteRange(settings.mobileActionSize,64,124,88), mobileScratchSize:finiteRange(settings.mobileScratchSize,64,124,88), mobileButtonOpacity:finiteRange(settings.mobileButtonOpacity,.35,1,.68), mobileActionX:finite01(settings.mobileActionX,null), mobileActionY:finite01(settings.mobileActionY,null), mobileScratchX:finite01(settings.mobileScratchX,null), mobileScratchY:finite01(settings.mobileScratchY,null), mobileControlGap:finiteRange(settings.mobileControlGap,4,32,18)};
   }
   function saveInputSettings(){ try{ localStorage.setItem(INPUT_SETTINGS_KEY, JSON.stringify(inputSettings)); }catch(e){} }
   function effectiveEffectMode(){
@@ -2573,6 +2575,18 @@
     Object.assign(aimInput,{rawAngle:angle,unwrappedAngle:angle,previousSampleAngle:null,sampleAngularVelocity:0,accumulatedCWTravel:0,accumulatedCCWTravel:0,pointerRadius:0,sampleCount:0,lastSampleTimestamp:0,centerDeadzoneActive:false,rebasePending:true,pendingSamples:0,lastSampleDelta:0});
     rawInputAngle=judgementAimAngle=visualArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=angle; rawAngularVelocity=0; centerDeadzoneActive=false;
   }
+  function updateVisualArmAngle(visualTarget,dt){
+    if(inputSettings.aimVisual==="DIRECT" || lastPointerSource==="touch"){ visualArmAngle=visualTarget; return; }
+    const response={FAST:{base:.024,min:.006},NORMAL:{base:.046,min:.012},SOFT:{base:.080,min:.020}}[inputSettings.aimVisualResponse] || {base:.024,min:.006};
+    const error=Math.abs(norm(visualTarget-visualArmAngle));
+    const velocity=Math.abs(aimInput.sampleAngularVelocity)||0;
+    // Both speed and visible error continuously shorten the response time. This
+    // deliberately has no velocity snap threshold, so it cannot flap between
+    // interpolation and snapping on adjacent samples.
+    const urgency=Math.max(1-Math.exp(-velocity/3.2),1-Math.exp(-error/(Math.PI/5)));
+    const tau=response.base+(response.min-response.base)*urgency;
+    visualArmAngle=norm(visualArmAngle+norm(visualTarget-visualArmAngle)*(1-Math.exp(-dt/Math.max(tau,.001))));
+  }
   function processAimSample(x,y,timestamp,source="pointer"){
     mouseX=x; mouseY=y; lastPointerSource=source;
     const dx=x-cx, dy=y-cy, radius=Math.hypot(dx,dy);
@@ -2583,6 +2597,7 @@
     if(aimInput.centerDeadzoneActive ? radius<exit : radius<enter){
       aimInput.centerDeadzoneActive=centerDeadzoneActive=true; aimInput.rebasePending=true;
       aimInput.sampleAngularVelocity=aimInput.lastSampleDelta=rawAngularVelocity=0; magnetTarget=null; magnetAngleError=0;
+      visualArmAngle=judgementAimAngle;
       return;
     }
     const angle=Math.atan2(dy,dx);
@@ -2592,13 +2607,14 @@
     if(aimInput.rebasePending || aimInput.previousSampleAngle===null){
       aimInput.previousSampleAngle=angle; aimInput.rawAngle=aimInput.unwrappedAngle=angle; aimInput.rebasePending=false;
       aimInput.sampleAngularVelocity=aimInput.lastSampleDelta=0; aimInput.lastSampleTimestamp=timestamp; aimInput.centerDeadzoneActive=centerDeadzoneActive=false;
-      lastValidTargetAngle=angle; return;
+      visualArmAngle=judgementAimAngle; lastValidTargetAngle=angle; return;
     }
     const delta=norm(angle-aimInput.previousSampleAngle);
     const dt=Math.max((timestamp-aimInput.lastSampleTimestamp)/1000,.001);
     aimInput.rawAngle=angle; aimInput.previousSampleAngle=angle; aimInput.unwrappedAngle+=delta;
     aimInput.lastSampleDelta=delta; aimInput.sampleAngularVelocity=delta/dt; rawAngularVelocity=aimInput.sampleAngularVelocity;
-    if(inputSettings.aimVisual==="SMOOTH" && (Math.abs(delta)>=Math.PI/4 || Math.abs(aimInput.sampleAngularVelocity)>=4.2)) visualArmAngle=angle;
+    // A near-half-turn sample is a discontinuity, not motion to trail behind.
+    if(Math.abs(delta)>=Math.PI*.9) visualArmAngle=angle;
     if(delta>0) aimInput.accumulatedCWTravel+=delta; else aimInput.accumulatedCCWTravel+=-delta;
     aimInput.sampleCount++; aimInput.pendingSamples++; aimInput.lastSampleTimestamp=timestamp;
     aimInput.centerDeadzoneActive=centerDeadzoneActive=false; centerDeadzoneActive=false; lastValidTargetAngle=angle;
@@ -2638,8 +2654,7 @@
     judgementAimAngle=profile.mode==="OFF" ? rawInputAngle : stabilizedTargetAngle;
     armAngle=judgementAimAngle;
     const visualTarget=profile.mode==="OFF" ? rawInputAngle : stabilizedTargetAngle;
-    if(inputSettings.aimVisual==="DIRECT" || lastPointerSource==="touch" || Math.abs(aimInput.sampleAngularVelocity)>=4.2) visualArmAngle=visualTarget;
-    else visualArmAngle=norm(visualArmAngle+norm(visualTarget-visualArmAngle)*(1-Math.exp(-dt/.035)));
+    updateVisualArmAngle(visualTarget,dt);
     rawArmVel=rawAngularVelocity=aimInput.sampleAngularVelocity;
     armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001); aimInput.pendingSamples=0;
   }
@@ -3752,6 +3767,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function formatJudgeGuide(){ return "JUDGE GUIDE " + visualSettings.judgeGuide; }
   function formatAimStabilizer(){ return "AIM STABILIZER " + inputSettings.aimStabilizer; }
   function formatAimVisual(){ return "AIM VISUAL " + inputSettings.aimVisual; }
+  function formatVisualResponse(){ return "VISUAL RESPONSE " + inputSettings.aimVisualResponse; }
   function effectivePcAimMode(){ return inputSettings.pcAimMode==="LOCKED" ? "LOCKED" : "ABSOLUTE"; }
   function formatPcAim(){ return "PC AIM " + inputSettings.pcAimMode + (inputSettings.pcAimMode==="AUTO" ? " · ABSOLUTE" : ""); }
   function formatLockedSensitivity(){ return "LOCKED AIM SENSITIVITY " + inputSettings.lockedAimSensitivity.toFixed(2)+"x"; }
@@ -3759,6 +3775,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function cycleLockedSensitivity(){ inputSettings.lockedAimSensitivity=finiteRange(Math.round((inputSettings.lockedAimSensitivity+.05)*20)/20,.5,2,1); if(inputSettings.lockedAimSensitivity>=2) inputSettings.lockedAimSensitivity=.5; saveInputSettings(); updateButtons(); }
   function cycleAimStabilizer(){ const idx=AIM_STABILIZER_MODES.indexOf(inputSettings.aimStabilizer); inputSettings.aimStabilizer=AIM_STABILIZER_MODES[(idx+1)%AIM_STABILIZER_MODES.length]; saveInputSettings(); updateButtons(); }
   function cycleAimVisual(){ const idx=AIM_VISUAL_MODES.indexOf(inputSettings.aimVisual); inputSettings.aimVisual=AIM_VISUAL_MODES[(idx+1)%AIM_VISUAL_MODES.length]; visualArmAngle=judgementAimAngle; saveInputSettings(); updateButtons(); }
+  function cycleVisualResponse(){ const idx=AIM_VISUAL_RESPONSE_MODES.indexOf(inputSettings.aimVisualResponse); inputSettings.aimVisualResponse=AIM_VISUAL_RESPONSE_MODES[(idx+1)%AIM_VISUAL_RESPONSE_MODES.length]; visualArmAngle=judgementAimAngle; saveInputSettings(); updateButtons(); }
   function cycleVisualSetting(key){ const list=VISUAL_CHOICES[key]; const idx=list.indexOf(visualSettings[key]); visualSettings[key]=list[(idx+1)%list.length]; saveVisualSettings(); updateButtons(); }
   function refreshSettingsUI(){ updateButtons(); }
 
@@ -3843,6 +3860,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(pauseSetJudgeGuide) pauseSetJudgeGuide.textContent = formatJudgeGuide();
     if(pauseSetAimStabilizer) pauseSetAimStabilizer.textContent = formatAimStabilizer();
     if(pauseSetAimVisual) pauseSetAimVisual.textContent = formatAimVisual();
+    if(pauseSetVisualResponse){ pauseSetVisualResponse.textContent=formatVisualResponse(); pauseSetVisualResponse.hidden=inputSettings.aimVisual!=="SMOOTH"; }
     if(pauseSetPcAim) pauseSetPcAim.textContent=formatPcAim(); if(pauseSetLockedSensitivity) pauseSetLockedSensitivity.textContent=formatLockedSensitivity();
     if(pauseSetMobileQuality) pauseSetMobileQuality.textContent = formatMobileQuality();
     if(pauseSetHaptic) pauseSetHaptic.textContent = formatHaptic();
@@ -4736,6 +4754,7 @@ settingsOrigin=${settingsOrigin}`);
     if(pauseSetJudgeGuide) pauseSetJudgeGuide.textContent = formatJudgeGuide();
     if(pauseSetAimStabilizer) pauseSetAimStabilizer.textContent = formatAimStabilizer();
     if(pauseSetAimVisual) pauseSetAimVisual.textContent = formatAimVisual();
+    if(pauseSetVisualResponse){ pauseSetVisualResponse.textContent=formatVisualResponse(); pauseSetVisualResponse.hidden=inputSettings.aimVisual!=="SMOOTH"; }
     if(pauseSetPcAim) pauseSetPcAim.textContent=formatPcAim(); if(pauseSetLockedSensitivity) pauseSetLockedSensitivity.textContent=formatLockedSensitivity();
     if(pauseSetMobileQuality) pauseSetMobileQuality.textContent = formatMobileQuality();
     if(pauseSetHaptic) pauseSetHaptic.textContent = formatHaptic();
@@ -4999,6 +5018,7 @@ settingsOrigin=${settingsOrigin}`);
   bindPress(pauseSetJudgeGuide,()=>{cycleVisualSetting("judgeGuide");syncPauseSettingsUI();});
   bindPress(pauseSetAimStabilizer,()=>{cycleAimStabilizer();syncPauseSettingsUI();});
   bindPress(pauseSetAimVisual,()=>{cycleAimVisual();syncPauseSettingsUI();});
+  bindPress(pauseSetVisualResponse,()=>{cycleVisualResponse();syncPauseSettingsUI();});
   bindPress(pauseSetPcAim,()=>{cyclePcAim();syncPauseSettingsUI();}); bindPress(pauseSetLockedSensitivity,()=>{cycleLockedSensitivity();syncPauseSettingsUI();});
   bindPress(pauseSetMobileQuality,()=>{cycleMobileQuality();syncPauseSettingsUI();});
   bindPress(pauseSetHaptic,()=>{toggleHaptic();syncPauseSettingsUI();});
@@ -5738,6 +5758,7 @@ running=${running}`);
       pcAimModeState:()=>({selected:inputSettings.pcAimMode, effective:effectivePcAimMode(), wantsLockedMouse:wantsLockedAim("mouse"), pointerLockRequested:!!pointerLockRequested, pointerLockActive:!!pointerLockActive()}),
       setPcAimMode:mode=>{ if(PC_AIM_MODES.includes(mode)){ inputSettings.pcAimMode=mode; saveInputSettings(); } },
       setAimVisual:mode=>{ if(AIM_VISUAL_MODES.includes(mode)){ inputSettings.aimVisual=mode; visualArmAngle=judgementAimAngle; saveInputSettings(); } },
+      setVisualResponse:mode=>{ if(AIM_VISUAL_RESPONSE_MODES.includes(mode)){ inputSettings.aimVisualResponse=mode; visualArmAngle=judgementAimAngle; saveInputSettings(); } },
       setLockedSensitivity:value=>{ inputSettings.lockedAimSensitivity=finiteRange(value,.5,2,1); saveInputSettings(); },
       injectLockedMovement:(movementX,movementY,timestamp=performance.now())=>{ processLockedAimMovement({movementX,movementY,timeStamp:timestamp}); return window.CircleMixTestApi.aimInputState(); },
       setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
