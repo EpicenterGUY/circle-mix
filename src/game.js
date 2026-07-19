@@ -259,9 +259,9 @@
   let running=false, startMs=0, lastMs=0, raf=0;
   let testFrameCount=0, testRenderCount=0;
   let tutorialMode=false, tutorialStepIndex=0, tutorialAttempts=0, tutorialCountdownUntil=0;
-  let tutorialSessionId=0, tutorialStepToken=0, tutorialAttemptId=0;
+  let tutorialSessionId=0, tutorialStepToken=0, tutorialAttemptId=0, tutorialTransitionGeneration=0;
   let tutorialLastAdvanceReason=null, tutorialLastAdvanceSource=null;
-  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
+  const tutorialState={successCount:0,successStreak:0,failCount:0,phaseCompleted:false,transitioning:false,transitionState:"IDLE",completing:false,currentJudgement:null,coverageRatio:0,trackedQualityTime:0,endpointCaptured:false,activeInput:null,autoSuppressed:false,previousAutoEnabled:false,timers:[],rafIds:[],pendingSkipQueue:[],mixRetryScheduled:false,mixRetryCount:0,completeCount:0,chartFinalizationCount:0,lastChartFinalization:null,inputEnabledAt:0,pointerMoved:false,lastSource:null,validUserInputCount:0,consumedNoteIds:new Set(),lastExploreCompletionAt:0,exploreInsideSince:0,traceSwingPhase:null,traceCompletedAt:0,swingArmedAt:0,swingVisible:false};
   let audioStartedAt=0;
   let score=0, combo=0, maxCombo=0;
   let judgedCount=0, perfectCount=0, greatCount=0, missCount=0;
@@ -3949,7 +3949,15 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function beep(freq=660,dur=.07){ ensureAudioCtx(); const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.frequency.value=freq; o.type="square"; g.gain.value=.035*(sfxEnabled ? clamp(sfxVolume,0,4) : 0); o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur); }
   function clearTutorialTimers(){ for(const id of tutorialState.timers) clearTimeout(id); tutorialState.timers=[]; for(const id of tutorialState.rafIds) cancelAnimationFrame(id); tutorialState.rafIds=[]; }
-  function tutorialSetTimeout(fn,delay){ const token=tutorialStepToken, session=tutorialSessionId, attempt=tutorialAttemptId; const id=setTimeout(()=>{ if(!tutorialMode || token!==tutorialStepToken || session!==tutorialSessionId || attempt!==tutorialAttemptId) return; fn(); },delay); tutorialState.timers.push(id); return id; }
+  function tutorialSetTimeout(fn,delay){
+    const token=tutorialStepToken, session=tutorialSessionId, attempt=tutorialAttemptId, generation=tutorialTransitionGeneration;
+    const id=setTimeout(()=>{
+      tutorialState.timers=tutorialState.timers.filter(timerId=>timerId!==id);
+      if(!tutorialMode || token!==tutorialStepToken || session!==tutorialSessionId || attempt!==tutorialAttemptId || generation!==tutorialTransitionGeneration) return;
+      fn();
+    },delay);
+    tutorialState.timers.push(id); return id;
+  }
   function resetTraceRuntimeState(){
     for(const n of chart){
       if(!n?.type?.startsWith("trace")) continue;
@@ -3959,7 +3967,8 @@ endpointCaptured=${n.endpointCaptured===true}`);
       delete n.swingGestureArmed; delete n.swingLastAngle; delete n.swingDirectedTravel;
     }
   }
-  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.mixRetryScheduled=false; tutorialState.chartFinalizationCount=0; tutorialState.lastChartFinalization=null; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function resetRenderWindow(){ renderWindow.start=0; renderWindow.end=0; renderWindow.notes.length=0; }
   function logTutorialAdvance(reason,extra={}){ if(!debugMode)return; const st=tutorialSteps[tutorialStepIndex]; console.log(`[Tutorial Advance]\nstep=${st?.kind||"-"}\nphase=${st?.phase||"-"}\nreason=${reason}\nsource=${extra.source||tutorialState.lastSource||"-"}\nsuccessCount=${tutorialState.successCount}\nsessionId=${tutorialSessionId}\nstepToken=${tutorialStepToken}\nattemptId=${tutorialAttemptId}\nfunction=${extra.fn||"-"}\ntimer=${!!extra.timer}\nnoteId=${extra.noteId||"-"}\npreviousStepToken=${extra.previousStepToken??tutorialStepToken}\ncurrentStepToken=${tutorialStepToken}`); }
   function tutorialHandleJudgement(ev){
     if(!tutorialMode || tutorialState.transitioning) return;
@@ -3985,6 +3994,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     if(st?.kind==="traceSwing" && ev.noteType && String(ev.noteType).startsWith("swing")) tutorialState.traceSwingPhase="DONE";
     const required=st?.kind==="traceSwing"?2:Math.max(1,chart.length);
     if(tutorialState.successCount>=required) requestTutorialTransition(tutorialStepIndex+1,{source:"success", reason:"USER_JUDGEMENT", extra:ev});
+    else handleFinalMixCompletion();
   }
   function tutorialCompleteExploreTarget(reason,source="pointer"){
     const st=tutorialSteps[tutorialStepIndex]; const nowMs=performance.now();
@@ -3994,9 +4004,27 @@ endpointCaptured=${n.endpointCaptured===true}`);
     addWave(laneAngle(st.targets[Math.max(0,st._hit-1)]),COLORS.perfect); beep(780,.05); tutorialState.exploreInsideSince=0;
     if(st._hit>=st.targets.length) requestTutorialTransition(tutorialStepIndex+1,{source:"success", reason, extra:{source,fn:"tutorialCompleteExploreTarget"}});
   }
+  function maxPendingTutorialSkips(){ return Math.max(0, tutorialSteps.length - 1 - tutorialStepIndex) + (tutorialStepIndex>=tutorialSteps.length-1 ? 1 : 0); }
+  function queueTutorialSkip(extra={}){
+    if(!tutorialMode || tutorialState.completing) return;
+    const cap=maxPendingTutorialSkips();
+    if(tutorialState.pendingSkipQueue.length>=cap) return;
+    tutorialState.pendingSkipQueue.push({reason:"SKIP_BUTTON", source:"skip", extra, queuedAt:performance.now()});
+  }
+  function drainTutorialSkipQueue(){
+    if(!tutorialMode || tutorialState.transitionState!=="IDLE" || tutorialState.completing) return;
+    const item=tutorialState.pendingSkipQueue.shift();
+    if(!item) return;
+    requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:item.extra});
+  }
   function requestTutorialTransition(nextIndex,{source="success",reason="USER_JUDGEMENT",skipCountdown=false,extra={}}={}){
-    if(!tutorialMode || tutorialState.transitioning)return;
+    if(!tutorialMode || tutorialState.completing)return;
+    if(tutorialState.transitionState!=="IDLE"){
+      if(source==="skip" || reason==="SKIP_BUTTON") queueTutorialSkip(extra);
+      return;
+    }
     if(source!=="skip" && reason!=="SKIP_BUTTON" && tutorialState.validUserInputCount<=0){ if(debugMode) console.warn("[Tutorial] blocked advance without valid user input", {reason,step:tutorialSteps[tutorialStepIndex]?.name}); return; }
+    if(nextIndex<=tutorialStepIndex && nextIndex<tutorialSteps.length) return;
     if(nextIndex>=tutorialSteps.length) return completeTutorial();
     tutorialLastAdvanceReason=reason; tutorialLastAdvanceSource=source;
     logTutorialAdvance(reason,extra);
@@ -4006,37 +4034,44 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function enterTutorialStep(idx,{source="success",skipCountdown=false}={}){
     const runtime=buildTutorialStepRuntime(idx);
     if(!runtime.valid){ console.error("[Tutorial] invalid step", runtime); return; }
-    tutorialState.transitioning=true; tutorialState.phaseCompleted=true;
+    tutorialTransitionGeneration++; tutorialState.transitionState="PREPARING"; tutorialState.transitioning=true; tutorialState.phaseCompleted=true;
     clearTutorialTimers(); tutorialAttemptId++;
     tutorialStepToken=runtime.token;
-    chart=[]; chartLastHitEnd=0; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
+    chart=[]; resetRenderWindow(); chartLastHitEnd=0; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
     tutorialStepIndex=runtime.index;
     const st=runtime.step; st._hit=0; st._done=false;
     resetTutorialRuntimeState();
     if(runtime.step.kind==="traceSwing") tutorialState.traceSwingPhase="TRACE_ACTIVE";
-    cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
-    tutorialMode=true; tutorialState.autoSuppressed=true; tutorialState.transitioning=true;
-    document.body.classList.add("tutorialMode","tutorialIntro"); resize();
-    abortingRun=false; resultShown=false; completionPending=false; paused=false; running=true; setGameplayScrollLocked(true); notifyPwaGameplay();
-    chart=runtime.chart;
+    const fullSessionStart=source==="replay" || !running || activeSceneName()!=="game";
+    if(fullSessionStart) cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
+    tutorialMode=true; tutorialState.autoSuppressed=true; tutorialState.transitionState="READY"; tutorialState.transitioning=true;
+    document.body.classList.add("tutorialMode","tutorialIntro"); if(fullSessionStart) resize();
+    abortingRun=false; resultShown=false; completionPending=false; paused=false; running=true; setGameplayScrollLocked(true); if(fullSessionStart) notifyPwaGameplay();
+    // Tutorial retries replace the chart while preserving the gameplay RAF.
+    // Reset the chart-indexed render cache in the same lifecycle operation.
+    chart=runtime.chart; resetRenderWindow();
     score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1;
-    setCleanGameplay(true); safeSetState("game"); startLayer.style.display="none";
+    setCleanGameplay(true); if(fullSessionStart || activeSceneName()!=="game") safeSetState("game"); startLayer.style.display="none";
     mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=lastRawAngleForVelocity=-Math.PI/2; magnetTarget=null; centerDeadzoneActive=false;
     const leadMs=source==="replay"?3000:(skipCountdown?120:(source==="retry"?650:560));
     tutorialCountdownUntil=performance.now()+leadMs; tutorialState.inputEnabledAt=performance.now()+leadMs+60; audioStartedAt=performance.now()+leadMs; startMs=audioStartedAt; lastMs=performance.now();
     setTutorialHud(runtime);
     if(source==="replay"){ ["3","2","1","시작"].forEach((txt,i)=>tutorialSetTimeout(()=>{ tutorialCountdown.textContent=txt; beep(520+i*110,.06); },i*720)); }
     else tutorialCountdown.textContent=skipCountdown?"다음 단계":"준비";
-    tutorialSetTimeout(()=>{ tutorialCountdown.textContent=""; document.body.classList.remove("tutorialIntro"); resize(); tutorialState.transitioning=false; },leadMs);
-    if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(frame);
+    tutorialSetTimeout(()=>{ tutorialCountdown.textContent=""; document.body.classList.remove("tutorialIntro"); if(fullSessionStart) resize(); tutorialState.transitionState="IDLE"; tutorialState.transitioning=false; drainTutorialSkipQueue(); },leadMs);
+    if(!raf) raf=requestAnimationFrame(frame);
   }
   function startTutorialStep(idx=tutorialStepIndex,{startMode="initial"}={}){ enterTutorialStep(idx,{source:startMode==="initial"?"replay":(startMode==="restart"?"retry":startMode),skipCountdown:startMode==="skip"}); }
-  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
+  function startTutorial(){ localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.completing=false; tutorialState.pendingSkipQueue=[]; tutorialState.mixRetryCount=0; tutorialState.completeCount=0; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
   function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
   function restoreTutorialAuto(){ tutorialState.autoSuppressed=false; setAutoPlayEnabled(!!tutorialState.previousAutoEnabled, "tutorial-restore"); }
-  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
-  function completeTutorial(){ clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none"; }
+  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; resetRenderWindow(); chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
+  function completeTutorial(){
+    if(tutorialState.completing) return;
+    tutorialState.completing=true; tutorialState.completeCount++; tutorialState.pendingSkipQueue=[]; tutorialTransitionGeneration++; tutorialState.transitionState="IDLE"; tutorialState.transitioning=false;
+    clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none";
+  }
   function updateTutorialAim(){
     const st=tutorialSteps[tutorialStepIndex];
     if(!tutorialMode||!st?.targets||tutorialState.transitioning)return;
@@ -4059,7 +4094,42 @@ endpointCaptured=${n.endpointCaptured===true}`);
       tutorialState.exploreInsideSince=0;
     }
   }
-  function tutorialFailed(){ if(!tutorialMode)return false; if(chart.some(n=>n.missed)){ tutorialState.failCount++; tutorialAttempts++; addFeedback("다시 시도",cx,cy-baseR*.42,COLORS.miss); tutorialSetTimeout(()=>{ if(tutorialMode)restartTutorialStep(); },700); return true; } return false; }
+  function tutorialNoteFinalDeadline(n){
+    if(n.type==="cut") return n.hitTime+.22;
+    if(n.type.startsWith("swing") || n.type.startsWith("scratch")) return n.hitTime+.26;
+    return n.hitTime+(n.duration||0);
+  }
+  function tutorialChartFinalDeadline(){ return chart.reduce((latest,n)=>Math.max(latest,tutorialNoteFinalDeadline(n)),0); }
+  function finalizeExpiredTutorialNotes(t){
+    if(!tutorialMode || !chart.length || t<tutorialChartFinalDeadline()) return false;
+    const unresolved=chart.filter(n=>!n.done&&!n.missed);
+    if(!unresolved.length) return false;
+    for(const n of unresolved) miss(n,"CHART_END_UNRESOLVED");
+    tutorialState.chartFinalizationCount+=unresolved.length;
+    tutorialState.lastChartFinalization={attemptId:tutorialAttemptId,gameTime:t,noteTypes:unresolved.map(n=>n.type)};
+    return true;
+  }
+  function tutorialChartSettled(){ return chart.length>0 && chart.every(n=>n.done||n.missed); }
+  function scheduleTutorialRetry(delay=700){
+    if(tutorialState.mixRetryScheduled) return;
+    tutorialState.mixRetryScheduled=true; tutorialState.failCount++; tutorialAttempts++;
+    addFeedback("다시 시도",cx,cy-baseR*.42,COLORS.miss);
+    tutorialSetTimeout(()=>{ if(tutorialMode){ tutorialState.mixRetryCount++; restartTutorialStep(); } },delay);
+  }
+  function handleFinalMixCompletion(){
+    const st=tutorialSteps[tutorialStepIndex];
+    if(!tutorialMode || st?.kind!=="mix" || !tutorialChartSettled()) return false;
+    if(chart.some(n=>n.missed)){ scheduleTutorialRetry(700); return false; }
+    requestTutorialTransition(tutorialSteps.length,{source:"success", reason:"USER_JUDGEMENT", extra:{source:"system",fn:"handleFinalMixCompletion"}});
+    return true;
+  }
+  function tutorialFailed(){
+    if(!tutorialMode)return false;
+    const st=tutorialSteps[tutorialStepIndex];
+    if(st?.kind==="mix") return handleFinalMixCompletion();
+    if(chart.some(n=>n.missed)){ scheduleTutorialRetry(700); return true; }
+    return false;
+  }
 
   function notifyPwaGameplay(){ try{ window.CircleMixPWA?.setGameplayState({running, paused, scene:activeSceneName()}); }catch(e){} }
 
@@ -4277,7 +4347,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     testFrameCount++;
     const dt=Math.min(.033,(ms-lastMs)/1000||.016);
     lastMs=ms; const t=now();
-    if(tutorialMode){ updateTutorialAim(); setTutorialHud(); if(tutorialFailed()) return; }
+    if(tutorialMode){ updateTutorialAim(); setTutorialHud(); }
     const notesSettled = judgedCount >= chart.length || song.ended || t >= chartLastHitEnd + HIT_WINDOW + 0.25;
     if(!tutorialMode && (song.ended || t >= songEndTime()) && notesSettled){ scheduleCompletion(); }
     // Tutorial progression is event-driven by tutorialHandleJudgement().
@@ -4294,6 +4364,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     updateAuto(t);
     updateArm(dt);
     updateNotes(t,dt);
+    if(tutorialMode){ finalizeExpiredTutorialNotes(t); tutorialFailed(); }
 
     focusNote=currentFocusNote(t);
 
@@ -4358,7 +4429,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     chart=generateChart();
     chartLastHitEnd=0;
     for(let i=0;i<chart.length;i++) chartLastHitEnd=Math.max(chartLastHitEnd,chart[i].hitTime+(chart[i].duration||0));
-    renderWindow.start=0; renderWindow.end=0; renderWindow.notes.length=0;
+    resetRenderWindow();
     perfStats.lastMs=0; perfStats.lastPaint=0; perfStats.samples=0; perfStats.totalFrame=0; perfStats.maxFrame=0; perfStats.longFrames=0; perfStats.fpsFrames=0; perfStats.fpsAt=0; perfStats.visibleNotes=0;
     autoQualityStats.windowAt=0; autoQualityStats.samples=0; autoQualityStats.totalFrame=0; autoQualityStats.longFrames=0;
     SESSION_QUALITY.autoDprCap=1.5; SESSION_QUALITY.effectMode="NORMAL"; SESSION_QUALITY.lastDropAt=0; SESSION_QUALITY.startedAt=performance.now();
@@ -4748,13 +4819,9 @@ settingsOrigin=${settingsOrigin}`);
 
   function bindImmediatePress(el,fn){
     if(!el)return;
-    let last=0;
     let pointerRunAt=-Infinity;
     const run=e=>{
       if(e){if(e.cancelable)e.preventDefault();e.stopPropagation();}
-      const m=performance.now();
-      if(m-last<120)return;
-      last=m;
       fn(e);
     };
     if(window.PointerEvent){
@@ -5481,7 +5548,10 @@ running=${running}`);
         return {started, previousSession, playSessionToken, songId:selectedSongId, difficulty:selectedDifficultyId};
       },
       exitTutorial:()=>exitTutorial(false),
-      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
+      completeTutorial:()=>completeTutorial(),
+      markFirstPendingTutorialNoteMissed:()=>{ const n=chart.find(note=>!note.done&&!note.missed); if(n){ miss(n,"TEST_FORCED_MISS"); return true; } return false; },
+      clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
+      state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialFinalMixRetryScheduled:tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:tutorialState.mixRetryCount, tutorialChartFinalizationCount:tutorialState.chartFinalizationCount, tutorialLastChartFinalization:tutorialState.lastChartFinalization, tutorialChartSettled:tutorialChartSettled(), tutorialCompleteCount:tutorialState.completeCount, tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount, chartDoneStates:chart.map(n=>({type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
       lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
       setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
       magnetProbe:(mode,velocity)=>{ const previousMode=inputSettings.aimStabilizer, previousTarget=magnetTarget, previousError=magnetAngleError, previousFocus=focusNote; try{ const probeNow=now(); const probeNote={type:"cut", angle:0, done:false, missed:false, spawnTime:probeNow-1, hitTime:probeNow}; inputSettings.aimStabilizer=mode; focusNote=probeNote; magnetTarget=probeNote; magnetAngleError=0; const result=updateAimMagnet(0, velocity); const disengaged=magnetTarget===null; return {mode, velocity, disengaged, result, profile:aimStabilizerProfile()}; } finally { inputSettings.aimStabilizer=previousMode; magnetTarget=previousTarget; magnetAngleError=previousError; focusNote=previousFocus; } },
