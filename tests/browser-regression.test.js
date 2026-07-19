@@ -522,12 +522,25 @@ async function runDeterministicAimAndCutRegression(browser){
     }
     const locked = await page.evaluate(() => {
       const api=window.CircleMixTestApi; api.setPcAimMode('LOCKED');
-      api.testInput.locked(0, 40, performance.now()); api.advanceTestClock(.02);
-      const before=api.state(); api.testInput.locked(0, 40, performance.now()+20); api.advanceTestClock(.02);
-      return {before, after:api.state()};
+      let timestamp=performance.now();
+      // At every virtual-ring angle, only the tangent component rotates aim:
+      // tangent = (-sin(theta), cos(theta)).  A vertical delta at 12 o'clock
+      // is radial and must therefore remain harmless.
+      const radialBefore=api.state(), radialTheta=radialBefore.lockedVirtualAngle; api.testInput.locked(Math.cos(radialTheta)*40, Math.sin(radialTheta)*40, timestamp+=20); api.advanceTestClock(.02);
+      const radialAfter=api.state();
+      const move=(sign)=>{ const theta=api.state().lockedVirtualAngle, magnitude=40*sign; api.testInput.locked(-Math.sin(theta)*magnitude, Math.cos(theta)*magnitude, timestamp+=20); api.advanceTestClock(.02); return api.state(); };
+      const baseline=api.state(), cw=move(1), ccw=move(-1);
+      // Repeat against the newly calculated tangent, not stale client coords.
+      const continued=move(1);
+      return {radialBefore, radialAfter, baseline, cw, ccw, continued};
     });
-    assert.ok(Number.isFinite(locked.after.lockedVirtualAngle) && Number.isFinite(locked.after.sampleAngularVelocity), `locked input diagnostics remain finite ${JSON.stringify(locked)}`);
-    assert.notEqual(locked.before.judgementAimAngle, locked.after.judgementAimAngle, `locked relative movement changes judgement aim ${JSON.stringify(locked)}`);
+    const lockedDelta=(after,before)=>shortestAngleDifference(after.judgementAimAngle,before.judgementAimAngle);
+    const radialDelta=lockedDelta(locked.radialAfter,locked.radialBefore), cwDelta=lockedDelta(locked.cw,locked.baseline), ccwDelta=lockedDelta(locked.ccw,locked.cw), continuedDelta=lockedDelta(locked.continued,locked.ccw);
+    for(const state of [locked.radialBefore,locked.radialAfter,locked.baseline,locked.cw,locked.ccw,locked.continued]) for(const key of ['rawInputAngle','judgementAimAngle','visualArmAngle','lockedVirtualAngle','sampleAngularVelocity']) assert.ok(Number.isFinite(state[key]), `locked ${key} is finite ${JSON.stringify(state)}`);
+    assert.ok(Math.abs(radialDelta)<.02, `locked radial-only movement does not rotate aim ${JSON.stringify(locked)}`);
+    assert.ok(Math.abs(cwDelta)>.01 && Math.abs(cwDelta)<1, `locked tangent movement rotates aim by a bounded amount ${JSON.stringify(locked)}`);
+    assert.ok(Math.sign(cwDelta)===-Math.sign(ccwDelta), `locked tangent directions are opposite ${JSON.stringify(locked)}`);
+    assert.ok(Math.abs(continuedDelta)>.01, `locked repeated tangent samples continue rotation ${JSON.stringify(locked)}`);
     const cut = await page.evaluate(() => {
       const api=window.CircleMixTestApi; api.startDeterministicChart(); api.setPcAimMode('ABSOLUTE'); api.advanceTestClock(.8);
       const st=api.state(), note=st.chartDoneStates.find(n=>n.id==='test-cut-0');
