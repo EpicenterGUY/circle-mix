@@ -3968,6 +3968,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     }
   }
   function resetTutorialRuntimeState(){ tutorialState.successCount=0; tutorialState.mixRetryScheduled=false; tutorialState.chartFinalizationCount=0; tutorialState.lastChartFinalization=null; tutorialState.successStreak=0; tutorialState.failCount=0; tutorialState.phaseCompleted=false; tutorialState.currentJudgement=null; tutorialState.coverageRatio=0; tutorialState.trackedQualityTime=0; tutorialState.endpointCaptured=false; tutorialState.activeInput=null; tutorialState.pointerMoved=false; tutorialState.lastSource=null; tutorialState.validUserInputCount=0; tutorialState.consumedNoteIds.clear(); tutorialState.lastExploreCompletionAt=0; tutorialState.exploreInsideSince=0; tutorialState.traceSwingPhase=null; tutorialState.traceCompletedAt=0; tutorialState.swingArmedAt=0; tutorialState.swingVisible=false; resetTraceRuntimeState(); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; filterHeld=scratchHeld=mouseDownRight=keyA=keyD=false; pointerActive=false; scratchMoveAmount=0; scratchSpeed=0; scratchCandidate=false; scratchThresholdMet=false; lastScratchResult="READY"; for(const k of Object.keys(keys)) keys[k]=false; }
+  function resetRenderWindow(){ renderWindow.start=0; renderWindow.end=0; renderWindow.notes.length=0; }
   function logTutorialAdvance(reason,extra={}){ if(!debugMode)return; const st=tutorialSteps[tutorialStepIndex]; console.log(`[Tutorial Advance]\nstep=${st?.kind||"-"}\nphase=${st?.phase||"-"}\nreason=${reason}\nsource=${extra.source||tutorialState.lastSource||"-"}\nsuccessCount=${tutorialState.successCount}\nsessionId=${tutorialSessionId}\nstepToken=${tutorialStepToken}\nattemptId=${tutorialAttemptId}\nfunction=${extra.fn||"-"}\ntimer=${!!extra.timer}\nnoteId=${extra.noteId||"-"}\npreviousStepToken=${extra.previousStepToken??tutorialStepToken}\ncurrentStepToken=${tutorialStepToken}`); }
   function tutorialHandleJudgement(ev){
     if(!tutorialMode || tutorialState.transitioning) return;
@@ -4036,7 +4037,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     tutorialTransitionGeneration++; tutorialState.transitionState="PREPARING"; tutorialState.transitioning=true; tutorialState.phaseCompleted=true;
     clearTutorialTimers(); tutorialAttemptId++;
     tutorialStepToken=runtime.token;
-    chart=[]; chartLastHitEnd=0; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
+    chart=[]; resetRenderWindow(); chartLastHitEnd=0; feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
     tutorialStepIndex=runtime.index;
     const st=runtime.step; st._hit=0; st._done=false;
     resetTutorialRuntimeState();
@@ -4046,7 +4047,9 @@ endpointCaptured=${n.endpointCaptured===true}`);
     tutorialMode=true; tutorialState.autoSuppressed=true; tutorialState.transitionState="READY"; tutorialState.transitioning=true;
     document.body.classList.add("tutorialMode","tutorialIntro"); if(fullSessionStart) resize();
     abortingRun=false; resultShown=false; completionPending=false; paused=false; running=true; setGameplayScrollLocked(true); if(fullSessionStart) notifyPwaGameplay();
-    chart=runtime.chart;
+    // Tutorial retries replace the chart while preserving the gameplay RAF.
+    // Reset the chart-indexed render cache in the same lifecycle operation.
+    chart=runtime.chart; resetRenderWindow();
     score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0)||1;
     setCleanGameplay(true); if(fullSessionStart || activeSceneName()!=="game") safeSetState("game"); startLayer.style.display="none";
     mouseX=cx; mouseY=cy-hitR; armAngle=targetAngle=prevArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=lastRawAngleForVelocity=-Math.PI/2; magnetTarget=null; centerDeadzoneActive=false;
@@ -4063,7 +4066,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
   function restoreTutorialAuto(){ tutorialState.autoSuppressed=false; setAutoPlayEnabled(!!tutorialState.previousAutoEnabled, "tutorial-restore"); }
-  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
+  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; resetRenderWindow(); chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
   function completeTutorial(){
     if(tutorialState.completing) return;
     tutorialState.completing=true; tutorialState.completeCount++; tutorialState.pendingSkipQueue=[]; tutorialTransitionGeneration++; tutorialState.transitionState="IDLE"; tutorialState.transitioning=false;
@@ -4426,7 +4429,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     chart=generateChart();
     chartLastHitEnd=0;
     for(let i=0;i<chart.length;i++) chartLastHitEnd=Math.max(chartLastHitEnd,chart[i].hitTime+(chart[i].duration||0));
-    renderWindow.start=0; renderWindow.end=0; renderWindow.notes.length=0;
+    resetRenderWindow();
     perfStats.lastMs=0; perfStats.lastPaint=0; perfStats.samples=0; perfStats.totalFrame=0; perfStats.maxFrame=0; perfStats.longFrames=0; perfStats.fpsFrames=0; perfStats.fpsAt=0; perfStats.visibleNotes=0;
     autoQualityStats.windowAt=0; autoQualityStats.samples=0; autoQualityStats.totalFrame=0; autoQualityStats.longFrames=0;
     SESSION_QUALITY.autoDprCap=1.5; SESSION_QUALITY.effectMode="NORMAL"; SESSION_QUALITY.lastDropAt=0; SESSION_QUALITY.startedAt=performance.now();
