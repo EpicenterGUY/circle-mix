@@ -7,6 +7,16 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.12",
+    date: "2026-07-19",
+    title: "Developer Input & Note Self Test",
+    summary: "일반 사용자 기능이 아닌 개발자 모드 전용 수동 입력·노트 진단 도구를 추가",
+    changes: [
+      { category: "DEVELOPER", text: "개발자 모드에서만 INPUT & NOTE SELF TEST를 열어 실제 입력 상태와 production 판정을 점검" },
+      { category: "DIAGNOSTICS", text: "입력 장치, 에임 각도, Pointer Lock, held 입력, 노트·점수·TRACE/SLIDE 상태와 직렬화 가능한 보고서를 제공" }
+    ]
+  },
+  {
     version: "0.9.11",
     date: "2026-07-19",
     title: "PC Pointer Lock Aim",

@@ -324,6 +324,15 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
     }));
     assert.equal(tutorialStorage.promptAnswered, 'true', `${label} tutorial prompt is answered without starting it`);
     assert.equal(tutorialStorage.completed, null, `${label} tutorial remains incomplete`);
+    const selfTestInitial = await page.evaluate(() => {
+      const overlay=document.getElementById('selfTestOverlay'), button=document.getElementById('safeSelfTestBtn');
+      const start=document.getElementById('safeStart').getBoundingClientRect();
+      const hit=document.elementFromPoint(start.x+start.width/2,start.y+start.height/2);
+      return {state:window.CircleMixTestApi.selfTestState(), ariaHidden:overlay?.getAttribute('aria-hidden'), intercepts:hit===overlay || !!hit?.closest?.('#selfTestOverlay')};
+    });
+    assert.deepEqual(selfTestInitial.state, {active:false, overlayHidden:true, overlayDisplay:'none', buttonHidden:true, pointerLockActive:false, actionHeld:false, scratchHeld:false}, `${label} self test is inert for regular users ${JSON.stringify(selfTestInitial)}`);
+    assert.equal(selfTestInitial.ariaHidden, 'true', `${label} self test aria hidden`);
+    assert.equal(selfTestInitial.intercepts, false, `${label} self test does not intercept START`);
     const startButton = page.locator('#safeStart');
     await startButton.waitFor({state:'visible'});
     assert.equal(await startButton.isEnabled(), true, `${label} START is enabled`);
@@ -377,6 +386,28 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
       await context.close();
     }
   }
+}
+
+async function runDeveloperSelfTestOverlayRegression(browser){
+  const context=await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720},hasTouch:false,isMobile:false}));
+  const page=await context.newPage(); const errors=await collectErrors(page);
+  try{
+    await page.goto('http://127.0.0.1:4173/index.html?browserTest=1&dev=1',{waitUntil:'domcontentloaded'});
+    await waitForStableCircleMixPage(page,'developer self test'); await dismissStartupOverlays(page);
+    await page.locator('#tutorialPromptSkip').click();
+    await page.waitForFunction(()=>document.getElementById('tutorialPrompt')?.hidden===true);
+    assert.deepEqual(await page.evaluate(()=>window.CircleMixTestApi.selfTestState()), {active:false,overlayHidden:true,overlayDisplay:'none',buttonHidden:false,pointerLockActive:false,actionHeld:false,scratchHeld:false}, 'developer mode exposes only the entry button');
+    await page.keyboard.press('KeyH'); await page.locator('#safeSelfTestBtn').waitFor({state:'visible'});
+    await page.locator('#safeSelfTestBtn').click();
+    await waitFor(page,()=>window.CircleMixTestApi.selfTestState().active,'self test opens');
+    assert.equal(await page.locator('#selfTestOverlay').getAttribute('aria-hidden'),'false');
+    await page.locator('#selfTestExit').click();
+    await waitFor(page,()=>!window.CircleMixTestApi.selfTestState().active && window.CircleMixTestApi.selfTestState().overlayHidden,'self test exits');
+    const after=await page.evaluate(()=>window.CircleMixTestApi.selfTestState());
+    assert.equal(after.overlayDisplay,'none'); assert.equal(after.actionHeld,false); assert.equal(after.scratchHeld,false); assert.equal(after.pointerLockActive,false);
+    await page.locator('#safeStart').click(); await page.waitForFunction(()=>!document.getElementById('songSelect')?.hidden);
+    assert.deepEqual(errors,[]);
+  } finally { await context.close(); }
 }
 
 async function collectErrors(page){
@@ -570,6 +601,7 @@ async function runDeterministicAimAndCutRegression(browser){
       {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
       'fresh desktop'
     );
+    await runDeveloperSelfTestOverlayRegression(browser);
     const answeredDesktopLoop = await runFreshDirectPlayRegression(
       browser,
       {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
