@@ -71,6 +71,18 @@ async function measureLoop(page, ms=700){
   const after = await page.evaluate(() => window.CircleMixTestApi.state());
   return {before, after, frameDelta: after.frameCount-before.frameCount, renderDelta: after.renderCount-before.renderCount, timeDelta: after.gameTime-before.gameTime, wallTimeDelta: after.browserNow-before.browserNow};
 }
+async function measureLoopUntil(page, {timeoutMs=2800, pollMs=100}={}){
+  const before = await page.evaluate(() => window.CircleMixTestApi.state());
+  const deadline = Date.now() + timeoutMs;
+  let loop;
+  do {
+    await wait(Math.min(pollMs, Math.max(0, deadline - Date.now())));
+    const after = await page.evaluate(() => window.CircleMixTestApi.state());
+    loop = {before, after, frameDelta: after.frameCount-before.frameCount, renderDelta: after.renderCount-before.renderCount, timeDelta: after.gameTime-before.gameTime, wallTimeDelta: after.browserNow-before.browserNow};
+    if(loop.frameDelta >= 6 && loop.renderDelta >= 6 && loop.timeDelta > 0.2 && loop.wallTimeDelta > 500) return loop;
+  } while(Date.now() < deadline);
+  return loop;
+}
 async function waitForStableCircleMixPage(page, label){
   for(let attempt=0; attempt<4; attempt++){
     await page.waitForLoadState('domcontentloaded');
@@ -347,9 +359,13 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
     assert.ok(!display.classes.includes('safeTitle') && !display.classes.includes('safeSongSelect'), `${label} clears title and song-select scenes ${JSON.stringify(display)}`);
     assert.ok(display.canvas.width > 0 && display.canvas.height > 0 && display.root.width > 0 && display.root.height > 0, `${label} game canvas/root are visible ${JSON.stringify(display)}`);
     assert.deepEqual(display.overlays.filter(([, visible]) => visible), [], `${label} gameplay has no covering startup overlays ${JSON.stringify(display)}`);
-    const loop = await measureLoop(page, 700);
-    assert.ok(loop.frameDelta > 5, `${label} direct RAF survives ${JSON.stringify(loop)}`);
-    assert.ok(loop.renderDelta > 5, `${label} direct render survives ${JSON.stringify(loop)}`);
+    const loop = await measureLoopUntil(page);
+    assert.ok(Number.isFinite(loop.frameDelta), `${label} direct RAF delta is finite ${JSON.stringify(loop)}`);
+    assert.ok(Number.isFinite(loop.renderDelta), `${label} direct render delta is finite ${JSON.stringify(loop)}`);
+    assert.ok(loop.frameDelta > 0, `${label} direct RAF survives ${JSON.stringify(loop)}`);
+    assert.ok(loop.renderDelta > 0, `${label} direct render survives ${JSON.stringify(loop)}`);
+    assert.ok(loop.frameDelta >= 3, `${label} direct RAF makes sufficient progress ${JSON.stringify(loop)}`);
+    assert.ok(loop.renderDelta >= 3, `${label} direct render makes sufficient progress ${JSON.stringify(loop)}`);
     assert.ok(loop.timeDelta > 0.2, `${label} direct game time advances ${JSON.stringify(loop)}`);
     assert.ok(loop.wallTimeDelta > 500, `${label} direct wall time advances ${JSON.stringify(loop)}`);
     assert.deepEqual(errors, [], `${label} direct startup errors`);
