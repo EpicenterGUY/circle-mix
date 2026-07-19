@@ -2400,6 +2400,11 @@
     return freshInput && freshAimSample() && enoughTravel && (n.swingReverseTravel||0)<Math.PI*.16 && Math.abs(aimInput.sampleAngularVelocity)>=SWING_FLICK_SPEED && Math.sign(aimInput.sampleAngularVelocity)===dir;
   }
   function setScratchHeld(held){ scratchHeld=!!held; syncScratchHoldState(); }
+  function forceReleaseScratch(){
+    setScratchHeld(false);
+    scratchHoldWasActive=false;
+    for(const note of chart){ delete note.scratchGestureEpoch; delete note.scratchGestureArmed; delete note.scratchDirectedTravel; delete note.scratchReverseTravel; }
+  }
   function syncScratchHoldState(){
     if(scratchHeld===scratchHoldWasActive)return;
     scratchHoldWasActive=scratchHeld; scratchHoldEpoch++;
@@ -3835,7 +3840,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     pauseSettingsOpen=false;
     fullscreenInterrupted=false;
     Object.keys(keys).forEach(k=>{ keys[k]=false; });
-    keyA=false; keyD=false; filterHeld=false; scratchHeld=false; mouseDownRight=false;
+    keyA=false; keyD=false; filterHeld=false; forceReleaseScratch(); mouseDownRight=false;
     if(raf){ cancelAnimationFrame(raf); raf=0; }
     if(pauseOverlay) pauseOverlay.classList.remove("show");
     if(pauseRetry) pauseRetry.textContent="RETRY";
@@ -4502,7 +4507,7 @@ settingsOrigin=${settingsOrigin}`);
     startLayer.style.display="none";
     mouseX=cx; mouseY=cy-hitR;
     resetAimInput(-Math.PI/2); armAngle=targetAngle=prevArmAngle=-Math.PI/2; armVel=rawArmVel=0; magnetTarget=null;
-    filterHeld=false; scratchHeld=false; mouseDownRight=false;
+    filterHeld=false; forceReleaseScratch(); mouseDownRight=false;
     lastScratchResult="READY";
     updateAutoDebug(0);
     updateButtons();
@@ -4773,7 +4778,7 @@ settingsOrigin=${settingsOrigin}`);
   async function requestFullscreenEnter(){ return requestGameFullscreen(); }
   function requestFullscreenSafe(){ if(document.fullscreenElement || document.webkitFullscreenElement) exitGameFullscreen(); else requestGameFullscreen(); }
   function handleFullscreenChange(){
-    releaseMobilePointers(); keys.MouseLeft=false; scratchHeld=false; filterHeld=false; mouseDownRight=false; fullscreenInterrupted=false; fullscreenTransitioning=false;
+    releaseMobilePointers(); keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; fullscreenInterrupted=false; fullscreenTransitioning=false;
     const inFullscreen=!!(document.fullscreenElement || document.webkitFullscreenElement) || isStandaloneDisplay();
     if(fullscreenRetryBtn) fullscreenRetryBtn.hidden=inFullscreen || !isMobileViewport();
     if(!inFullscreen){ try{ if(screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }catch(e){} }
@@ -4974,7 +4979,7 @@ settingsOrigin=${settingsOrigin}`);
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
   function isAimPointerBlockedTarget(target){return !!(target && target.closest && target.closest("#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialComplete,.tuner,.editorPanel,.start,.mobileControls,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay"));}
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay"));}
-  function releaseMobilePointers(){ mobileAimPointerId=null; mobileActionPointerId=null; mobileScratchPointerId=null; keys.MouseLeft=false; scratchHeld=false; filterHeld=false; mouseDownRight=false; mobileActionBtn?.classList.remove("mobileActionActive"); mobileScratchBtn?.classList.remove("mobileScratchActive"); }
+  function releaseMobilePointers(){ mobileAimPointerId=null; mobileActionPointerId=null; mobileScratchPointerId=null; keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; mobileActionBtn?.classList.remove("mobileActionActive"); mobileScratchBtn?.classList.remove("mobileScratchActive"); }
   function handleMobileAimPointer(e){ if(e.pointerId!==mobileAimPointerId) return; updateGameplayPointerFromEvent(e,"touch"); }
   if(window.PointerEvent){
     canvas.addEventListener("pointerdown",e=>{ if(!isCoarsePointerMobile()||e.pointerType!=="touch"||isUiInputTarget(e.target)||mobileAimPointerId!==null) return; mobileAimPointerId=e.pointerId; try{canvas.setPointerCapture(e.pointerId);}catch(err){} updateGameplayPointerFromEvent(e,"touch"); e.preventDefault(); },{passive:false});
@@ -5562,7 +5567,7 @@ running=${running}`);
   bindPress(songPlayBtn,(e)=>startSelectedSong(e));
 
   window.addEventListener("resize",()=>{ releaseMobilePointers(); scheduleStableViewportResize("resize"); handlePlayOrientation(); });
-  window.addEventListener("orientationchange", () => { releaseMobilePointers(); keys.MouseLeft=false; scratchHeld=false; filterHeld=false; mouseDownRight=false; scheduleStableViewportResize("orientationchange"); setTimeout(handlePlayOrientation, 80); });
+  window.addEventListener("orientationchange", () => { releaseMobilePointers(); keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; scheduleStableViewportResize("orientationchange"); setTimeout(handlePlayOrientation, 80); });
   window.visualViewport?.addEventListener("resize",()=>scheduleStableViewportResize("visualViewport"));
   document.addEventListener("touchmove", handleGameplayTouchMove, {passive:false});
 
