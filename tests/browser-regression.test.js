@@ -8,6 +8,7 @@ const artifactDir = process.env.BROWSER_ARTIFACTS_DIR;
 const diagnosticContexts = new Set();
 const diagnosticPages = new Set();
 const diagnosticLogs = new Map();
+let activeBrowser = null;
 
 async function registerDiagnosticContext(context){
   diagnosticContexts.add(context);
@@ -15,6 +16,7 @@ async function registerDiagnosticContext(context){
   return context;
 }
 function registerDiagnosticPage(page){ diagnosticPages.add(page); return page; }
+function unregisterDiagnosticContext(context, page){ diagnosticContexts.delete(context); if(page){ diagnosticPages.delete(page); diagnosticLogs.delete(page); } }
 async function captureFailureArtifacts(error){
   if(!artifactDir) return;
   fs.mkdirSync(artifactDir, {recursive:true});
@@ -112,11 +114,23 @@ async function assertStateContract(page, label){
   const state = await page.evaluate(() => window.CircleMixTestApi?.state?.());
   assert.ok(state && typeof state === 'object', `${label} exposes CircleMixTestApi.state()`);
   const booleans = ['running','paused','tutorialMode','tutorialPointerMoved','tutorialTransitioning','tutorialFinalMixRetryScheduled','tutorialChartSettled','tutorialHudHidden','tutorialCompleteVisible','inputEnabled','pointerActive','actionHeld','scratchHeld','mouseDownRight'];
-  const numbers = ['tutorialStepIndex','tutorialTargetProgress','tutorialInputEnabledAt','tutorialSuccessCount','tutorialValidUserInputCount','pendingTutorialSkipCount','tutorialStepToken','tutorialAttemptId','tutorialTimerCount','tutorialFinalMixRetryCount','tutorialChartFinalizationCount','tutorialCompleteCount','tutorialRafCount','judgedCount','chartLength','gameTime','browserNow','frameCount','renderCount','mouseX','mouseY','armAngle','rawArmVel','rawAngularVelocity','cx','cy','hitR'];
+  const numbers = ['tutorialStepIndex','tutorialTargetProgress','tutorialInputEnabledAt','tutorialSuccessCount','tutorialValidUserInputCount','pendingTutorialSkipCount','tutorialStepToken','tutorialAttemptId','tutorialTimerCount','tutorialFinalMixRetryCount','tutorialChartFinalizationCount','tutorialCompleteCount','tutorialRafCount','judgedCount','chartLength','gameTime','browserNow','frameCount','renderCount','mouseX','mouseY','armAngle','rawArmVel','rawAngularVelocity','W','H','cx','cy','hitR'];
   for(const key of booleans) assert.equal(typeof state[key], 'boolean', `${label} state.${key} must be an explicit boolean`);
   for(const key of numbers) assert.ok(Number.isFinite(state[key]), `${label} state.${key} must be a finite explicit number`);
   for(const key of ['tutorialExploreInsideSince','mobileAimPointerId','mobileActionPointerId','mobileScratchPointerId']) assert.ok(state[key] === null || typeof state[key] === 'number', `${label} state.${key} must be null or a number`);
   return state;
+}
+async function assertViewportStateAfter(page, action, label){
+  await page.evaluate(action);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const state = await assertStateContract(page, label);
+  for(const key of ['W','H','cx','cy','hitR']) assert.ok(Number.isFinite(state[key]), `${label} state.${key} remains finite after viewport event`);
+}
+async function runViewportResizeRegression(page, label){
+  await assertStateContract(page, `${label} initial viewport`);
+  await assertViewportStateAfter(page, () => window.dispatchEvent(new Event('resize')), `${label} window resize`);
+  await assertViewportStateAfter(page, () => window.CircleMixTestApi.triggerViewportResizeObserverCallback(), `${label} ResizeObserver callback`);
+  await assertViewportStateAfter(page, () => window.dispatchEvent(new Event('orientationchange')), `${label} orientationchange`);
 }
 async function lanePoint(page, lane){ return page.evaluate(l => window.CircleMixTestApi.lanePoint(l), lane); }
 async function moveToLane(page, lane){ const p = await lanePoint(page, lane); await page.mouse.move(p.x, p.y); return p; }
@@ -282,9 +296,11 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
   }
   const page = await context.newPage();
   const errors = await collectErrors(page);
+  let completed=false;
   try{
     await page.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
     await waitForStableCircleMixPage(page, `${label} direct play`);
+    await runViewportResizeRegression(page, `${label} direct play`);
     await dismissStartupOverlays(page);
     if(!promptAnswered){
       await page.locator('#tutorialPromptSkip').click();
@@ -337,9 +353,13 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
     assert.ok(loop.timeDelta > 0.2, `${label} direct game time advances ${JSON.stringify(loop)}`);
     assert.ok(loop.wallTimeDelta > 500, `${label} direct wall time advances ${JSON.stringify(loop)}`);
     assert.deepEqual(errors, [], `${label} direct startup errors`);
+    completed=true;
     return loop;
   } finally {
-    await context.close();
+    if(completed){
+      unregisterDiagnosticContext(context, page);
+      await context.close();
+    }
   }
 }
 
@@ -466,6 +486,7 @@ async function dismissStartupOverlays(page){
   try{
     await waitForServer('http://127.0.0.1:4173/index.html');
     const browser = await chromium.launch({headless:true});
+    activeBrowser = browser;
     const freshDesktopLoop = await runFreshDirectPlayRegression(
       browser,
       {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
@@ -720,14 +741,16 @@ async function dismissStartupOverlays(page){
     assert.equal(aimDiagnostics.stale.sampleAngularVelocity, 0, `stale velocity ${JSON.stringify(aimDiagnostics.stale)}`);
     assert.ok(aimDiagnostics.keyCW.accumulatedCWTravel>0 && aimDiagnostics.keyCCW.accumulatedCCWTravel>0, `keyboard travel ${JSON.stringify({keyCW:aimDiagnostics.keyCW,keyCCW:aimDiagnostics.keyCCW})}`);
 
-    await browser.close();
     assert.deepEqual([...errors, ...mobileErrors], []);
     console.log('PASS browser regression', {freshDesktopLoop, answeredDesktopLoop, freshMobileLoop, stillMouseLoop, hudHoverLoop, songResults, mobile:{frameDelta:mobileLoop.frameDelta}});
+    await browser.close();
+    activeBrowser = null;
   } finally {
     server.close();
   }
 })().catch(async error => {
   console.error(error);
   await captureFailureArtifacts(error);
+  await activeBrowser?.close().catch(() => {});
   process.exit(1);
 });
