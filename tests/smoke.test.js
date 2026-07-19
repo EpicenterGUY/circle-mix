@@ -175,8 +175,8 @@ assert.equal(JSON.stringify(mirror.charts[difficulty].notes), JSON.stringify(bun
 test("index and service worker use the same PWA cache query", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260719-aim-input-1/);
-assert.match(sw, /20260719-aim-input-1/);
+assert.match(index, /20260719-playfield-readability-1/);
+assert.match(sw, /20260719-playfield-readability-1/);
 assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
@@ -258,15 +258,15 @@ assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOver
 });
 
 
-test("aim input release versions are synchronized at 0.9.8", () => {
+test("playfield readability release versions are synchronized at 0.9.9", () => {
 const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.8"/);
-assert.match(pwa, /const VERSION="0\.9\.8"/);
-assert.match(sw, /const VERSION = "0\.9\.8"/);
-assert.match(changelog, /version:\s*"0\.9\.8"/);
+assert.match(version, /version:\s*"0\.9\.9"/);
+assert.match(pwa, /const VERSION="0\.9\.9"/);
+assert.match(sw, /const VERSION = "0\.9\.9"/);
+assert.match(changelog, /version:\s*"0\.9\.9"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {
@@ -415,4 +415,26 @@ assert.match(src, /const delta=\(keyD-keyA\)\*9\.5\*dt/);
 assert.match(src, /aimInput\.accumulatedCWTravel\+=delta/);
 assert.match(src, /aimInput\.accumulatedCCWTravel-=delta/);
 assert.match(src, /armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=a/);
+});
+
+
+test("playfield readability keeps TRACE visual widths independent of judgement tolerance", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+const traceStart = src.indexOf("function drawTrace(n,t){");
+const traceBody = src.slice(traceStart, src.indexOf("function linkedTraceForSwing", traceStart));
+assert.match(src, /function traceVisualProfile\(\)\{/);
+assert.match(src, /activeOuterWidth:compact\?18:21/);
+assert.match(src, /activeInnerWidth:compact\?6:8/);
+assert.doesNotMatch(traceBody, /outerRadialTolerance\*2/);
+assert.doesNotMatch(traceBody, /innerRadialTolerance\*2/);
+assert.match(traceBody, /const visual=traceVisualProfile\(\)/);
+assert.match(src, /function getTraceJudgementRegion\(n,t,profile=traceProfile\(\)\)/);
+});
+
+test("playfield readability only renders a separate judgement marker when needed", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+assert.match(src, /function judgementMarkerVisible\(\)\{\s*return judgementMarkerVisibleFor\(visualArmAngle,judgementAimAngle,magnetTarget\);/);
+assert.match(src, /if\(judgementMarkerVisible\(\)\)\{/);
+assert.match(src, /ctx\.arc\(hitR,0,5\.5,0,TAU\); ctx\.stroke\(\)/);
+assert.doesNotMatch(src, /ctx\.arc\(hitR,0,4\.5,0,TAU\); ctx\.fill\(\)/);
 });

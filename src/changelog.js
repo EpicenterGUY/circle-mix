@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.9",
+    date: "2026-07-19",
+    title: "Playfield Readability Polish",
+    summary: "에임 팔과 TRACE 경로의 겹침을 줄이고 판정 위치와 노트를 더 선명하게 표시하도록 플레이 화면을 정리",
+    changes: [
+      { category: "PLAYFIELD", text: "에임 팔의 원호, 연결선, 끝점을 얇고 단순하게 정리하고 겹칠 때만 판정 외곽 링을 표시" },
+      { category: "TRACE", text: "판정 tolerance와 분리된 전용 시각 폭으로 미래·지나간 경로와 현재 목표를 명확하게 렌더링" },
+      { category: "TEST", text: "TRACE 시각 프로필과 판정 위치 마커의 렌더링 조건을 브라우저 회귀 테스트로 검증" }
+    ]
+  },
+  {
     version: "0.9.8",
     date: "2026-07-19",
     title: "Event-Based Aim Input Stability",

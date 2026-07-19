@@ -352,10 +352,10 @@ async function dismissStartupOverlays(page){
       updateLogVisible: (() => { const overlay=document.getElementById('updateLogOverlay'); return !!overlay && !overlay.hidden && overlay.classList.contains('show'); })(),
       cacheNames: await caches.keys()
     }));
-    assert.equal(releaseMetadata.version, '0.9.8', `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
-    assert.equal(releaseMetadata.changelogVersion, '0.9.8', `latest changelog ${JSON.stringify(releaseMetadata)}`);
+    assert.equal(releaseMetadata.version, '0.9.9', `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
+    assert.equal(releaseMetadata.changelogVersion, '0.9.9', `latest changelog ${JSON.stringify(releaseMetadata)}`);
     assert.equal(releaseMetadata.updateLogVisible, true, `new release auto-opens UPDATE LOG ${JSON.stringify(releaseMetadata)}`);
-    assert.ok(releaseMetadata.cacheNames.includes('circle-mix-v0.9.8-app'), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);
+    assert.ok(releaseMetadata.cacheNames.includes('circle-mix-v0.9.9-app'), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);
     await dismissStartupOverlays(page);
 
     await page.evaluate(() => {
@@ -494,6 +494,16 @@ async function dismissStartupOverlays(page){
       assert.ok(loop.timeDelta > 0.4, `${song} time delta ${loop.timeDelta}`);
       songResults[song] = {chartLength: loop.after.chartLength, frameDelta: loop.frameDelta, renderDelta: loop.renderDelta, timeDelta: loop.timeDelta};
     }
+
+    const readability = await page.evaluate(() => ({
+      arm: window.CircleMixTestApi.visualArmProfile(),
+      trace: window.CircleMixTestApi.traceVisualProfile(),
+      markerAtMatch: window.CircleMixTestApi.judgementMarkerVisible()
+    }));
+    assert.ok(readability.trace.activeOuterWidth <= 24, `TRACE visual outer width ${JSON.stringify(readability)}`);
+    assert.equal(readability.markerAtMatch, false, `OFF matching arm has no duplicate marker ${JSON.stringify(readability)}`);
+    const separatedMarker = await page.evaluate(() => window.CircleMixTestApi.judgementMarkerVisibleFor(0, Math.PI/18));
+    assert.equal(separatedMarker, true, 'separated visual and judgement angles show the outline marker');
 
     const mobile = await browser.newContext({...devices['iPhone 12'], viewport:{width:844,height:390}, screen:{width:844,height:390}});
     const mobilePage = await mobile.newPage();
