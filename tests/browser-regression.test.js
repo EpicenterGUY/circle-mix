@@ -91,14 +91,21 @@ async function runRapidSkipRegression(page, label){
     await clickSkipRapidly(page, 2, interval);
     await waitFor(page, arg => {
       const st = window.CircleMixTestApi.state();
-      return st.tutorialStepIndex >= Math.min(arg.beforeIndex + 2, 17) || !st.tutorialMode;
+      return !st.tutorialMode || (
+        st.tutorialStepIndex >= Math.min(arg.beforeIndex + 2, 17) &&
+        st.pendingTutorialSkipCount === 0 &&
+        st.tutorialTransitioning === false &&
+        st.tutorialTransitionState === 'IDLE'
+      );
     }, `${label} rapid skip ${interval}ms`, 8000, {beforeIndex:before.tutorialStepIndex});
     const after = await page.evaluate(() => window.CircleMixTestApi.state());
     assert.ok(after.tutorialStepIndex >= before.tutorialStepIndex, `${label} ${interval}ms monotonic ${JSON.stringify({before, after})}`);
     assert.equal(after.pendingTutorialSkipCount, 0, `${label} ${interval}ms queue drained`);
-    const loop = await measureLoop(page, 500);
+    const loop = await measureLoop(page, 700);
     assert.ok(loop.frameDelta > 5, `${label} ${interval}ms RAF survives ${JSON.stringify(loop)}`);
     assert.ok(loop.renderDelta > 5, `${label} ${interval}ms render survives ${JSON.stringify(loop)}`);
+    assert.ok(loop.timeDelta > 0.2, `${label} ${interval}ms game time advances ${JSON.stringify(loop)}`);
+    assert.ok(loop.wallTimeDelta > 500, `${label} ${interval}ms wall time advances ${JSON.stringify(loop)}`);
   }
 }
 async function reachFinalTutorialStep(page, label){
@@ -218,6 +225,74 @@ async function runFinalTutorialRegression(page, label){
   await runFinalMixConsecutiveRetryRegression(page, label);
   await runSuccessfulFinalMixRegression(page, label);
   await runFinalSkipCompletionRegression(page, label);
+}
+
+async function runFreshDirectPlayRegression(browser, contextOptions, label, {promptAnswered=false}={}){
+  const context = await browser.newContext(contextOptions);
+  if(promptAnswered){
+    await context.addInitScript(() => localStorage.setItem('circleMixTutorialPromptAnswered', 'true'));
+  }
+  const page = await context.newPage();
+  const errors = await collectErrors(page);
+  try{
+    await page.goto('http://127.0.0.1:4173/index.html?browserTest=1', {waitUntil:'domcontentloaded'});
+    await waitForStableCircleMixPage(page, `${label} direct play`);
+    await dismissStartupOverlays(page);
+    if(!promptAnswered){
+      await page.locator('#tutorialPromptSkip').click();
+      await page.waitForFunction(() => document.getElementById('tutorialPrompt')?.hidden === true);
+    }
+    const tutorialStorage = await page.evaluate(() => ({
+      promptAnswered: localStorage.getItem('circleMixTutorialPromptAnswered'),
+      completed: localStorage.getItem('circleMixTutorialCompleted')
+    }));
+    assert.equal(tutorialStorage.promptAnswered, 'true', `${label} tutorial prompt is answered without starting it`);
+    assert.equal(tutorialStorage.completed, null, `${label} tutorial remains incomplete`);
+    const startButton = page.locator('#safeStart');
+    await startButton.waitFor({state:'visible'});
+    assert.equal(await startButton.isEnabled(), true, `${label} START is enabled`);
+    const startBox = await startButton.boundingBox();
+    assert.ok(
+      startBox && startBox.width > 0 && startBox.height > 0,
+      `${label} START has a visible hit box ${JSON.stringify(startBox)}`
+    );
+    await startButton.click({force:true});
+    await page.waitForFunction(() => !document.getElementById('songSelect')?.hidden);
+    await page.locator('#songPlayBtn').click();
+    await waitFor(page, () => {
+      const st = window.CircleMixTestApi.state();
+      return st.activeScene === 'game' && st.running && !st.tutorialMode && st.chartLength > 0;
+    }, `${label} direct built-in game start`, 8000);
+    const display = await page.evaluate(() => {
+      const visible = id => {
+        const element = document.getElementById(id);
+        if(!element) return false;
+        const style = getComputedStyle(element);
+        return !element.hidden && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0;
+      };
+      const canvas = document.getElementById('game').getBoundingClientRect();
+      const root = document.getElementById('gameRoot').getBoundingClientRect();
+      return {
+        classes: [...document.body.classList],
+        canvas: {width:canvas.width, height:canvas.height},
+        root: {width:root.width, height:root.height},
+        overlays: ['startLayer', 'tutorialPrompt', 'songSelect', 'updateLogOverlay'].map(id => [id, visible(id)])
+      };
+    });
+    assert.ok(display.classes.includes('safeGame'), `${label} has safeGame ${JSON.stringify(display)}`);
+    assert.ok(!display.classes.includes('safeTitle') && !display.classes.includes('safeSongSelect'), `${label} clears title and song-select scenes ${JSON.stringify(display)}`);
+    assert.ok(display.canvas.width > 0 && display.canvas.height > 0 && display.root.width > 0 && display.root.height > 0, `${label} game canvas/root are visible ${JSON.stringify(display)}`);
+    assert.deepEqual(display.overlays.filter(([, visible]) => visible), [], `${label} gameplay has no covering startup overlays ${JSON.stringify(display)}`);
+    const loop = await measureLoop(page, 700);
+    assert.ok(loop.frameDelta > 5, `${label} direct RAF survives ${JSON.stringify(loop)}`);
+    assert.ok(loop.renderDelta > 5, `${label} direct render survives ${JSON.stringify(loop)}`);
+    assert.ok(loop.timeDelta > 0.2, `${label} direct game time advances ${JSON.stringify(loop)}`);
+    assert.ok(loop.wallTimeDelta > 500, `${label} direct wall time advances ${JSON.stringify(loop)}`);
+    assert.deepEqual(errors, [], `${label} direct startup errors`);
+    return loop;
+  } finally {
+    await context.close();
+  }
 }
 
 async function collectErrors(page){
@@ -341,6 +416,22 @@ async function dismissStartupOverlays(page){
   try{
     await waitForServer('http://127.0.0.1:4173/index.html');
     const browser = await chromium.launch({headless:true});
+    const freshDesktopLoop = await runFreshDirectPlayRegression(
+      browser,
+      {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
+      'fresh desktop'
+    );
+    const answeredDesktopLoop = await runFreshDirectPlayRegression(
+      browser,
+      {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
+      'prompt-answered desktop',
+      {promptAnswered:true}
+    );
+    const freshMobileLoop = await runFreshDirectPlayRegression(
+      browser,
+      {...devices['iPhone 12'], viewport:{width:844,height:390}, screen:{width:844,height:390}},
+      'fresh mobile'
+    );
     const desktop = await browser.newContext({viewport:{width:1280,height:720}, hasTouch:false, isMobile:false});
     const page = await desktop.newPage();
     const errors = await collectErrors(page);
@@ -352,10 +443,10 @@ async function dismissStartupOverlays(page){
       updateLogVisible: (() => { const overlay=document.getElementById('updateLogOverlay'); return !!overlay && !overlay.hidden && overlay.classList.contains('show'); })(),
       cacheNames: await caches.keys()
     }));
-    assert.equal(releaseMetadata.version, '0.9.9', `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
-    assert.equal(releaseMetadata.changelogVersion, '0.9.9', `latest changelog ${JSON.stringify(releaseMetadata)}`);
+    assert.equal(releaseMetadata.version, '0.9.10', `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
+    assert.equal(releaseMetadata.changelogVersion, '0.9.10', `latest changelog ${JSON.stringify(releaseMetadata)}`);
     assert.equal(releaseMetadata.updateLogVisible, true, `new release auto-opens UPDATE LOG ${JSON.stringify(releaseMetadata)}`);
-    assert.ok(releaseMetadata.cacheNames.includes('circle-mix-v0.9.9-app'), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);
+    assert.ok(releaseMetadata.cacheNames.includes('circle-mix-v0.9.10-app'), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);
     await dismissStartupOverlays(page);
 
     await page.evaluate(() => {
@@ -538,8 +629,9 @@ async function dismissStartupOverlays(page){
     assert.equal(scratchDown.scratchHeld, true);
     await mobilePage.locator('#mobileScratchBtn').dispatchEvent('pointercancel', {pointerId:42, pointerType:'touch', isPrimary:true, bubbles:true});
     const scratchUp = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
-    assert.equal(scratchUp.mobileScratchPointerId, null);
-    assert.equal(scratchUp.scratchHeld, false);
+    assert.equal(scratchUp.mobileScratchPointerId, null, `mobile SCRATCH pointercancel clears pointer ${JSON.stringify({scratchDown, scratchUp})}`);
+    assert.equal(scratchUp.scratchHeld, false, `mobile SCRATCH pointercancel releases hold ${JSON.stringify({scratchDown, scratchUp})}`);
+    assert.equal(scratchUp.mouseDownRight, false, `mobile SCRATCH pointercancel releases right input ${JSON.stringify({scratchDown, scratchUp})}`);
     const mobileLoop = await measureLoop(mobilePage, 500);
     assert.ok(mobileLoop.frameDelta > 5 && mobileLoop.renderDelta > 5 && mobileLoop.wallTimeDelta > 300, `mobile loop ${JSON.stringify(mobileLoop)}`);
     await runRapidSkipRegression(mobilePage, 'mobile');
@@ -580,7 +672,7 @@ async function dismissStartupOverlays(page){
 
     await browser.close();
     assert.deepEqual([...errors, ...mobileErrors], []);
-    console.log('PASS browser regression', {stillMouseLoop, hudHoverLoop, songResults, mobile:{frameDelta:mobileLoop.frameDelta}});
+    console.log('PASS browser regression', {freshDesktopLoop, answeredDesktopLoop, freshMobileLoop, stillMouseLoop, hudHoverLoop, songResults, mobile:{frameDelta:mobileLoop.frameDelta}});
   } finally {
     server.close();
   }

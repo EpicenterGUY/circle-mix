@@ -175,8 +175,8 @@ assert.equal(JSON.stringify(mirror.charts[difficulty].notes), JSON.stringify(bun
 test("index and service worker use the same PWA cache query", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260719-playfield-readability-1/);
-assert.match(sw, /20260719-playfield-readability-1/);
+assert.match(index, /20260719-direct-play-startup-fix-1/);
+assert.match(sw, /20260719-direct-play-startup-fix-1/);
 assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
@@ -258,15 +258,15 @@ assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOver
 });
 
 
-test("playfield readability release versions are synchronized at 0.9.9", () => {
+test("direct play startup release versions are synchronized at 0.9.10", () => {
 const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.9"/);
-assert.match(pwa, /const VERSION="0\.9\.9"/);
-assert.match(sw, /const VERSION = "0\.9\.9"/);
-assert.match(changelog, /version:\s*"0\.9\.9"/);
+assert.match(version, /version:\s*"0\.9\.10"/);
+assert.match(pwa, /const VERSION="0\.9\.10"/);
+assert.match(sw, /const VERSION = "0\.9\.10"/);
+assert.match(changelog, /version:\s*"0\.9\.10"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {
