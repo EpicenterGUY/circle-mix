@@ -276,6 +276,7 @@
   let centerDeadzoneActive=false, cursorRadius=hitR, lastRawAngleForVelocity=-Math.PI/2;
   let rawAngularVelocity=0, magnetTarget=null, magnetAngleError=0;
   // Pointer samples, not RAF cadence, are the authoritative aim input stream.
+  const AIM_SAMPLE_FRESH_MS=120;
   const aimInput={rawAngle:-Math.PI/2, unwrappedAngle:-Math.PI/2, previousSampleAngle:null, sampleAngularVelocity:0, accumulatedCWTravel:0, accumulatedCCWTravel:0, pointerRadius:0, sampleCount:0, lastSampleTimestamp:0, centerDeadzoneActive:false, rebasePending:true, pendingSamples:0, lastSampleDelta:0};
   let rawInputAngle=-Math.PI/2, judgementAimAngle=-Math.PI/2, visualArmAngle=-Math.PI/2;
   let keyA=false, keyD=false, filterHeld=false, scratchHeld=false, mouseDownRight=false;
@@ -2392,7 +2393,7 @@
     const dir=n.type==="swingCW"?1:-1;
     const enoughTravel=(n.swingDirectedTravel||0)>=Math.PI*.035;
     const freshInput=!n.tutorialTraceSwingRuntime || performance.now()>=(n.swingArmedAt||0);
-    return freshInput && enoughTravel && Math.abs(aimInput.sampleAngularVelocity)>=SWING_FLICK_SPEED && Math.sign(aimInput.sampleAngularVelocity)===dir;
+    return freshInput && freshAimSample() && enoughTravel && Math.abs(aimInput.sampleAngularVelocity)>=SWING_FLICK_SPEED && Math.sign(aimInput.sampleAngularVelocity)===dir;
   }
 
   function checkScratch(n, t){
@@ -2402,7 +2403,7 @@
     scratchCandidate=!!(scratchHeld&&aligned(n.angle,.026));
     scratchMoveAmount=Math.abs(aimInput.lastSampleDelta);
     scratchSpeed=Math.abs(aimInput.sampleAngularVelocity);
-    scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
+    scratchThresholdMet=freshAimSample() && scratchSpeed>=SCRATCH_FLICK_SPEED;
     if(!scratchHeld){lastScratchResult="READY";return false;}
     if(!aligned(n.angle,.026)){lastScratchResult="MISS";return false;}
     if(!scratchThresholdMet){lastScratchResult="TOO SLOW";return false;}
@@ -2490,7 +2491,7 @@
     const activePath=chart.find(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&t>=n.hitTime&&t<=n.hitTime+n.duration);
     if(activePath){
       const a=slideAngle(activePath,t);
-      armAngle=a;
+      armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=a;
       targetAngle=a;
       armVel=slideDelta(activePath)/Math.max(activePath.duration,.001);
     }else{
@@ -2530,8 +2531,8 @@
     const angle=Math.atan2(dy,dx);
     rawInputAngle=rawTargetAngle=angle;
     if(aimInput.rebasePending || aimInput.previousSampleAngle===null){
-      aimInput.previousSampleAngle=angle; aimInput.rawAngle=angle; aimInput.rebasePending=false;
-      aimInput.lastSampleTimestamp=timestamp; aimInput.centerDeadzoneActive=centerDeadzoneActive=false;
+      aimInput.previousSampleAngle=angle; aimInput.rawAngle=aimInput.unwrappedAngle=angle; aimInput.rebasePending=false;
+      aimInput.sampleAngularVelocity=aimInput.lastSampleDelta=0; aimInput.lastSampleTimestamp=timestamp; aimInput.centerDeadzoneActive=centerDeadzoneActive=false;
       lastValidTargetAngle=angle; return;
     }
     const delta=norm(angle-aimInput.previousSampleAngle);
@@ -2542,20 +2543,32 @@
     aimInput.sampleCount++; aimInput.pendingSamples++; aimInput.lastSampleTimestamp=timestamp;
     aimInput.centerDeadzoneActive=centerDeadzoneActive=false; centerDeadzoneActive=false; lastValidTargetAngle=angle;
   }
+  function freshAimSample(){
+    const fresh=aimInput.lastSampleTimestamp>0 && performance.now()-aimInput.lastSampleTimestamp<=AIM_SAMPLE_FRESH_MS;
+    if(!fresh){ aimInput.sampleAngularVelocity=0; aimInput.lastSampleDelta=0; rawAngularVelocity=0; }
+    return fresh;
+  }
   function updateArm(dt){
     const tNow=now(); prevArmAngle=armAngle;
     if(isAutoActive() && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)) return;
     if(isAutoActive()||keyA||keyD){
-      if(keyA||keyD){ targetAngle+=(keyD-keyA)*9.5*dt; magnetTarget=null; }
+      if(keyA||keyD){
+        const delta=(keyD-keyA)*9.5*dt;
+        targetAngle+=delta; rawInputAngle=rawTargetAngle=norm(targetAngle);
+        aimInput.unwrappedAngle+=delta; aimInput.lastSampleDelta=delta; aimInput.sampleAngularVelocity=delta/Math.max(dt,.001);
+        if(delta>0) aimInput.accumulatedCWTravel+=delta; else aimInput.accumulatedCCWTravel-=delta;
+        aimInput.sampleCount++; aimInput.lastSampleTimestamp=performance.now(); magnetTarget=null;
+      }
       const diff=norm(targetAngle-armAngle); armAngle=norm(armAngle+diff*clamp(1-Math.pow(.0001,dt),0,1));
-      judgementAimAngle=rawInputAngle=rawTargetAngle=armAngle; visualArmAngle=armAngle; rawArmVel=armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001); return;
+      judgementAimAngle=rawInputAngle=rawTargetAngle=armAngle; visualArmAngle=armAngle; rawArmVel=armVel=aimInput.sampleAngularVelocity||norm(armAngle-prevArmAngle)/Math.max(dt,.001); return;
     }
+    const sampleFresh=freshAimSample();
     const profile=lastPointerSource!=="touch"?aimStabilizerProfile():{mode:"OFF"};
     targetAngle=rawInputAngle;
     let desired=rawInputAngle;
     if(lastPointerSource!=="touch" && profile.mode!=="OFF"){
-      desired=updateAimMagnet(desired,aimInput.sampleAngularVelocity);
-      if(Math.abs(aimInput.sampleAngularVelocity)<profile.fastVel && aimInput.pendingSamples){
+      desired=updateAimMagnet(desired,sampleFresh?aimInput.sampleAngularVelocity:0);
+      if(sampleFresh && Math.abs(aimInput.sampleAngularVelocity)<profile.fastVel && aimInput.pendingSamples){
         const slowFactor=clamp((profile.fastVel-Math.abs(aimInput.sampleAngularVelocity))/Math.max(profile.fastVel-profile.slowVel,.001),0,1);
         const alpha=1-Math.exp(-dt/Math.max(profile.slowTime*slowFactor,.001));
         stabilizedTargetAngle=norm(stabilizedTargetAngle+norm(desired-stabilizedTargetAngle)*alpha);
@@ -3913,6 +3926,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function resetTraceSwingCarryover(){
+    resetAimInput(rawInputAngle);
     rawArmVel=0; armVel=0; rawAngularVelocity=0; lastRawAngleForVelocity=rawTargetAngle; prevArmAngle=armAngle; magnetTarget=null;
     for(const n of chart){ delete n.swingGestureArmed; delete n.swingDirectedTravel; n.swingLastAngle=rawTargetAngle; }
   }
@@ -4026,6 +4040,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     tutorialStepIndex=runtime.index;
     const st=runtime.step; st._hit=0; st._done=false;
     resetTutorialRuntimeState();
+    resetAimInput(-Math.PI/2);
     if(runtime.step.kind==="traceSwing") tutorialState.traceSwingPhase="TRACE_ACTIVE";
     const fullSessionStart=source==="replay" || !running || activeSceneName()!=="game";
     if(fullSessionStart) cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
@@ -4051,9 +4066,10 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
   function restoreTutorialAuto(){ tutorialState.autoSuppressed=false; setAutoPlayEnabled(!!tutorialState.previousAutoEnabled, "tutorial-restore"); }
-  function exitTutorial(toTitle=true){ clearTutorialTimers(); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; resetRenderWindow(); chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
+  function exitTutorial(toTitle=true){ clearTutorialTimers(); resetAimInput(-Math.PI/2); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; resetRenderWindow(); chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
   function completeTutorial(){
     if(tutorialState.completing) return;
+    resetAimInput(-Math.PI/2);
     tutorialState.completing=true; tutorialState.completeCount++; tutorialState.pendingSkipQueue=[]; tutorialTransitionGeneration++; tutorialState.transitionState="IDLE"; tutorialState.transitioning=false;
     clearTutorialTimers(); localStorage.setItem(TUTORIAL_COMPLETED_KEY,"true"); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); if(tutorialComplete)tutorialComplete.hidden=false; safeSetState("title"); startLayer.style.display="none";
   }
@@ -4162,6 +4178,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function endGame(stopAudio=true){
+    resetAimInput(-Math.PI/2);
     cleanupPlaySession({stopAudio, hideResultOverlay:true, abort:true});
     notifyPwaGameplay();
     if(stopAudio && activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
@@ -4171,6 +4188,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
 
   function showPause(message=""){
     releaseMobilePointers();
+    resetAimInput(rawInputAngle);
     if(!running) return;
     if(!paused){
       paused=true;
@@ -4185,7 +4203,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function resumeGame(){
-    releaseMobilePointers();
+    releaseMobilePointers(); resetAimInput(rawInputAngle);
     if(!paused) return;
     paused=false;
     notifyPwaGameplay();
@@ -4344,7 +4362,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
     scratchMoveAmount=Math.abs(aimInput.lastSampleDelta);
     scratchSpeed=Math.abs(aimInput.sampleAngularVelocity);
-    scratchThresholdMet=scratchSpeed>=SCRATCH_FLICK_SPEED;
+    scratchThresholdMet=freshAimSample() && scratchSpeed>=SCRATCH_FLICK_SPEED;
     scratchCandidate=!!scratchHeld;
     updateAuto(t);
     updateArm(dt);
@@ -4444,7 +4462,7 @@ settingsOrigin=${settingsOrigin}`);
     lastMs=startMs;
     startLayer.style.display="none";
     mouseX=cx; mouseY=cy-hitR;
-    armAngle=targetAngle=prevArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=lastRawAngleForVelocity=-Math.PI/2; armVel=rawArmVel=rawAngularVelocity=0; magnetTarget=null; centerDeadzoneActive=false;
+    resetAimInput(-Math.PI/2); armAngle=targetAngle=prevArmAngle=-Math.PI/2; armVel=rawArmVel=0; magnetTarget=null;
     filterHeld=false; scratchHeld=false; mouseDownRight=false;
     lastScratchResult="READY";
     updateAutoDebug(0);
@@ -4898,8 +4916,9 @@ settingsOrigin=${settingsOrigin}`);
 
   function updateGameplayPointerFromEvent(e,source){
     if(isAimPointerBlockedTarget(e.target))return;
-    const samples=typeof e.getCoalescedEvents==="function" ? e.getCoalescedEvents() : [e];
-    for(const point of samples.length?samples:[e]){
+    const fallbackPoint=e.touches?.[0] || e.changedTouches?.[0] || e;
+    const samples=typeof e.getCoalescedEvents==="function" ? e.getCoalescedEvents() : [fallbackPoint];
+    for(const point of samples.length?samples:[fallbackPoint]){
       if(!Number.isFinite(point.clientX)||!Number.isFinite(point.clientY))continue;
       // The gameplay canvas uses viewport CSS pixels, so client coordinates are its native coordinate system.
       processAimSample(point.clientX,point.clientY,Number.isFinite(point.timeStamp)?point.timeStamp:performance.now(),source);
@@ -5540,6 +5559,8 @@ running=${running}`);
       state:()=>({running, paused, tutorialMode, tutorialStepIndex, tutorialTargetProgress:tutorialSteps[tutorialStepIndex]?._hit||0, tutorialPointerMoved:tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince, tutorialInputEnabledAt:tutorialState.inputEnabledAt, tutorialSuccessCount:tutorialState.successCount, tutorialValidUserInputCount:tutorialState.validUserInputCount, tutorialLastSource:tutorialState.lastSource, tutorialCurrentJudgement:tutorialState.currentJudgement, tutorialTransitioning:tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState, pendingTutorialSkipCount:tutorialState.pendingSkipQueue.length, tutorialStepToken, tutorialAttemptId, tutorialTimerCount:tutorialState.timers.length, tutorialFinalMixRetryScheduled:tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:tutorialState.mixRetryCount, tutorialChartFinalizationCount:tutorialState.chartFinalizationCount, tutorialLastChartFinalization:tutorialState.lastChartFinalization, tutorialChartSettled:tutorialChartSettled(), tutorialCompleteCount:tutorialState.completeCount, tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:tutorialState.rafIds.length+(raf?1:0), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount, chartDoneStates:chart.map(n=>({type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:chart.length, gameTime:now(), browserNow:performance.now(), frameCount:testFrameCount, renderCount:testRenderCount, lastPointerSource, pointerActive, mouseX, mouseY, armAngle, rawArmVel, rawAngularVelocity, cx, cy, hitR, selectedSongId, selectedDifficultyId, mobileAimPointerId, mobileActionPointerId, mobileScratchPointerId, actionHeld:!!keys.MouseLeft, scratchHeld, mouseDownRight}),
       aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget}),
       injectAimSamples:(samples,mode="OFF")=>{ resetAimInput(samples[0]?.angle??-Math.PI/2); const previous=inputSettings.aimStabilizer; inputSettings.aimStabilizer=mode; for(const sample of samples){ const angle=sample.angle, radius=sample.radius??Math.max(hitR,80); processAimSample(cx+Math.cos(angle)*radius,cy+Math.sin(angle)*radius,sample.timestamp??performance.now(),"pointer"); } updateArm(1/60); const result=window.CircleMixTestApi.aimInputState(); inputSettings.aimStabilizer=previous; return result; },
+      injectKeyboardRotation:(direction,dt=.02)=>{ resetAimInput(-Math.PI/2); keyD=direction>0; keyA=direction<0; updateArm(dt); keyA=keyD=false; return window.CircleMixTestApi.aimInputState(); },
+      expireAimInput:()=>{ aimInput.lastSampleTimestamp=performance.now()-AIM_SAMPLE_FRESH_MS-1; freshAimSample(); return window.CircleMixTestApi.aimInputState(); },
       lanePoint:lane=>({x:cx+Math.cos(laneAngle(lane))*hitR, y:cy+Math.sin(laneAngle(lane))*hitR}),
       setAimStabilizer:mode=>{ if(AIM_STABILIZER_MODES.includes(mode)){ inputSettings.aimStabilizer=mode; saveInputSettings(); } },
       magnetProbe:(mode,velocity)=>{ const previousMode=inputSettings.aimStabilizer, previousTarget=magnetTarget, previousError=magnetAngleError, previousFocus=focusNote; try{ const probeNow=now(); const probeNote={type:"cut", angle:0, done:false, missed:false, spawnTime:probeNow-1, hitTime:probeNow}; inputSettings.aimStabilizer=mode; focusNote=probeNote; magnetTarget=probeNote; magnetAngleError=0; const result=updateAimMagnet(0, velocity); const disengaged=magnetTarget===null; return {mode, velocity, disengaged, result, profile:aimStabilizerProfile()}; } finally { inputSettings.aimStabilizer=previousMode; magnetTarget=previousTarget; magnetAngleError=previousError; focusNote=previousFocus; } },

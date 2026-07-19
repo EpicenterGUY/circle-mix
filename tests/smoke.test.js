@@ -394,3 +394,25 @@ assert.match(src, /n\.swingStartCW=aimInput\.accumulatedCWTravel/);
 assert.match(src, /scratchSpeed=Math\.abs\(aimInput\.sampleAngularVelocity\)/);
 
 });
+
+
+test("aim input resets and freshness cover session boundaries and fallback", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+assert.match(src, /function resetAimInput\(angle=-Math\.PI\/2\)/);
+assert.match(src, /resetAimInput\(-Math\.PI\/2\); armAngle=targetAngle=prevArmAngle=-Math\.PI\/2/);
+assert.match(src, /resetAimInput\(-Math\.PI\/2\);[\s\S]*if\(runtime\.step\.kind==="traceSwing"\)/);
+assert.match(src, /function resetTraceSwingCarryover\(\)\{[\s\S]*resetAimInput\(rawInputAngle\)/);
+assert.match(src, /function freshAimSample\(\)/);
+assert.match(src, /AIM_SAMPLE_FRESH_MS=120/);
+assert.match(src, /e\.touches\?\.\[0\] \|\| e\.changedTouches\?\.\[0\] \|\| e/);
+assert.match(src, /aimInput\.unwrappedAngle\+=delta; aimInput\.lastSampleDelta=delta/);
+assert.match(src, /aimInput\.unwrappedAngle\+=delta; aimInput\.lastSampleDelta=delta; aimInput\.sampleAngularVelocity=delta\/Math\.max\(dt/);
+});
+
+test("keyboard and AUTO aim synchronize the unified rotation state", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+assert.match(src, /const delta=\(keyD-keyA\)\*9\.5\*dt/);
+assert.match(src, /aimInput\.accumulatedCWTravel\+=delta/);
+assert.match(src, /aimInput\.accumulatedCCWTravel-=delta/);
+assert.match(src, /armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=a/);
+});
