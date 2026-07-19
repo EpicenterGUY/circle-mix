@@ -7,6 +7,19 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.8",
+    date: "2026-07-19",
+    title: "Event-Based Aim Input Stability",
+    summary: "포인터 이벤트 기반 에임 처리와 회전 누적, 중앙 데드존 및 SWING/SCRATCH 입력 안정성을 개선",
+    changes: [
+      { category: "INPUT", text: "RAF가 아닌 pointer/coalesced event 샘플 단위로 에임과 각속도 처리" },
+      { category: "AIM", text: "판정용 각도와 시각용 팔을 분리하고 Stabilizer OFF 직결 입력 유지" },
+      { category: "ROTATION", text: "0° 경계와 360°/540°/720° 누적 회전, 중앙 데드존 rebase 처리" },
+      { category: "JUDGEMENT", text: "SWING/SCRATCH의 판정창 이후 이동량과 홀드 이후 입력만 인정" },
+      { category: "TEST", text: "PC/모바일, CW/CCW 대회전, 빠른 점프 및 입력 freshness 회귀 검증" }
+    ]
+  },
+  {
     version: "0.9.7",
     date: "2026-07-18",
     title: "Tutorial Rapid Skip Hotfix",
