@@ -7,6 +7,18 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.11",
+    date: "2026-07-19",
+    title: "PC Pointer Lock Aim",
+    summary: "PC 마우스 상대 입력과 에임 진단을 추가하면서 펜과 모바일의 절대좌표 입력을 유지",
+    changes: [
+      { category: "INPUT", text: "AUTO / ABSOLUTE / LOCKED PC AIM 모드와 0.50x~2.00x locked sensitivity를 추가" },
+      { category: "AIM", text: "브라우저 경계에서도 계속 회전하는 Pointer Lock 상대 입력, 안전한 절대좌표 fallback 및 lock 해제 일시정지를 추가" },
+      { category: "DEBUG", text: "F4 AIM DEBUG에서 raw, judgement, visual angle과 Pointer Lock 샘플 정보를 확인" },
+      { category: "COMPATIBILITY", text: "펜과 모바일 touch AIM/ACTION/SCRATCH는 기존 절대좌표 및 pointer capture 흐름을 유지" }
+    ]
+  },
+  {
     version: "0.9.10",
     date: "2026-07-19",
     title: "Direct Play Startup Fix",
