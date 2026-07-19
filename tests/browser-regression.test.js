@@ -724,7 +724,9 @@ async function dismissStartupOverlays(page){
       const crossing=api.injectAimSamples([{angle:0,radius:180,timestamp:1},{angle:Math.PI,radius:.5,timestamp:2},{angle:Math.PI/2,radius:.5,timestamp:3},{angle:Math.PI,radius:180,timestamp:4},{angle:Math.PI+.1,radius:180,timestamp:5}], 'OFF');
       const stale=api.expireAimInput();
       const keyCW=api.injectKeyboardRotation(1), keyCCW=api.injectKeyboardRotation(-1);
-      return {cw360,cw540,cw720,ccw360,ccw540,ccw720,wrapCW,wrapCCW,jump,immediateJump,crossing,stale,keyCW,keyCCW};
+      api.setPcAimMode("LOCKED"); api.injectAimSamples([{angle:-Math.PI/2,radius:180,timestamp:100}], "OFF");
+      const lockedStart=api.aimInputState(); const lockedCW=api.injectLockedMovement(40,0,110); const lockedCCW=api.injectLockedMovement(-80,0,120); const pointerLockState=api.state();
+      return {lockedStart,lockedCW,lockedCCW,pointerLockState,cw360,cw540,cw720,ccw360,ccw540,ccw720,wrapCW,wrapCCW,jump,immediateJump,crossing,stale,keyCW,keyCCW};
     });
     const near=(a,b,e=.03)=>Math.abs(a-b)<e;
     assert.ok(near(aimDiagnostics.cw360.accumulatedCWTravel,2*Math.PI,.05), `CW 360 ${JSON.stringify(aimDiagnostics.cw360)}`);
@@ -740,6 +742,10 @@ async function dismissStartupOverlays(page){
     assert.ok(aimDiagnostics.crossing.accumulatedCWTravel<.2, `deadzone rebase ${JSON.stringify(aimDiagnostics.crossing)}`);
     assert.equal(aimDiagnostics.stale.sampleAngularVelocity, 0, `stale velocity ${JSON.stringify(aimDiagnostics.stale)}`);
     assert.ok(aimDiagnostics.keyCW.accumulatedCWTravel>0 && aimDiagnostics.keyCCW.accumulatedCCWTravel>0, `keyboard travel ${JSON.stringify({keyCW:aimDiagnostics.keyCW,keyCCW:aimDiagnostics.keyCCW})}`);
+    assert.notEqual(aimDiagnostics.lockedStart.unwrappedAngle, aimDiagnostics.lockedCW.unwrappedAngle, `locked relative CW movement changes aim ${JSON.stringify(aimDiagnostics)}`);
+    assert.notEqual(aimDiagnostics.lockedCW.unwrappedAngle, aimDiagnostics.lockedCCW.unwrappedAngle, `locked relative CCW movement changes aim ${JSON.stringify(aimDiagnostics)}`);
+    assert.equal(aimDiagnostics.pointerLockState.pointerLockMode, "LOCKED");
+    assert.ok(Number.isFinite(aimDiagnostics.pointerLockState.lockedVirtualAngle) && Number.isFinite(aimDiagnostics.pointerLockState.lockedSensitivity), `pointer lock diagnostics finite ${JSON.stringify(aimDiagnostics.pointerLockState)}`);
 
     assert.deepEqual([...errors, ...mobileErrors], []);
     console.log('PASS browser regression', {freshDesktopLoop, answeredDesktopLoop, freshMobileLoop, stillMouseLoop, hudHoverLoop, songResults, mobile:{frameDelta:mobileLoop.frameDelta}});
