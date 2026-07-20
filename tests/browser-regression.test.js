@@ -390,7 +390,7 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
 
 async function runPublicCmixImportRegression(browser){
   const cmixState=async page=>page.evaluate(()=>{
-    const visible=id=>{const el=document.getElementById(id), style=el&&getComputedStyle(el);return !!el&&!el.hidden&&style.display!=="none"&&style.visibility!=="hidden";};
+    const visible=id=>{const el=document.getElementById(id);if(!el||el.hidden)return false;const style=getComputedStyle(el);return style.display!=="none"&&style.visibility!=="hidden"&&style.visibility!=="collapse"&&el.getClientRects().length>0;};
     const start=document.getElementById('safeStart')?.getBoundingClientRect();
     const hit=start&&document.elementFromPoint(start.x+start.width/2,start.y+start.height/2);
     return {scene:window.CircleMixTestApi?.state?.().activeScene||null,button:{count:document.querySelectorAll('#cmixImportBtn').length,hidden:document.getElementById('cmixImportBtn')?.hidden,visible:visible('cmixImportBtn'),songSelectHidden:document.getElementById('songSelect')?.hidden},modal:{hidden:document.getElementById('cmixImportModal')?.hidden,display:getComputedStyle(document.getElementById('cmixImportModal')).display,visible:visible('cmixImportModal')},drop:{hidden:document.getElementById('cmixDropOverlay')?.hidden,display:getComputedStyle(document.getElementById('cmixDropOverlay')).display,visible:visible('cmixDropOverlay')},startIntercepted:!!hit?.closest?.('#cmixImportModal,#cmixDropOverlay')};
