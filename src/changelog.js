@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.17",
+    date: "2026-07-20",
+    title: "Routing Seven-Difficulty Chart Set",
+    summary: "Adds an audio-free Camellia - Routing chart bundle with seven adapted difficulties and local audio linking.",
+    changes: [
+      { category: "CHART", text: "Adds Beginner, Normal, Advanced, Hyper, Another, Lasse's Extra, and Reverb adaptations generated from locally analyzed osu! beatmaps." },
+      { category: "TECH", text: "Reverb preserves reverse gestures, anti-flow turns, curved travel, and rhythmic twists through authored SLIDE, TRACE, and SWING combinations." },
+      { category: "AUDIO", text: "Keeps copyrighted audio and original resources out of the repository; players can link a legally obtained audio file in local browser storage." }
+    ]
+  },
+  {
     version: "0.9.16",
     date: "2026-07-20",
     title: "TRACE Travel Judgement and Note Readability",

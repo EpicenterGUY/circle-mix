@@ -18,15 +18,19 @@ setAttribute(){}, removeAttribute(){}, focus(){}, blur(){}, getBoundingClientRec
 }
 function loadGameExports(){
 const src = fs.readFileSync("src/game.js", "utf8");
-const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty, calculateChartDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong\n};\n`;
-const patched = src.replace(/\n\s*updateModeButtons\(\);\n\s*updateButtons\(\);\n\}\)\(\);\s*$/, `${exportPatch}\n updateModeButtons();\n updateButtons();\n})();`);
+const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty, calculateChartDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
+const patched = src.replace(/\r?\n\s*updateModeButtons\(\);\r?\n\s*updateButtons\(\);\r?\n\}\)\(\);\s*$/, `${exportPatch}\n updateModeButtons();\n updateButtons();\n})();`);
 const elements = new Map();
 const document = {
 documentElement: makeElement("html"), body: makeElement("body"), fullscreenElement:null,
 getElementById(id){ if(!elements.has(id)) elements.set(id, makeElement(id)); return elements.get(id); },
 createElement(tag){ return makeElement(tag); }, addEventListener(){}, removeEventListener(){}, querySelectorAll(){ return []; }, querySelector(){ return null; }
 };
-const window = { document, location:{search:"", href:"http://localhost/index.html"}, CircleMixSongRegistry:{ all:()=>[{id:"anima",source:"builtin",title:"ANiMA",artist:"xi",bpm:184.6,offset:-0.04,difficulties:{normal:{label:"NORMAL"},tech:{label:"TECH"}}}], localAll:()=>[], refreshLocal:async()=>[], get:()=>({id:"anima",source:"builtin",title:"ANiMA",artist:"xi",bpm:184.6,offset:-0.04,difficulties:{normal:{label:"NORMAL"},tech:{label:"TECH"}}}), hasDifficulty:(s,d)=>!!s?.difficulties?.[d] }, CircleMixChartTools:{calculateStars:()=>1}, CircleMixVersion:{version:"0.0.0"}, CircleMixChangelog:[], history:{replaceState(){}}, addEventListener(){}, removeEventListener(){}, PointerEvent:function PointerEvent(){} };
+const routing=loadRoutingBundle();
+const anima={id:"anima",source:"builtin",title:"ANiMA",artist:"xi",bpm:184.6,offset:-0.04,difficulties:{normal:{label:"NORMAL"},tech:{label:"TECH"}}};
+const routingSong={...routing.song,difficulties:routing.song.difficulties};
+const builtins=[anima,routingSong];
+const window = { document, location:{search:"", href:"http://localhost/index.html"}, CircleMixRoutingBundle:routing, CircleMixSongRegistry:{ all:()=>builtins, localAll:()=>[], refreshLocal:async()=>[], refreshBuiltinAudio:async()=>builtins, get:id=>builtins.find(song=>song.id===id)||anima, hasDifficulty:(s,d)=>!!s?.difficulties?.[d] }, CircleMixChartTools:{calculateStars:()=>1}, CircleMixVersion:{version:"0.0.0"}, CircleMixChangelog:[], history:{replaceState(){}}, addEventListener(){}, removeEventListener(){}, PointerEvent:function PointerEvent(){} };
 const sandbox = { window, document, console, URLSearchParams, URL, setTimeout, clearTimeout, setInterval, clearInterval,
 localStorage:{getItem:()=>null,setItem(){},removeItem(){}}, performance:{now:()=>0}, requestAnimationFrame:()=>0, cancelAnimationFrame(){},
 screen:{orientation:{unlock(){}}}, alert(){}, confirm:()=>false, prompt:()=>null, AudioContext:function(){}, webkitAudioContext:function(){} };
@@ -41,6 +45,11 @@ function loadGhostRuleBundle(){
 const context = {window:{}}; vm.createContext(context);
 vm.runInContext(fs.readFileSync("src/charts/ghost-rule.js", "utf8"), context, {filename:"src/charts/ghost-rule.js"});
 return context.window.CircleMixGhostRuleBundle;
+}
+function loadRoutingBundle(){
+const context = {window:{}}; vm.createContext(context);
+vm.runInContext(fs.readFileSync("src/charts/routing.js", "utf8"), context, {filename:"src/charts/routing.js"});
+return context.window.CircleMixRoutingBundle;
 }
 function traceEndAngle(note){
 if(note.signedSweepAngle !== undefined) return normDeg(Number(note.angle) + Number(note.signedSweepAngle));
@@ -172,11 +181,63 @@ assert.equal(JSON.stringify(mirror.charts[difficulty].notes), JSON.stringify(bun
 }
 });
 
+test("Routing bundle exposes seven valid, strictly sorted adapted charts", () => {
+const bundle=loadRoutingBundle();
+const expected={beginner:119,normal:195,advanced:241,hyper:334,another:520,"lasses-extra":518,reverb:553};
+assert.deepEqual(Object.keys(bundle.charts),Object.keys(expected));
+assert.equal(bundle.song.audio,null); assert.equal(bundle.song.audioRequired,true);
+for(const [difficulty,count] of Object.entries(expected)){
+const chart=bundle.charts[difficulty];
+assert.equal(chart.notes.length,count,`${difficulty} note count`);
+let previousBeat=-Infinity;
+for(const [index,note] of chart.notes.entries()){
+assert.ok(Number.isFinite(note.beat)&&note.beat>=0,`${difficulty} #${index} beat`);
+assert.ok(note.beat>previousBeat,`${difficulty} #${index} strictly sorted and unique`);
+assert.ok(Number.isFinite(note.angle)&&note.angle>=0&&note.angle<360,`${difficulty} #${index} angle`);
+if(note.durationBeat!==undefined) assert.ok(Number.isFinite(note.durationBeat)&&note.durationBeat>0,`${difficulty} #${index} duration`);
+if(note.endAngle!==undefined) assert.ok(Number.isFinite(note.endAngle)&&note.endAngle>=0&&note.endAngle<360,`${difficulty} #${index} end angle`);
+if(String(note.type).startsWith("trace")){
+assert.ok(Number.isFinite(note.signedSweepAngle)&&note.signedSweepAngle!==0,`${difficulty} #${index} required travel`);
+const seconds=note.durationBeat*60/chart.bpm, required=Math.abs(note.signedSweepAngle);
+const minimum=Math.min(Math.max(required/180*.30,.12),.40);
+assert.ok(seconds+1e-6>=Math.min(minimum,Math.max(.06,seconds*.72)),`${difficulty} #${index} achievable TRACE duration`);
+}
+if(index+1<chart.notes.length&&note.durationBeat!==undefined) assert.ok(note.beat+note.durationBeat<=chart.notes[index+1].beat-.07,`${difficulty} #${index} no held-input overlap`);
+previousBeat=note.beat;
+}
+assert.equal(auditTraceTransitions(chart,chart.bpm).filter(issue=>issue.issueType==="SEVERE_TRACE_START_JUMP"||issue.issueType==="BLIND_REVERSE_JUMP").length,0,`${difficulty} readable TRACE entries`);
+}
+assert.ok(bundle.charts.reverb.notes.some(note=>String(note.type).startsWith("scratch")),"Reverb keeps rare friction accents");
+assert.ok(bundle.charts.reverb.notes.filter(note=>String(note.type).startsWith("trace")).length>=25,"Reverb keeps authored rotational travel");
+assert.ok(bundle.charts.reverb.notes.filter(note=>String(note.type).startsWith("swing")).length>=80,"Reverb keeps technical direction changes");
+});
+
+test("Routing chart JSON mirrors runtime and original media stays excluded", () => {
+const bundle=loadRoutingBundle();
+const mirror=JSON.parse(fs.readFileSync("data/routing-charts.json","utf8"));
+assert.equal(JSON.stringify(mirror),JSON.stringify(bundle));
+assert.equal(fs.readFileSync("service-worker.js","utf8").includes("routing.mp3"),false);
+assert.equal(fs.readFileSync("src/charts/routing.js","utf8").includes("audio.mp3"),false);
+});
+
+test("song selection renders exactly seven Routing difficulties and clears them on switch", () => {
+api.resolveSelectedSong("routing","builtin"); api.renderSongSelect();
+const routingHtml=api.renderedDifficultyHtml();
+assert.equal((routingHtml.match(/data-difficulty=/g)||[]).length,7);
+for(const id of ["beginner","normal","advanced","hyper","another","lasses-extra","reverb"]) assert.match(routingHtml,new RegExp(`data-difficulty="${id}"`));
+api.resolveSelectedSong("anima","builtin"); api.renderSongSelect();
+const animaHtml=api.renderedDifficultyHtml();
+assert.equal((animaHtml.match(/data-difficulty=/g)||[]).length,2);
+assert.doesNotMatch(animaHtml,/data-difficulty="reverb"/);
+});
+
 test("index and service worker use the same PWA cache query", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260720-trace-travel-1/);
-assert.match(sw, /20260720-trace-travel-1/);
+assert.match(index, /20260720-routing-seven-diffs-1/);
+assert.match(sw, /20260720-routing-seven-diffs-1/);
+assert.match(index, /src\/charts\/routing\.js\?v=/);
+assert.match(sw, /src\/charts\/routing\.js\?v=/);
 assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
@@ -258,15 +319,15 @@ assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOver
 });
 
 
-test("direct play startup release versions are synchronized at 0.9.16", () => {
+test("direct play startup release versions are synchronized at 0.9.17", () => {
 const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.16"/);
-assert.match(pwa, /const VERSION="0\.9\.16"/);
-assert.match(sw, /const VERSION = "0\.9\.16"/);
-assert.match(changelog, /version:\s*"0\.9\.16"/);
+assert.match(version, /version:\s*"0\.9\.17"/);
+assert.match(pwa, /const VERSION="0\.9\.17"/);
+assert.match(sw, /const VERSION = "0\.9\.17"/);
+assert.match(changelog, /version:\s*"0\.9\.17"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {
@@ -296,7 +357,7 @@ assert.doesNotMatch(index, /id="safeUpdateLogBtn"[^>]*hidden/);
 
 test("update log buttons are not dev-mode-only except DEV MODE OFF", () => {
 const game = fs.readFileSync("src/game.js", "utf8");
-assert.match(game, /const devOffBtn=document\.getElementById\("updateLogDevOff"\);\n    if\(devOffBtn\) devOffBtn\.hidden=!circleMixDevMode;/);
+assert.match(game, /const devOffBtn=document\.getElementById\("updateLogDevOff"\);\r?\n    if\(devOffBtn\) devOffBtn\.hidden=!circleMixDevMode;/);
 assert.doesNotMatch(game, /safeUpdateLogBtn[\s\S]{0,140}hidden=!circleMixDevMode/);
 assert.match(fs.readFileSync("index.html", "utf8"), /id="safeSetUpdateLog"[\s\S]*UPDATE LOG[\s\S]*id="pauseSetUpdateLog"/);
 });
@@ -306,8 +367,8 @@ test("turning off dev mode immediately hides only DEV MODE OFF", () => {
 const game = fs.readFileSync("src/game.js", "utf8");
 const disableBody = game.match(/function disableCircleMixDevMode\(\)\{([\s\S]*?)\n  \}/)[1];
 assert.match(disableBody, /circleMixDevMode=false/);
-assert.match(disableBody, /const btn=document\.getElementById\("safeUpdateLogBtn"\);\n    if\(btn\) btn\.hidden=false;/);
-assert.match(disableBody, /const devOffBtn=document\.getElementById\("updateLogDevOff"\);\n    if\(devOffBtn\) devOffBtn\.hidden=true;/);
+assert.match(disableBody, /const btn=document\.getElementById\("safeUpdateLogBtn"\);\r?\n    if\(btn\) btn\.hidden=false;/);
+assert.match(disableBody, /const devOffBtn=document\.getElementById\("updateLogDevOff"\);\r?\n    if\(devOffBtn\) devOffBtn\.hidden=true;/);
 assert.doesNotMatch(disableBody, /safeUpdateLogBtn[\s\S]{0,120}hidden=true/);
 });
 
@@ -346,7 +407,7 @@ assert.match(fs.readFileSync("index.html", "utf8"), /VISUAL RESPONSE FAST/);
 test("PC input runtime has no broad updateArm exception suppression", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
 assert.doesNotMatch(src, /function updateArmSafely/);
-assert.ok(src.includes("updateAuto(t);\n    updateArm(dt);\n    updateNotes(t,dt);"));
+assert.match(src,/updateAuto\(t\);\r?\n    updateArm\(dt\);\r?\n    updateNotes\(t,dt\);/);
 });
 
 
