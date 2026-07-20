@@ -317,6 +317,10 @@
   let selectedMenuMode=(selectedDifficultyId || initialDifficultyParam || "tech").toLowerCase();
   let songTab=selectedSource==="local" ? "local" : "built-in";
   let activeLocalBlobUrl=null;
+  const localJacketUrls=new Map();
+  function localJacketUrl(songData){ if(!songData?.jacketBlob) return songData?.jacket || ""; if(!localJacketUrls.has(songData.id)) localJacketUrls.set(songData.id,URL.createObjectURL(songData.jacketBlob)); return localJacketUrls.get(songData.id); }
+  function revokeLocalJacketUrl(id){ const url=localJacketUrls.get(id); if(url){ URL.revokeObjectURL(url); localJacketUrls.delete(id); } }
+  window.addEventListener("beforeunload",()=>{ for(const url of localJacketUrls.values()) URL.revokeObjectURL(url); });
   let previewTimer=0;
   let previewActive=false;
   let previewSessionId=0;
@@ -5290,7 +5294,8 @@ settingsOrigin=${settingsOrigin}`);
       const artist=escapeHtml(songData.artist || "UNKNOWN");
       const bpm=escapeHtml(songData.bpm || "--");
       const manage=songData.source==="local" ? `<div class="songManage"><button data-action="rename" data-song-id="${songIdAttr}">EDIT META</button><button data-action="clone" data-song-id="${songIdAttr}">CLONE</button><button data-action="delete" data-song-id="${songIdAttr}">DELETE</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : (songData.audioRequired ? `<div class="songManage"><button data-audio-action="${songData.audioLinked ? "unlink" : "link"}" data-song-id="${songIdAttr}">${songData.audioLinked ? "UNLINK LOCAL AUDIO" : "LINK LOCAL AUDIO"}</button><small>${escapeHtml(songData.audioLinked ? "LOCAL AUDIO LINKED · NOT UPLOADED" : songData.audioNotice)}</small></div>` : "");
-      const jacket=songData.jacket ? `<img src="${escapeAttribute(songData.jacket)}" alt="" loading="lazy" onerror="this.remove()">` : "";
+      const jacketUrl=localJacketUrl(songData);
+      const jacket=jacketUrl ? `<img src="${escapeAttribute(jacketUrl)}" alt="" loading="lazy" onerror="this.remove()">` : "";
       return `<div class="songCard${active ? " active" : ""}" data-song-id="${songIdAttr}">
         <button class="songCardPick" type="button" data-song-id="${songIdAttr}"><div class="songJacket" aria-hidden="true">${jacket}<span>${songTitle}</span></div>
         <div class="songMeta"><span>${artist}</span><strong>${songTitle}</strong><em>${bpm} BPM</em><small>${diffs || "NO CHART"}</small></div></button>${manage}
@@ -5302,7 +5307,7 @@ settingsOrigin=${settingsOrigin}`);
       bindPress(card,()=>{ try{ pauseSong("reset"); setSongCurrentTime(0,"reset"); }catch(e){} resolveSelectedSong(card.dataset.songId, selectedSource); selectedDifficultyId=null; renderSongSelect(); });
     }
     for(const btn of songCarousel.querySelectorAll(".songManage button[data-action]")){
-      bindPress(btn,async()=>{ const id=btn.dataset.songId, action=btn.dataset.action; const rec=await window.CircleMixLocalSongs.get(id); if(!rec)return; if(action==="delete"){ if(confirm(`${rec.title}을(를) 삭제할까요? 오디오와 모든 채보도 함께 삭제됩니다.`)){ await window.CircleMixLocalSongs.delete(id); await songs.refreshLocal(); selectedSongId=null; selectedDifficultyId=null; selectedSong=null; renderSongSelect(); } } if(action==="clone"){ const copy={...rec,id:rec.id+"-copy",title:rec.title+" Copy",updatedAt:new Date().toISOString()}; await window.CircleMixLocalSongs.put(copy); await songs.refreshLocal(); resolveSelectedSong(copy.id,"local"); renderSongSelect(); } if(action==="rename"){ const title=prompt("곡명",rec.title); if(title===null)return; const artist=prompt("아티스트",rec.artist||""); if(artist===null)return; await window.CircleMixLocalSongs.put({...rec,title:title.trim()||rec.title,artist:artist.trim()||rec.artist,updatedAt:new Date().toISOString()}); await songs.refreshLocal(); renderSongSelect(); } });
+      bindPress(btn,async()=>{ const id=btn.dataset.songId, action=btn.dataset.action; const rec=await window.CircleMixLocalSongs.get(id); if(!rec)return; if(action==="delete"){ if(confirm(`${rec.title}을(를) 삭제할까요? 오디오와 모든 채보도 함께 삭제됩니다.`)){ await window.CircleMixLocalSongs.delete(id); revokeLocalJacketUrl(id); await songs.refreshLocal(); selectedSongId=null; selectedDifficultyId=null; selectedSong=null; renderSongSelect(); } } if(action==="clone"){ const copy={...rec,id:rec.id+"-copy",title:rec.title+" Copy",updatedAt:new Date().toISOString()}; await window.CircleMixLocalSongs.put(copy); await songs.refreshLocal(); resolveSelectedSong(copy.id,"local"); renderSongSelect(); } if(action==="rename"){ const title=prompt("곡명",rec.title); if(title===null)return; const artist=prompt("아티스트",rec.artist||""); if(artist===null)return; await window.CircleMixLocalSongs.put({...rec,title:title.trim()||rec.title,artist:artist.trim()||rec.artist,updatedAt:new Date().toISOString()}); await songs.refreshLocal(); renderSongSelect(); } });
     }
     for(const btn of songCarousel.querySelectorAll(".songManage button[data-audio-action]")){
       bindPress(btn,async()=>{
@@ -5377,6 +5382,10 @@ settingsOrigin=${settingsOrigin}`);
     if(!rec || !rec.charts?.[req.chartId]) throw new Error("실행할 로컬 곡과 채보를 선택해주세요.");
     return {source:"local", song:rec, chart:rec.charts[req.chartId], chartId:req.chartId, difficultyId:req.chartId};
   }
+
+  window.CircleMixOpenLocalSong=async function(id){
+    await songs.refreshLocal(); selectedSource="local"; songTab="local"; resolveSelectedSong(id,"local"); selectedDifficultyId=localChartEntries(selectedSong)[0]?.id || null; selectedMenuMode=selectedDifficultyId||""; syncSongUrl(); await showSongSelect();
+  };
 
   async function showSongSelect(){
     await Promise.all([songs.refreshLocal(), songs.refreshBuiltinAudio?.()]);
