@@ -234,8 +234,8 @@ assert.doesNotMatch(animaHtml,/data-difficulty="reverb"/);
 test("index and service worker use the same PWA cache query", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260720-cmix-import-1/);
-assert.match(sw, /20260720-cmix-import-1/);
+assert.match(index, /20260720-cmix-install-1/);
+assert.match(sw, /20260720-cmix-install-1/);
 assert.match(index, /src\/charts\/routing\.js\?v=/);
 assert.match(sw, /src\/charts\/routing\.js\?v=/);
 assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
@@ -319,15 +319,15 @@ assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOver
 });
 
 
-test("direct play startup release versions are synchronized at 0.9.18", () => {
+test("direct play startup release versions are synchronized at 0.9.19", () => {
 const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.18"/);
-assert.match(pwa, /const VERSION="0\.9\.18"/);
-assert.match(sw, /const VERSION = "0\.9\.18"/);
-assert.match(changelog, /version:\s*"0\.9\.18"/);
+assert.match(version, /version:\s*"0\.9\.19"/);
+assert.match(pwa, /const VERSION="0\.9\.19"/);
+assert.match(sw, /const VERSION = "0\.9\.19"/);
+assert.match(changelog, /version:\s*"0\.9\.19"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {

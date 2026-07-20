@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "node --check src/game.js && node --check src/version.js && node --check src/changelog.js && node --check src/pwa.js && node --check src/cmix-validator.js && node --check src/cmix-importer.js && node --check src/cmix-import-ui.js && node --check service-worker.js && node tests/smoke.test.js && node tests/cmix-validator.test.js && node tests/cmix-importer.test.js",
+    "test": "node --check src/game.js && node --check src/version.js && node --check src/changelog.js && node --check src/pwa.js && node --check src/cmix-validator.js && node --check src/cmix-importer.js && node --check src/cmix-import-ui.js && node --check src/cmix-local-install.js && node --check service-worker.js && node tests/smoke.test.js && node tests/cmix-validator.test.js && node tests/cmix-importer.test.js",
     "test:browser": "node tests/browser-regression.test.js",
     "verify": "node scripts/verify.js"
   },

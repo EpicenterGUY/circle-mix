@@ -7,6 +7,11 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.19", date: "2026-07-20", title: ".cmix FULL Local Installation",
+    summary: "검증된 FULL .cmix 패키지를 기존 LOCAL SONGS 라이브러리에 설치하고 플레이할 수 있습니다.",
+    changes: [{ category: "DEVELOPER", text: "설치, 버전 충돌 확인, Blob 영구 저장, LOCAL SONGS 이동 및 삭제 호환을 추가했습니다." }]
+  },
+  {
     version: "0.9.18", date: "2026-07-20", title: "Developer .cmix Package Inspection",
     summary: "개발자 모드에서 .cmix 패키지를 안전하게 읽고 검사하는 기반을 추가.",
     changes: [{ category: "DEVELOPER", text: "ZIP 사전 검사, manifest/chart/media 검증, SHA-256 및 설치 전 미리보기를 추가했습니다." }]
