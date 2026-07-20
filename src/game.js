@@ -357,9 +357,16 @@
 
 
   function sourceKey(songData=selectedSong){ return (songData?.source==="local" || selectedSource==="local") ? "local" : "builtin"; }
+  function difficultyIds(songData=selectedSong){
+    const available=new Set([...Object.keys(songData?.difficulties||{}),...Object.keys(songData?.charts||{})]), ids=[], seen=new Set();
+    for(const id of [...(Array.isArray(songData?.difficultyOrder)?songData.difficultyOrder:[]),...Object.keys(songData?.difficulties||{}),...Object.keys(songData?.charts||{})]){
+      if(typeof id==="string"&&available.has(id)&&!seen.has(id)){ seen.add(id); ids.push(id); }
+    }
+    return ids;
+  }
   function localChartEntries(songData=selectedSong){
-    const charts=songData?.charts || {};
-    return Object.keys(charts).filter(id=>charts[id]?.notes?.length).map(id=>({id, chart:charts[id], meta:songData?.difficulties?.[id] || charts[id]?.meta || {}}));
+    const charts=songData?.charts||{};
+    return difficultyIds(songData).filter(id=>charts[id]?.notes?.length).map(id=>({id,chart:charts[id],meta:songData?.difficulties?.[id]||charts[id]?.meta||{}}));
   }
   function getActiveDifficultyLabel(songData=selectedSong, difficultyId=selectedDifficultyId || selectedMenuMode){
     if(!difficultyId) return "UNKNOWN";
@@ -5272,7 +5279,7 @@ settingsOrigin=${settingsOrigin}`);
     if(selectedSource==="builtin"){
       if(!selectedSongId || !list.some(s=>s.id===selectedSongId)) selectedSongId=list[0]?.id || null;
       selectedSong=selectedSongId ? resolveSelectedSong(selectedSongId,"builtin") : null;
-      if(!songs.hasDifficulty(selectedSong, selectedDifficultyId || selectedMenuMode)) selectedDifficultyId=Object.keys(selectedSong?.difficulties||{})[0] || null;
+      if(!songs.hasDifficulty(selectedSong, selectedDifficultyId || selectedMenuMode)) selectedDifficultyId=difficultyIds(selectedSong)[0] || null;
       selectedMenuMode=selectedDifficultyId || "tech";
       mapMode=selectedMenuMode;
     }else{
@@ -5287,7 +5294,7 @@ settingsOrigin=${settingsOrigin}`);
     syncSongUrl();
     songCarousel.innerHTML = tabHtml + (list.length ? list.map(songData => {
       const active = songData.id === selectedSongId;
-      const chartEntries = songData.source==="local" ? localChartEntries(songData) : Object.keys(songData.difficulties||{}).map(id=>({id}));
+      const chartEntries = songData.source==="local" ? localChartEntries(songData) : difficultyIds(songData).map(id=>({id}));
       const diffs=chartEntries.map(({id})=>{ const diff=difficultyViewForSong(songData,id); return `${escapeHtml(diff?.label || id.toUpperCase())} ${escapeHtml(formatStarValue(diff?.stars))}`; }).join(" · ");
       const songIdAttr=escapeAttribute(songData.id);
       const songTitle=escapeHtml(songData.title || "UNKNOWN");
@@ -5337,7 +5344,7 @@ settingsOrigin=${settingsOrigin}`);
     if(selectedSource==="local" && !selectedSong){
       diffHtml = `<div class="songDiffEmpty">로컬 곡을 선택하거나 에디터에서 곡을 만들어주세요.</div>`;
     }else{
-      const entries = selectedSource==="local" ? localChartEntries(selectedSong) : Object.keys(selectedSong?.difficulties||{}).filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff=>({id:diff, meta:selectedSong.difficulties[diff]}));
+      const entries = selectedSource==="local" ? localChartEntries(selectedSong) : difficultyIds(selectedSong).filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff=>({id:diff, meta:selectedSong.difficulties[diff]}));
       if(selectedSource==="local" && !entries.length) diffHtml = `<div class="songDiffEmpty">선택한 로컬 곡에 저장된 채보가 없습니다.</div>`;
       else diffHtml = entries.map(({id,meta,chart}) => {
         const label = getActiveDifficultyLabel(selectedSong,id);

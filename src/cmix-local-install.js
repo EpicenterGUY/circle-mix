@@ -4,15 +4,16 @@
   function recordFromPackage(pkg, now=new Date().toISOString()){
     const manifest=pkg?.manifest;
     if(!manifest || manifest.packageType!=='full' || !(pkg.audioBlob instanceof Blob)) throw new Error('FULL .cmix package with audio is required.');
-    const difficulties=Object.create(null), charts=Object.create(null);
+    const difficulties=Object.create(null), charts=Object.create(null), difficultyOrder=[];
     for(const descriptor of manifest.charts||[]){
+      difficultyOrder.push(descriptor.id);
       const chart=pkg.charts?.[descriptor.file];
       if(!chart || !Array.isArray(chart.notes)) throw new Error(`Validated chart is missing: ${descriptor.id}`);
       charts[descriptor.id]=chart;
       difficulties[descriptor.id]={label:descriptor.name,chart:descriptor.id,level:descriptor.level,style:descriptor.style||null,stars:Number.isFinite(Number(descriptor.level))?Number(descriptor.level):undefined};
     }
     if(!Object.keys(charts).length) throw new Error('The package has no playable charts.');
-    return {id:manifest.id,source:'local',cmixInstalled:true,title:manifest.title,artist:manifest.artist,bpm:manifest.bpm,offset:manifest.offset||0,previewStart:manifest.preview?.startSeconds||0,previewDuration:manifest.preview?.durationSeconds||15,audioBlob:pkg.audioBlob,audioType:pkg.audioBlob.type||null,audioMetadata:{duration:pkg.manifest.audioMetadata?.duration||pkg.manifest.duration||0},jacketBlob:pkg.jacketBlob||null,difficulties,charts,packageType:manifest.packageType,packageVersion:manifest.packageVersion,packageHash:pkg.packageHash||null,sourceFileName:pkg.sourceFileName||null,installedAt:now,updatedAt:now};
+    return {id:manifest.id,source:'local',cmixInstalled:true,title:manifest.title,artist:manifest.artist,bpm:manifest.bpm,offset:manifest.offset||0,previewStart:manifest.preview?.startSeconds||0,previewDuration:manifest.preview?.durationSeconds||15,audioBlob:pkg.audioBlob,audioType:pkg.audioBlob.type||null,audioMetadata:{duration:pkg.manifest.audioMetadata?.duration||pkg.manifest.duration||0},jacketBlob:pkg.jacketBlob||null,difficultyOrder,difficulties,charts,packageType:manifest.packageType,packageVersion:manifest.packageVersion,packageHash:pkg.packageHash||null,sourceFileName:pkg.sourceFileName||null,installedAt:now,updatedAt:now};
   }
   function recordFromChartPackage(pkg,linked,now=new Date().toISOString()){
     if(pkg?.manifest?.packageType!=='chart'||!(linked?.blob instanceof Blob)) throw new Error('Validated CHART package and local audio are required.');
