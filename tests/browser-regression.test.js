@@ -388,35 +388,31 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
   }
 }
 
-async function runCmixHiddenOverlayRegression(browser){
-  const hiddenState=async page=>page.evaluate(()=>Object.fromEntries(['cmixImportModal','cmixDropOverlay'].map(id=>{const el=document.getElementById(id);return [id,{hidden:el.hidden,display:getComputedStyle(el).display,intercepts:(()=>{const b=document.getElementById('safeStart').getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return hit===el||!!hit?.closest?.(`#${id}`);})()}]})));
+async function runPublicCmixImportRegression(browser){
+  const cmixState=async page=>page.evaluate(()=>{
+    const visible=id=>{const el=document.getElementById(id), style=el&&getComputedStyle(el);return !!el&&!el.hidden&&style.display!=="none"&&style.visibility!=="hidden";};
+    const start=document.getElementById('safeStart')?.getBoundingClientRect();
+    const hit=start&&document.elementFromPoint(start.x+start.width/2,start.y+start.height/2);
+    return {scene:window.CircleMixTestApi?.state?.().activeScene||null,button:{count:document.querySelectorAll('#cmixImportBtn').length,hidden:document.getElementById('cmixImportBtn')?.hidden,visible:visible('cmixImportBtn'),songSelectHidden:document.getElementById('songSelect')?.hidden},modal:{hidden:document.getElementById('cmixImportModal')?.hidden,display:getComputedStyle(document.getElementById('cmixImportModal')).display,visible:visible('cmixImportModal')},drop:{hidden:document.getElementById('cmixDropOverlay')?.hidden,display:getComputedStyle(document.getElementById('cmixDropOverlay')).display,visible:visible('cmixDropOverlay')},startIntercepted:!!hit?.closest?.('#cmixImportModal,#cmixDropOverlay')};
+  });
+  const assertClosed=async(page,label)=>{const state=await cmixState(page);assert.deepEqual(state.modal,{hidden:true,display:'none',visible:false},`${label} modal is fully closed ${JSON.stringify(state)}`);assert.deepEqual(state.drop,{hidden:true,display:'none',visible:false},`${label} drop overlay is fully closed ${JSON.stringify(state)}`);assert.equal(state.startIntercepted,false,`${label} import layers do not intercept START ${JSON.stringify(state)}`);};
+  const openSongSelect=async(page,label)=>{await page.locator('#tutorialPromptSkip').click();await page.locator('#safeStart').click();await page.waitForFunction(()=>!document.getElementById('songSelect').hidden);await page.locator('#cmixImportBtn').waitFor({state:'visible'});assert.equal((await cmixState(page)).button.visible,true,`${label} public import is visible in song select ${JSON.stringify(await cmixState(page))}`);};
   const regular=await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}})); const page=await regular.newPage(); const errors=await collectErrors(page);
   try{
-    await page.goto('http://127.0.0.1:4173/index.html?browserTest=1',{waitUntil:'domcontentloaded'}); await waitForStableCircleMixPage(page,'cmix regular hidden'); await dismissStartupOverlays(page);
-    assert.equal(await page.locator('#cmixImportBtn').evaluate(el=>el.hidden),true,'regular users do not enable import');
-    for(const state of Object.values(await hiddenState(page))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`regular hidden cmix overlay ${JSON.stringify(state)}`);
-    await page.locator('#tutorialPromptSkip').click(); await page.locator('#safeStart').click(); await page.waitForFunction(()=>!document.getElementById('songSelect').hidden);
-    assert.deepEqual(errors,[],`regular cmix hidden errors ${JSON.stringify(errors)}`);
+    await page.goto('http://127.0.0.1:4173/index.html?browserTest=1',{waitUntil:'domcontentloaded'});await waitForStableCircleMixPage(page,'public cmix regular');await dismissStartupOverlays(page);
+    await page.evaluate(()=>localStorage.removeItem('circleMixCmixImportNotice'));
+    let state=await cmixState(page);assert.equal(state.button.hidden,false,`regular users enable import ${JSON.stringify(state)}`);assert.equal(state.button.songSelectHidden,true,`title keeps public import inside hidden song select ${JSON.stringify(state)}`);assert.equal(state.button.visible,false,`title does not show import over START ${JSON.stringify(state)}`);await assertClosed(page,'regular title');
+    await openSongSelect(page,'regular');
+    await page.locator('#cmixImportBtn').click();await page.locator('#cmixImportModal').waitFor({state:'visible'});await page.locator('#cmixImportContent').getByRole('button',{name:'CONTINUE'}).click();await page.locator('#cmixImportClose').click();await assertClosed(page,'regular close after first-use notice');
+    await page.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File(['not a zip'],'mime-empty.cmix',{type:''}));window.dispatchEvent(new DragEvent('dragover',{dataTransfer:dt,bubbles:true,cancelable:true}));});await page.locator('#cmixDropOverlay').waitFor({state:'visible'});await page.evaluate(()=>window.dispatchEvent(new DragEvent('dragleave',{bubbles:true,cancelable:true})));await assertClosed(page,'song-select dragleave');
+    await page.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File(['not a zip'],'mime-empty.cmix',{type:''}));window.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}));});await page.locator('#cmixImportModal').waitFor({state:'visible'});await waitFor(page,()=>document.getElementById('cmixImportStatus').textContent==='PACKAGE CHECK FAILED','public invalid cmix inspection');await page.locator('#cmixImportClose').click();await assertClosed(page,'song-select invalid package close');
+    await page.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File(['one'],'one.cmix',{type:''}));dt.items.add(new File(['two'],'two.cmix',{type:''}));window.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}));});await page.locator('#cmixImportModal').waitFor({state:'visible'});assert.equal(await page.locator('#cmixImportStatus').textContent(),'SELECT ONE .CMIX PACKAGE AT A TIME');await page.locator('#cmixImportClose').click();await assertClosed(page,'multi-file drop close');
+    await page.locator('#songPlayBtn').click();await waitFor(page,()=>window.CircleMixTestApi.state().running,'public gameplay begins',8000);const before=await page.evaluate(()=>window.CircleMixTestApi.state());const dropped=await page.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File(['not a zip'],'during-game.cmix',{type:''}));const event=new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;});assert.equal(dropped,false,'gameplay drop is not intercepted');await assertClosed(page,'gameplay drop');const after=await page.evaluate(()=>window.CircleMixTestApi.state());assert.equal(after.running,true,`gameplay remains active ${JSON.stringify({before,after})}`);const loop=await measureLoop(page,700);assert.ok(loop.frameDelta>5&&loop.renderDelta>5&&loop.timeDelta>.2,`gameplay loop survives drop ${JSON.stringify(loop)}`);
+    assert.deepEqual(errors,[],`public cmix errors ${JSON.stringify(errors)}`);
   } finally {unregisterDiagnosticContext(regular,page);await regular.close();}
-  const dev=await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}})); const devPage=await dev.newPage(); const devErrors=await collectErrors(devPage);
+  const dev=await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}}));const devPage=await dev.newPage();const devErrors=await collectErrors(devPage);
   try{
-    await devPage.goto('http://127.0.0.1:4173/index.html?browserTest=1&dev=1',{waitUntil:'domcontentloaded'}); await waitForStableCircleMixPage(devPage,'cmix developer hidden'); await dismissStartupOverlays(devPage);
-    const freshDeveloperImportState=await devPage.locator('#cmixImportBtn').evaluate(el=>({hidden:el.hidden,display:getComputedStyle(el).display,visibility:getComputedStyle(el).visibility,hiddenAncestor:el.closest('[hidden]')?.id||null,songSelectHidden:document.getElementById('songSelect').hidden,activeScene:window.CircleMixTestApi?.state?.().activeScene||null}));
-    assert.equal(freshDeveloperImportState.hidden,false,`developer mode enables the button itself ${JSON.stringify(freshDeveloperImportState)}`);
-    assert.equal(freshDeveloperImportState.hiddenAncestor,'songSelect',`button remains inside hidden song-select until START ${JSON.stringify(freshDeveloperImportState)}`);
-    assert.equal(freshDeveloperImportState.songSelectHidden,true,`fresh developer page remains on title scene ${JSON.stringify(freshDeveloperImportState)}`);
-    for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`developer hidden cmix overlay ${JSON.stringify(state)}`);
-    await devPage.locator('#tutorialPromptSkip').click(); await devPage.locator('#safeStart').click(); await devPage.waitForFunction(()=>!document.getElementById('songSelect').hidden);
-    assert.equal(await devPage.locator('#cmixImportBtn').isVisible(),true,'developer import button is visible in song select');
-    await devPage.locator('#cmixImportBtn').click(); await devPage.locator('#cmixImportModal').waitFor({state:'visible'}); await devPage.locator('#cmixImportClose').click();
-    for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`closed cmix overlay ${JSON.stringify(state)}`);
-    await devPage.locator('#songPlayBtn').click();
-    await devPage.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File(['not a zip'],'mime-empty.cmix',{type:''}));window.dispatchEvent(new DragEvent('dragenter',{dataTransfer:dt,bubbles:true}));window.dispatchEvent(new DragEvent('dragleave',{dataTransfer:dt,bubbles:true}));});
-    for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`drag-cancel cmix overlay ${JSON.stringify(state)}`);
-    await devPage.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File(['not a zip'],'mime-empty.cmix',{type:''}));window.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}));});
-    await devPage.locator('#cmixImportModal').waitFor({state:'visible'}); await waitFor(devPage,()=>document.getElementById('cmixImportStatus').textContent==='PACKAGE CHECK FAILED','mime-empty cmix inspection'); await devPage.locator('#cmixImportClose').click();
-    for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`dropped cmix closed overlay ${JSON.stringify(state)}`);
-    assert.deepEqual(devErrors,[],`developer cmix hidden errors ${JSON.stringify(devErrors)}`);
+    await devPage.goto('http://127.0.0.1:4173/index.html?browserTest=1&dev=1',{waitUntil:'domcontentloaded'});await waitForStableCircleMixPage(devPage,'public cmix developer');await dismissStartupOverlays(devPage);const state=await cmixState(devPage);assert.equal(state.button.count,1,`developer mode creates one public import button ${JSON.stringify(state)}`);assert.equal(state.button.hidden,false,`developer button remains enabled ${JSON.stringify(state)}`);assert.equal(state.button.songSelectHidden,true,`developer title keeps import in song select ${JSON.stringify(state)}`);await assertClosed(devPage,'developer title');await openSongSelect(devPage,'developer');assert.equal((await cmixState(devPage)).button.count,1,'developer song select still has one import button');assert.deepEqual(devErrors,[],`developer public cmix errors ${JSON.stringify(devErrors)}`);
   } finally {unregisterDiagnosticContext(dev,devPage);await dev.close();}
 }
 
@@ -433,6 +429,7 @@ async function runDeveloperSelfTestOverlayRegression(browser){
     await page.locator('#safeSelfTestBtn').click();
     await waitFor(page,()=>window.CircleMixTestApi.selfTestState().active,'self test opens');
     assert.equal(await page.locator('#selfTestOverlay').getAttribute('aria-hidden'),'false');
+    assert.equal(await page.evaluate(()=>{document.getElementById('cmixImportBtn').click();return document.getElementById('cmixImportModal').hidden;}),true,'SELF TEST blocks the public import transaction');
     await page.locator('#selfTestExit').click();
     await waitFor(page,()=>!window.CircleMixTestApi.selfTestState().active && window.CircleMixTestApi.selfTestState().overlayHidden,'self test exits');
     const after=await page.evaluate(()=>window.CircleMixTestApi.selfTestState());
@@ -667,7 +664,7 @@ async function runDeterministicAimAndCutRegression(browser){
       {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
       'fresh desktop'
     );
-    await runCmixHiddenOverlayRegression(browser);
+    await runPublicCmixImportRegression(browser);
     await runDeveloperSelfTestOverlayRegression(browser);
     const answeredDesktopLoop = await runFreshDirectPlayRegression(
       browser,
