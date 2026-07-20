@@ -6,6 +6,7 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.25", date: "2026-07-20", title: ".cmix Import for Everyone", summary: "IMPORT .CMIX is now public: safely link CHART audio, install FULL packages, and update LOCAL SONGS with optional backups. Files never upload to a server." },
   { version: "0.9.24", date: "2026-07-20", title: "LOCAL SONGS Library Safety", summary: "DB v3 adds atomic song updates, one-version backups, restore, storage estimates, integrity checks, and cross-tab refresh." },
   { version: "0.9.23", date: "2026-07-20", title: ".cmix Secure Import", summary: "엄격한 ZIP 무결성, CRC-32, 안전 JSON 및 취소 가능한 .cmix 가져오기를 제공합니다." },
   { version: "0.9.22", date: "2026-07-20", title: ".cmix FULL Export", summary: "음원과 재킷, 모든 난이도를 포함한 FULL .cmix v1 패키지를 안전하게 내보냅니다." },

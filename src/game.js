@@ -5386,6 +5386,14 @@ settingsOrigin=${settingsOrigin}`);
   window.CircleMixOpenLocalSong=async function(id){
     await songs.refreshLocal(); selectedSource="local"; songTab="local"; resolveSelectedSong(id,"local"); selectedDifficultyId=localChartEntries(selectedSong)[0]?.id || null; selectedMenuMode=selectedDifficultyId||""; syncSongUrl(); await showSongSelect();
   };
+  // Kept deliberately narrow: public import may only start from a safe menu,
+  // never during gameplay, results, tutorial, or a competing dialog.
+  window.CircleMixCanImportCmix=function(){
+    const importModal=document.getElementById("cmixImportModal");
+    return !running && !paused && !tutorialMode && !selfTest.active &&
+      !resultOverlay?.classList.contains("show") &&
+      (!!songSelect && !songSelect.hidden || !!document.getElementById("startLayer") && !document.getElementById("startLayer").hidden || !!importModal && !importModal.hidden);
+  };
 
   async function showSongSelect(){
     await Promise.all([songs.refreshLocal(), songs.refreshBuiltinAudio?.()]);
