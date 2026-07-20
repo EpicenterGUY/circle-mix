@@ -1,6 +1,7 @@
 // Shared song registry and local-song persistence for CIRCLE MIX.
 (() => {
   const ghostBundle = window.CircleMixGhostRuleBundle || null;
+  const routingBundle = window.CircleMixRoutingBundle || null;
   function cloneGhostDifficulties(bundle){
     const songDiffs=bundle?.song?.difficulties || {};
     const charts=bundle?.charts || {};
@@ -23,19 +24,38 @@
       difficulties:cloneGhostDifficulties(ghostBundle)
     });
   }
+  if(routingBundle?.song && routingBundle?.charts){
+    BUILT_INS.push({
+      ...routingBundle.song,
+      difficulties:cloneGhostDifficulties(routingBundle)
+    });
+  }
   const VALID_TYPES = new Set(["cut","fx","slideCW","slideCCW","trace","traceCW","traceCCW","swingCW","swingCCW","scratchCW","scratchCCW"]);
-  const DB_NAME="circle-mix-local-songs", DB_VERSION=1, STORE="songs";
+  const DB_NAME="circle-mix-local-songs", DB_VERSION=2, STORE="songs", BUILTIN_AUDIO_STORE="builtinAudio";
   let localCache=[];
 
-  function openDb(){ return new Promise((resolve,reject)=>{ const r=indexedDB.open(DB_NAME,DB_VERSION); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE,{keyPath:"id"}); }; r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error||new Error("IndexedDB open failed")); }); }
-  async function tx(mode, fn){ const db=await openDb(); return new Promise((resolve,reject)=>{ const t=db.transaction(STORE,mode); const s=t.objectStore(STORE); let out; try{ out=fn(s); }catch(e){ reject(e); return; } t.oncomplete=()=>{ db.close(); resolve(out?.result ?? out); }; t.onerror=()=>{ db.close(); reject(t.error||new Error("IndexedDB transaction failed")); }; }); }
+  function openDb(){ return new Promise((resolve,reject)=>{ const r=indexedDB.open(DB_NAME,DB_VERSION); r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE,{keyPath:"id"}); if(!r.result.objectStoreNames.contains(BUILTIN_AUDIO_STORE)) r.result.createObjectStore(BUILTIN_AUDIO_STORE,{keyPath:"id"}); }; r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error||new Error("IndexedDB open failed")); }); }
+  async function tx(store, mode, fn){ const db=await openDb(); return new Promise((resolve,reject)=>{ const t=db.transaction(store,mode); const s=t.objectStore(store); let out; try{ out=fn(s); }catch(e){ reject(e); return; } t.oncomplete=()=>{ db.close(); resolve(out?.result ?? out); }; t.onerror=()=>{ db.close(); reject(t.error||new Error("IndexedDB transaction failed")); }; }); }
   const LocalSongs = {
-    async all(){ try{ localCache=await tx("readonly",s=>s.getAll()) || []; }catch(e){ console.warn("local songs unavailable",e); localCache=[]; } return localCache.slice().sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")); },
+    async all(){ try{ localCache=await tx(STORE,"readonly",s=>s.getAll()) || []; }catch(e){ console.warn("local songs unavailable",e); localCache=[]; } return localCache.slice().sort((a,b)=>(b.updatedAt||"").localeCompare(a.updatedAt||"")); },
     cached(){ return localCache.slice(); },
-    async get(id){ return tx("readonly",s=>s.get(id)); },
-    async put(record){ await tx("readwrite",s=>s.put(record)); await this.all(); return record; },
-    async delete(id){ await tx("readwrite",s=>s.delete(id)); await this.all(); },
+    async get(id){ return tx(STORE,"readonly",s=>s.get(id)); },
+    async put(record){ await tx(STORE,"readwrite",s=>s.put(record)); await this.all(); return record; },
+    async delete(id){ await tx(STORE,"readwrite",s=>s.delete(id)); await this.all(); },
     async exists(id){ return Boolean(await this.get(id)); }
+  };
+  const BuiltinAudio = {
+    async get(id){ return tx(BUILTIN_AUDIO_STORE,"readonly",s=>s.get(id)); },
+    async put(id,audioBlob){ if(!(audioBlob instanceof Blob)) throw new Error("A local audio file is required."); const record={id,audioBlob,updatedAt:new Date().toISOString()}; await tx(BUILTIN_AUDIO_STORE,"readwrite",s=>s.put(record)); return record; },
+    async delete(id){ await tx(BUILTIN_AUDIO_STORE,"readwrite",s=>s.delete(id)); },
+    async refresh(){
+      for(const song of BUILT_INS){
+        if(!song.audioStorageKey) continue;
+        try{ const record=await this.get(song.audioStorageKey); song.audioBlob=record?.audioBlob || null; song.audioLinked=Boolean(record?.audioBlob); }
+        catch(error){ console.warn("built-in audio link unavailable",error); song.audioBlob=null; song.audioLinked=false; }
+      }
+      return BUILT_INS;
+    }
   };
   function normalizeAngle(angle){ return ((Number(angle)%360)+360)%360; }
   function legacyLaneToAngle(lane){ return normalizeAngle((Number(lane)||0)*45); }
@@ -64,6 +84,7 @@
   function calculateStars(chart){ const notes=(chart?.notes||[]).slice().sort((a,b)=>(a.beat||0)-(b.beat||0)); if(!notes.length) return 1; const bpm=Number(chart.bpm)||120, beat=60/bpm; const weights={cut:1,fx:1.2,slideCW:1.35,slideCCW:1.35,trace:.55,traceCW:.55,traceCCW:.55,swingCW:1.45,swingCCW:1.45,scratchCW:1.5,scratchCCW:1.5}; let raw=0, prev=null; for(const n of notes){ let w=weights[n.type]||1; if(prev){ const gap=Math.max(.04,(n.beat-prev.beat)*beat); w+=Math.max(0,Math.min(1,(.55-gap)/.55))*.95; w+=shortestAngleDifference(noteAngle(n),noteAngle(prev))/180*.55; } raw+=w; prev=n; } const dur=Math.max(1,(notes.at(-1).beat-notes[0].beat)*beat); const normalized=1+(raw/dur)*.5+Math.sqrt(notes.length/dur)*.1; return Math.round(Math.max(1,Math.min(10,normalized))*10)/10; }
   window.CircleMixSongs = BUILT_INS;
   window.CircleMixLocalSongs = LocalSongs;
+  window.CircleMixBuiltinAudio = BuiltinAudio;
   window.CircleMixChartTools = { validateChart, calculateStars, validTypes:[...VALID_TYPES], normalizeAngle, noteAngle, noteEndAngle, shortestAngleDifference };
-  window.CircleMixSongRegistry = { all(){ return BUILT_INS.slice(); }, localAll(){ return LocalSongs.cached(); }, async refreshLocal(){ return LocalSongs.all(); }, get(id){ return BUILT_INS.find(s=>s.id===id) || LocalSongs.cached().find(s=>s.id===id) || BUILT_INS[0]; }, hasDifficulty(song,d){ return Boolean(song?.difficulties?.[d]); } };
+  window.CircleMixSongRegistry = { all(){ return BUILT_INS.slice(); }, localAll(){ return LocalSongs.cached(); }, async refreshLocal(){ return LocalSongs.all(); }, async refreshBuiltinAudio(){ return BuiltinAudio.refresh(); }, get(id){ return BUILT_INS.find(s=>s.id===id) || LocalSongs.cached().find(s=>s.id===id) || BUILT_INS[0]; }, hasDifficulty(song,d){ return Boolean(song?.difficulties?.[d]); } };
 })();

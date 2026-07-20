@@ -788,6 +788,37 @@ async function runDeterministicAimAndCutRegression(browser){
     await runRapidSkipRegression(page, 'desktop');
     await runFinalTutorialRegression(page, 'desktop');
 
+    await page.evaluate(() => window.CircleMixTestApi.openSongSelect());
+    await waitFor(page, () => !document.getElementById('songSelect')?.hidden, 'Routing song select');
+    await page.click('.songCardPick[data-song-id="routing"]');
+    const routingSelect = await page.evaluate(() => ({
+      difficulties:[...document.querySelectorAll('#songDifficulty .songDiffBtn[data-difficulty]')].map(button=>button.dataset.difficulty),
+      audioLink:document.querySelector('.songManage button[data-song-id="routing"]')?.textContent || ''
+    }));
+    assert.deepEqual(routingSelect.difficulties,['beginner','normal','advanced','hyper','another','lasses-extra','reverb']);
+    assert.match(routingSelect.audioLink,/LINK LOCAL AUDIO|UNLINK LOCAL AUDIO/);
+
+    const routingExpected={beginner:119,normal:195,advanced:241,hyper:334,another:520,'lasses-extra':518,reverb:553};
+    const routingAutoResults={};
+    for(const [difficulty,expectedCount] of Object.entries(routingExpected)){
+      const initial=await page.evaluate(diff=>window.CircleMixTestApi.startBuiltInChartTest('routing',diff),difficulty);
+      assert.equal(initial.chartLength,expectedCount,`${difficulty} runtime chart count`);
+      assert.equal(initial.selectedDifficultyId,difficulty,`${difficulty} selected`);
+      assert.ok(initial.chartDoneStates.every(note=>String(note.id).startsWith(`routing-${difficulty}-`)),`${difficulty} has no prior chart notes`);
+      const finished=await page.evaluate(end=>window.CircleMixTestApi.advanceTestClock(end+1,.04),initial.chartEndTime);
+      assert.equal(finished.judgedCount,expectedCount,`${difficulty} AUTO judged every note`);
+      assert.equal(finished.missCount,0,`${difficulty} AUTO has no misses`);
+      assert.equal(finished.resultVisible,true,`${difficulty} AUTO reaches results`);
+      routingAutoResults[difficulty]={chartLength:finished.chartLength,perfectCount:finished.perfectCount,missCount:finished.missCount};
+    }
+
+    const playerInitial=await page.evaluate(()=>window.CircleMixTestApi.startBuiltInChartTest('routing','beginner'));
+    const playerFinished=await page.evaluate(()=>window.CircleMixTestApi.completeChartTestAsPlayer());
+    assert.equal(playerFinished.judgedCount,playerInitial.chartLength,'normal-play result judges the full chart');
+    assert.equal(playerFinished.missCount,0,'normal-play result has no forced misses');
+    assert.equal(playerFinished.resultVisible,true,'normal-play completion shows results');
+    assert.equal(await page.locator('#resultAuto').textContent(),'PLAYER RESULT');
+
     const songResults = {};
     for (const [song, difficulty] of [['anima','tech'], ['ghost-rule','hard']]) {
       const startResult = await page.evaluate(([songId, diff]) => window.CircleMixTestApi.startBuiltIn(songId, diff), [song, difficulty]);
@@ -892,7 +923,7 @@ async function runDeterministicAimAndCutRegression(browser){
     assert.ok(Number.isFinite(aimDiagnostics.pointerLockState.lockedVirtualAngle) && Number.isFinite(aimDiagnostics.pointerLockState.lockedSensitivity), `pointer lock diagnostics finite ${JSON.stringify(aimDiagnostics.pointerLockState)}`);
 
     assert.deepEqual([...errors, ...mobileErrors], []);
-    console.log('PASS browser regression', {freshDesktopLoop, answeredDesktopLoop, freshMobileLoop, stillMouseLoop, hudHoverLoop, songResults, mobile:{frameDelta:mobileLoop.frameDelta}});
+    console.log('PASS browser regression', {freshDesktopLoop, answeredDesktopLoop, freshMobileLoop, stillMouseLoop, hudHoverLoop, routingAutoResults, songResults, mobile:{frameDelta:mobileLoop.frameDelta}});
     await browser.close();
     activeBrowser = null;
   } finally {

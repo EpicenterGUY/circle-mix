@@ -388,14 +388,15 @@
   function loadPreviewAudio(songData, sessionId=previewSessionId){
     if(!canRunSongPreview(sessionId)) return false;
     if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
-    if(songData?.source==="local"){
-      if(!songData.audioBlob) return false;
+    if(songData?.audioBlob){
       activeLocalBlobUrl=URL.createObjectURL(songData.audioBlob); song.src=activeLocalBlobUrl;
+    }else if(songData?.source==="local"){
+      return false;
     }else if(songData?.audio && String(songData.audio).startsWith("#")){
       song.src=embeddedAnimaSrc;
     }else if(songData?.audio){
       song.src=songData.audio;
-    }
+    }else return false;
     try{ loadSong("preview-load"); }catch(e){}
     applyMusicVolume();
     return true;
@@ -811,6 +812,11 @@
     if(songId==="anima" && difficultyId==="tech") return {kind:"generator", notes:generateTechChart(), gap:1.10, trimBeat:CHART_END_BEAT};
     if(songId==="ghost-rule"){
       const bundle=window.CircleMixGhostRuleBundle;
+      const chartData=bundle?.charts?.[difficultyId];
+      if(chartData?.notes?.length) return {kind:"bundle", notes:chartData.notes, chart:chartData};
+    }
+    if(songId==="routing"){
+      const bundle=window.CircleMixRoutingBundle;
       const chartData=bundle?.charts?.[difficultyId];
       if(chartData?.notes?.length) return {kind:"bundle", notes:chartData.notes, chart:chartData};
     }
@@ -1877,7 +1883,7 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; return make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT*CHART_STRETCH, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; const runtime=make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT*CHART_STRETCH, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); if(n.id!==undefined) runtime.id=String(n.id); return runtime; }
 
   function generateChart(){
     if(useCustomChart){
@@ -2539,12 +2545,24 @@
     updateAutoDebug(t);
     if(!isAutoActive())return;
 
-    const activePath=chart.find(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&t>=n.hitTime&&t<=n.hitTime+n.duration);
+    const activePath=chart.find(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&t>=n.hitTime&&t<=n.hitTime+n.duration+(n.type.startsWith("trace")?traceProfile().endpointGrace:0));
     if(activePath){
       const a=slideAngle(activePath,t);
       armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=a;
       targetAngle=a;
       armVel=slideDelta(activePath)/Math.max(activePath.duration,.001);
+      if(activePath.type.startsWith("trace")){
+        const progress=traceProgress(activePath,t);
+        if(activePath.startCaptured){
+          const previousProgress=Number(activePath.autoTraceProgress)||0;
+          const travel=resolveTraceMotion(activePath).signedSweepAngle*Math.max(0,progress-previousProgress);
+          if(travel>0) aimInput.accumulatedCWTravel+=travel;
+          else aimInput.accumulatedCCWTravel+=-travel;
+          activePath.autoTraceProgress=progress;
+        }else{
+          activePath.autoTraceProgress=0;
+        }
+      }
     }else{
       const n=nextNote(t);
       if(n)targetAngle=(n.type.startsWith("scratch")||n.type.startsWith("swing"))?n.angle:n.angle;
@@ -3976,7 +3994,7 @@
       if(!n?.type?.startsWith("trace")) continue;
       delete n.validTrackedTime; delete n.traceQualityTime; delete n.activeTraceDuration; delete n.endpointInsideTime;
       delete n.endpointCaptured; delete n.enteredTrace; delete n.lateTraceStart; delete n.lastTraceRegion; delete n.lastTraceEndpointRegion;
-      delete n.coverageRatio; delete n.traceQuality; delete n.failReason; delete n.lastTraceReason; delete n.autoProcessingLogged;
+      delete n.coverageRatio; delete n.traceQuality; delete n.failReason; delete n.lastTraceReason; delete n.autoProcessingLogged; delete n.autoTraceProgress;
       delete n.swingGestureArmed; delete n.swingLastAngle; delete n.swingDirectedTravel; delete n.swingReverseTravel;
       delete n.scratchGestureArmed; delete n.scratchDirectedTravel; delete n.scratchReverseTravel;
     }
@@ -4078,7 +4096,26 @@
   }
   function startTutorialStep(idx=tutorialStepIndex,{startMode="initial"}={}){ enterTutorialStep(idx,{source:startMode==="initial"?"replay":(startMode==="restart"?"retry":startMode),skipCountdown:startMode==="skip"}); }
   function startTutorial(){ deactivateSelfTestSurface?.({releaseInputs:true}); localStorage.setItem(TUTORIAL_PROMPT_KEY,"true"); if(tutorialPrompt)tutorialPrompt.hidden=true; if(tutorialComplete)tutorialComplete.hidden=true; tutorialSessionId++; tutorialState.completing=false; tutorialState.pendingSkipQueue=[]; tutorialState.mixRetryCount=0; tutorialState.completeCount=0; tutorialState.previousAutoEnabled=gameState.autoEnabled; tutorialState.autoSuppressed=true; enterTutorialStep(0,{source:"replay",skipCountdown:false}); }
-  function nextTutorialStep(){ if(!tutorialMode)return; requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}}); }
+  function nextTutorialStep(event){
+    if(!tutorialMode)return;
+    // The final pointerdown used to replace the HUD before pointerup, allowing
+    // that release to activate the replay button underneath on touch layouts.
+    // Finish on the matching release so the original skip button owns the full
+    // gesture; direct/test calls without an event remain synchronous.
+    if(event?.type==="pointerdown" && tutorialStepIndex>=tutorialSteps.length-1){
+      const pointerId=event.pointerId;
+      const finish=release=>{
+        if(release.pointerId!==pointerId)return;
+        window.removeEventListener("pointerup",finish,true);
+        window.removeEventListener("pointercancel",finish,true);
+        nextTutorialStep();
+      };
+      window.addEventListener("pointerup",finish,true);
+      window.addEventListener("pointercancel",finish,true);
+      return;
+    }
+    requestTutorialTransition(tutorialStepIndex+1,{source:"skip",reason:"SKIP_BUTTON",skipCountdown:true,extra:{source:"button",fn:"nextTutorialStep"}});
+  }
   function restartTutorialStep(){ if(!tutorialMode)return; enterTutorialStep(tutorialStepIndex,{source:"retry",skipCountdown:false}); }
   function restoreTutorialAuto(){ tutorialState.autoSuppressed=false; setAutoPlayEnabled(!!tutorialState.previousAutoEnabled, "tutorial-restore"); }
   function exitTutorial(toTitle=true){ clearTutorialTimers(); resetAimInput(-Math.PI/2); tutorialMode=false; restoreTutorialAuto(); document.body.classList.remove("tutorialMode","tutorialIntro","tutorialSidePanel","tutorialTopPanel"); resize(); if(tutorialHud)tutorialHud.hidden=true; cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true}); notifyPwaGameplay(); chart=[]; resetRenderWindow(); chartLastHitEnd=0; startLayer.style.display="flex"; if(toTitle) showTitleMenu(); }
@@ -4421,14 +4458,15 @@
     try{ pauseSong("reset"); setSongCurrentTime(0,"reset"); }catch(e){}
     if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
     BPM = selectedSong?.bpm || 184.6; BEAT = 60 / BPM; SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04;
-    if(activePlaySource==="local"){
-      if(!selectedSong?.audioBlob) throw new Error("로컬 오디오 Blob을 찾을 수 없습니다.");
+    if(selectedSong?.audioBlob){
       activeLocalBlobUrl=URL.createObjectURL(selectedSong.audioBlob); song.src=activeLocalBlobUrl;
+    }else if(activePlaySource==="local"){
+      throw new Error("로컬 오디오 Blob을 찾을 수 없습니다.");
     }else if(selectedSong?.audio && String(selectedSong.audio).startsWith("#")){
       song.src=embeddedAnimaSrc;
     }else if(selectedSong?.audio){
       song.src=selectedSong.audio;
-    }
+    }else if(selectedSong?.audioRequired) throw new Error(selectedSong.audioNotice || "Link a local audio file before playing this chart.");
     try{ loadSong("load"); }catch(e){}
     applyMusicVolume();
   }
@@ -4442,6 +4480,7 @@
     cleanupPlaySession({stopAudio:true, hideResultOverlay:true, abort:true});
     paused=false;
     abortingRun=false; completionPending=false; resultShown=false;
+    browserTestClock=null;
     if(selectedMenuMode) mapMode=selectedMenuMode;
     if(selectedMenuMode==="custom") useCustomChart=customChartData.length>0;
     editorMode=mode==="editor";
@@ -5250,7 +5289,7 @@ settingsOrigin=${settingsOrigin}`);
       const songTitle=escapeHtml(songData.title || "UNKNOWN");
       const artist=escapeHtml(songData.artist || "UNKNOWN");
       const bpm=escapeHtml(songData.bpm || "--");
-      const manage=songData.source==="local" ? `<div class="songManage"><button data-action="rename" data-song-id="${songIdAttr}">EDIT META</button><button data-action="clone" data-song-id="${songIdAttr}">CLONE</button><button data-action="delete" data-song-id="${songIdAttr}">DELETE</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : "";
+      const manage=songData.source==="local" ? `<div class="songManage"><button data-action="rename" data-song-id="${songIdAttr}">EDIT META</button><button data-action="clone" data-song-id="${songIdAttr}">CLONE</button><button data-action="delete" data-song-id="${songIdAttr}">DELETE</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : (songData.audioRequired ? `<div class="songManage"><button data-audio-action="${songData.audioLinked ? "unlink" : "link"}" data-song-id="${songIdAttr}">${songData.audioLinked ? "UNLINK LOCAL AUDIO" : "LINK LOCAL AUDIO"}</button><small>${escapeHtml(songData.audioLinked ? "LOCAL AUDIO LINKED · NOT UPLOADED" : songData.audioNotice)}</small></div>` : "");
       const jacket=songData.jacket ? `<img src="${escapeAttribute(songData.jacket)}" alt="" loading="lazy" onerror="this.remove()">` : "";
       return `<div class="songCard${active ? " active" : ""}" data-song-id="${songIdAttr}">
         <button class="songCardPick" type="button" data-song-id="${songIdAttr}"><div class="songJacket" aria-hidden="true">${jacket}<span>${songTitle}</span></div>
@@ -5262,8 +5301,31 @@ settingsOrigin=${settingsOrigin}`);
     for(const card of songCarousel.querySelectorAll(".songCardPick")){
       bindPress(card,()=>{ try{ pauseSong("reset"); setSongCurrentTime(0,"reset"); }catch(e){} resolveSelectedSong(card.dataset.songId, selectedSource); selectedDifficultyId=null; renderSongSelect(); });
     }
-    for(const btn of songCarousel.querySelectorAll(".songManage button")){
+    for(const btn of songCarousel.querySelectorAll(".songManage button[data-action]")){
       bindPress(btn,async()=>{ const id=btn.dataset.songId, action=btn.dataset.action; const rec=await window.CircleMixLocalSongs.get(id); if(!rec)return; if(action==="delete"){ if(confirm(`${rec.title}을(를) 삭제할까요? 오디오와 모든 채보도 함께 삭제됩니다.`)){ await window.CircleMixLocalSongs.delete(id); await songs.refreshLocal(); selectedSongId=null; selectedDifficultyId=null; selectedSong=null; renderSongSelect(); } } if(action==="clone"){ const copy={...rec,id:rec.id+"-copy",title:rec.title+" Copy",updatedAt:new Date().toISOString()}; await window.CircleMixLocalSongs.put(copy); await songs.refreshLocal(); resolveSelectedSong(copy.id,"local"); renderSongSelect(); } if(action==="rename"){ const title=prompt("곡명",rec.title); if(title===null)return; const artist=prompt("아티스트",rec.artist||""); if(artist===null)return; await window.CircleMixLocalSongs.put({...rec,title:title.trim()||rec.title,artist:artist.trim()||rec.artist,updatedAt:new Date().toISOString()}); await songs.refreshLocal(); renderSongSelect(); } });
+    }
+    for(const btn of songCarousel.querySelectorAll(".songManage button[data-audio-action]")){
+      bindPress(btn,async()=>{
+        const id=btn.dataset.songId;
+        if(btn.dataset.audioAction==="unlink"){
+          await window.CircleMixBuiltinAudio.delete(id);
+          await songs.refreshBuiltinAudio();
+          resolveSelectedSong(id,"builtin");
+          renderSongSelect();
+          return;
+        }
+        const picker=document.createElement("input");
+        picker.type="file"; picker.accept="audio/*";
+        picker.addEventListener("change",async()=>{
+          const file=picker.files?.[0];
+          if(!file)return;
+          await window.CircleMixBuiltinAudio.put(id,file);
+          await songs.refreshBuiltinAudio();
+          resolveSelectedSong(id,"builtin");
+          renderSongSelect();
+        },{once:true});
+        picker.click();
+      });
     }
     let diffHtml="";
     if(selectedSource==="local" && !selectedSong){
@@ -5317,7 +5379,7 @@ settingsOrigin=${settingsOrigin}`);
   }
 
   async function showSongSelect(){
-    await songs.refreshLocal();
+    await Promise.all([songs.refreshLocal(), songs.refreshBuiltinAudio?.()]);
     const params=new URLSearchParams(window.location.search);
     selectedSource=params.get("tab")==="local" ? "local" : "builtin";
     songTab=selectedSource==="local" ? "local" : "built-in";
@@ -5623,7 +5685,7 @@ running=${running}`);
       advanceTestClock:(seconds,step=.02)=>{
         if(browserTestClock===null) throw new Error('deterministic chart is not running');
         const target=browserTestClock+Math.max(0,Number(seconds)||0), dt=Math.max(.001,Number(step)||.02);
-        while(browserTestClock<target){ const delta=Math.min(dt,target-browserTestClock); browserTestClock+=delta; filterHeld=mouseDownRight||keys.KeyZ||keys.KeyX||keys.Space; scratchHeld=mouseDownRight||keys.ShiftLeft||keys.ShiftRight; syncScratchHoldState(); updateArm(delta); updateNotes(browserTestClock,delta); focusNote=currentFocusNote(browserTestClock); testFrameCount++; testRenderCount++; }
+        while(browserTestClock<target){ const delta=Math.min(dt,target-browserTestClock); browserTestClock+=delta; filterHeld=mouseDownRight||keys.KeyZ||keys.KeyX||keys.Space; scratchHeld=mouseDownRight||keys.ShiftLeft||keys.ShiftRight; syncScratchHoldState(); updateAuto(browserTestClock); updateArm(delta); updateNotes(browserTestClock,delta); focusNote=currentFocusNote(browserTestClock); testFrameCount++; testRenderCount++; }
         if(judgedCount===chart.length && !resultShown) completeRun();
         return window.CircleMixTestApi.state();
       },
@@ -5634,6 +5696,7 @@ running=${running}`);
         scratch:(held)=>{ mouseDownRight=!!held; filterHeld=!!held; setScratchHeld(!!held); }
       },
       startTutorial:()=>startTutorial(),
+      openSongSelect:()=>showSongSelect(),
       skipTutorialStep:()=>nextTutorialStep(),
       startBuiltIn:async(songId,difficulty)=>{
         if(tutorialMode) exitTutorial(false);
@@ -5644,11 +5707,32 @@ running=${running}`);
         const started=await start("play");
         return {started, previousSession, playSessionToken, songId:selectedSongId, difficulty:selectedDifficultyId};
       },
+      startBuiltInChartTest:(songId,difficulty)=>{
+        if(raf){ cancelAnimationFrame(raf); raf=0; }
+        cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
+        tutorialMode=false; paused=false; running=true; resultShown=false; abortingRun=false; completionPending=false;
+        const songData=songs.get(songId);
+        selectedSource="builtin"; activePlaySource="builtin"; activeChartId=difficulty;
+        selectedSong=songData; selectedSongId=songData.id; selectedDifficultyId=difficulty; selectedMenuMode=difficulty; mapMode=difficulty; useCustomChart=false;
+        BPM=selectedSong?.bpm || 184.6; BEAT=60/BPM; SONG_OFFSET=typeof selectedSong?.offset==="number"?selectedSong.offset:-.04;
+        browserTestClock=0; resetAimInput(-Math.PI/2); chart=chartForDifficulty(difficulty); resetTraceRuntimeState(); resetRenderWindow(); focusNote=null;
+        chartLastHitEnd=Math.max(...chart.map(n=>n.hitTime+(n.duration||0)));
+        score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0);
+        feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[]; gameState.autoEnabled=true;
+        return window.CircleMixTestApi.state();
+      },
+      completeChartTestAsPlayer:()=>{
+        gameState.autoEnabled=false;
+        for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); }
+        browserTestClock=chartLastHitEnd+.1;
+        if(!resultShown) completeRun();
+        return window.CircleMixTestApi.state();
+      },
       exitTutorial:()=>exitTutorial(false),
       completeTutorial:()=>completeTutorial(),
       markFirstPendingTutorialNoteMissed:()=>{ const n=chart.find(note=>!note.done&&!note.missed); if(n){ miss(n,"TEST_FORCED_MISS"); return true; } return false; },
       clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
-      state:()=>({running:!!running, paused:!!paused, tutorialMode:!!tutorialMode, tutorialStepIndex:Number(tutorialStepIndex), tutorialTargetProgress:Number(tutorialSteps[tutorialStepIndex]?._hit||0), tutorialPointerMoved:!!tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince==null?null:Number(tutorialState.exploreInsideSince), tutorialInputEnabledAt:Number(tutorialState.inputEnabledAt), tutorialSuccessCount:Number(tutorialState.successCount), tutorialValidUserInputCount:Number(tutorialState.validUserInputCount), tutorialLastSource:tutorialState.lastSource||null, tutorialCurrentJudgement:tutorialState.currentJudgement||null, tutorialTransitioning:!!tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState||null, pendingTutorialSkipCount:Number(tutorialState.pendingSkipQueue.length), tutorialStepToken:Number(tutorialStepToken), tutorialAttemptId:Number(tutorialAttemptId), tutorialTimerCount:Number(tutorialState.timers.length), tutorialFinalMixRetryScheduled:!!tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:Number(tutorialState.mixRetryCount), tutorialChartFinalizationCount:Number(tutorialState.chartFinalizationCount), tutorialLastChartFinalization:tutorialState.lastChartFinalization||null, tutorialChartSettled:!!tutorialChartSettled(), tutorialCompleteCount:Number(tutorialState.completeCount), tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:Number(tutorialState.rafIds.length+(raf?1:0)), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount:Number(judgedCount), perfectCount:Number(perfectCount), greatCount:Number(greatCount), missCount:Number(missCount), score:Number(score), combo:Number(combo), maxCombo:Number(maxCombo), visibleNoteCount:Number(getVisibleNotes(now()).length), visibleNotes:getVisibleNotes(now()).map(n=>({id:n.id||noteDebugId(n),type:n.type})), focusNote:focusNote?{id:focusNote.id||noteDebugId(focusNote),type:focusNote.type}:null, chartDoneStates:chart.map(n=>({id:n.id||noteDebugId(n),type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,coverage:Number(n.coverageRatio||0),quality:Number(n.traceQuality||0),started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime,angle:Number(n.angle),endAngle:n.endAngle==null?null:Number(n.endAngle),duration:Number(n.duration||0)})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:Number(chart.length), gameTime:Number(now()), browserNow:Number(performance.now()), frameCount:Number(testFrameCount), renderCount:Number(testRenderCount), W:Number(W), H:Number(H), lastPointerSource:lastPointerSource||null, pointerActive:!!pointerActive, mouseX:Number(mouseX), mouseY:Number(mouseY), armAngle:Number(armAngle), rawArmVel:Number(rawArmVel), rawAngularVelocity:Number(rawAngularVelocity), sampleAngularVelocity:Number(aimInput.sampleAngularVelocity), cx:Number(cx), cy:Number(cy), hitR:Number(hitR), selectedSongId:selectedSongId||null, selectedDifficultyId:selectedDifficultyId||null, mobileAimPointerId:mobileAimPointerId==null?null:Number(mobileAimPointerId), mobileActionPointerId:mobileActionPointerId==null?null:Number(mobileActionPointerId), mobileScratchPointerId:mobileScratchPointerId==null?null:Number(mobileScratchPointerId), actionHeld:!!keys.MouseLeft, scratchHeld:!!scratchHeld, mouseDownRight:!!mouseDownRight, pointerLockMode:inputSettings.pcAimMode, effectivePcAimMode:effectivePcAimMode(), pointerLockRequested:!!pointerLockRequested, pointerLockActive:!!pointerLockActive(), lockedVirtualAngle:Number(lockedVirtualAngle), lockedSensitivity:Number(inputSettings.lockedAimSensitivity), lastRelativeMovement:{x:Number(lastRelativeMovement.x),y:Number(lastRelativeMovement.y)}, rawInputAngle:Number(rawInputAngle), judgementAimAngle:Number(judgementAimAngle), visualArmAngle:Number(visualArmAngle), rawJudgementDifference:Number(norm(rawInputAngle-judgementAimAngle)), judgementVisualDifference:Number(norm(judgementAimAngle-visualArmAngle)), resultVisible:!!resultOverlay?.classList.contains('show')}),
+      state:()=>({running:!!running, paused:!!paused, tutorialMode:!!tutorialMode, tutorialStepIndex:Number(tutorialStepIndex), tutorialTargetProgress:Number(tutorialSteps[tutorialStepIndex]?._hit||0), tutorialPointerMoved:!!tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince==null?null:Number(tutorialState.exploreInsideSince), tutorialInputEnabledAt:Number(tutorialState.inputEnabledAt), tutorialSuccessCount:Number(tutorialState.successCount), tutorialValidUserInputCount:Number(tutorialState.validUserInputCount), tutorialLastSource:tutorialState.lastSource||null, tutorialCurrentJudgement:tutorialState.currentJudgement||null, tutorialTransitioning:!!tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState||null, pendingTutorialSkipCount:Number(tutorialState.pendingSkipQueue.length), tutorialStepToken:Number(tutorialStepToken), tutorialAttemptId:Number(tutorialAttemptId), tutorialTimerCount:Number(tutorialState.timers.length), tutorialFinalMixRetryScheduled:!!tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:Number(tutorialState.mixRetryCount), tutorialChartFinalizationCount:Number(tutorialState.chartFinalizationCount), tutorialLastChartFinalization:tutorialState.lastChartFinalization||null, tutorialChartSettled:!!tutorialChartSettled(), tutorialCompleteCount:Number(tutorialState.completeCount), tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:Number(tutorialState.rafIds.length+(raf?1:0)), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount:Number(judgedCount), perfectCount:Number(perfectCount), greatCount:Number(greatCount), missCount:Number(missCount), score:Number(score), combo:Number(combo), maxCombo:Number(maxCombo), visibleNoteCount:Number(getVisibleNotes(now()).length), visibleNotes:getVisibleNotes(now()).map(n=>({id:n.id||noteDebugId(n),type:n.type})), focusNote:focusNote?{id:focusNote.id||noteDebugId(focusNote),type:focusNote.type}:null, chartDoneStates:chart.map(n=>({id:n.id||noteDebugId(n),type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,coverage:Number(n.coverageRatio||0),quality:Number(n.traceQuality||0),started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime,angle:Number(n.angle),endAngle:n.endAngle==null?null:Number(n.endAngle),duration:Number(n.duration||0)})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:Number(chart.length), chartEndTime:Number(chartLastHitEnd), gameTime:Number(now()), browserNow:Number(performance.now()), frameCount:Number(testFrameCount), renderCount:Number(testRenderCount), W:Number(W), H:Number(H), lastPointerSource:lastPointerSource||null, pointerActive:!!pointerActive, mouseX:Number(mouseX), mouseY:Number(mouseY), armAngle:Number(armAngle), rawArmVel:Number(rawArmVel), rawAngularVelocity:Number(rawAngularVelocity), sampleAngularVelocity:Number(aimInput.sampleAngularVelocity), cx:Number(cx), cy:Number(cy), hitR:Number(hitR), selectedSongId:selectedSongId||null, selectedDifficultyId:selectedDifficultyId||null, mobileAimPointerId:mobileAimPointerId==null?null:Number(mobileAimPointerId), mobileActionPointerId:mobileActionPointerId==null?null:Number(mobileActionPointerId), mobileScratchPointerId:mobileScratchPointerId==null?null:Number(mobileScratchPointerId), actionHeld:!!keys.MouseLeft, scratchHeld:!!scratchHeld, mouseDownRight:!!mouseDownRight, pointerLockMode:inputSettings.pcAimMode, effectivePcAimMode:effectivePcAimMode(), pointerLockRequested:!!pointerLockRequested, pointerLockActive:!!pointerLockActive(), lockedVirtualAngle:Number(lockedVirtualAngle), lockedSensitivity:Number(inputSettings.lockedAimSensitivity), lastRelativeMovement:{x:Number(lastRelativeMovement.x),y:Number(lastRelativeMovement.y)}, rawInputAngle:Number(rawInputAngle), judgementAimAngle:Number(judgementAimAngle), visualArmAngle:Number(visualArmAngle), rawJudgementDifference:Number(norm(rawInputAngle-judgementAimAngle)), judgementVisualDifference:Number(norm(judgementAimAngle-visualArmAngle)), resultVisible:!!resultOverlay?.classList.contains('show')}),
       aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget}),
       visualArmProfile:()=>visualArmProfile(),
       traceVisualProfile:()=>traceVisualProfile(),
