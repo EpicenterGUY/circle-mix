@@ -2,7 +2,7 @@
   const $ = id => document.getElementById(id);
   const TAU = Math.PI * 2;
   const NOTE_TYPES = ["cut","fx","slideCW","slideCCW","trace","traceCW","traceCCW","swingCW","swingCCW","scratchCW","scratchCCW"];
-  const state = { notes: [], selected: new Set(), type: "cut", audioUrl: null, audioFile: null, jacketFile: null, jacketData: null, clipboard: [], undo: [], redo: [], db: null, autoPreview:false, lastMetro:-1 };
+  const state = { notes: [], selected: new Set(), type: "cut", audioUrl: null, audioFile: null, jacketFile: null, jacketData: null, localRecord:null, clipboard: [], undo: [], redo: [], db: null, autoPreview:false, lastMetro:-1 };
   const audio = $("audio"), preview = $("preview"), ctx = preview.getContext("2d"), tl = $("timelineCanvas"), tx = tl.getContext("2d");
   const fields = ["songId","title","artist","bpm","offset","difficulty","previewStart"];
   const meta = () => Object.fromEntries(fields.map(id => [id, id==="bpm"||id==="offset"||id==="previewStart" ? Number($(id).value)||0 : $(id).value.trim() || ""]));
@@ -58,6 +58,26 @@
   $("jacketFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; state.jacketFile=f; const rd=new FileReader(); rd.onload=()=>{state.jacketData=rd.result; autosave();}; rd.readAsDataURL(f); };
   $("playBtn").onclick=()=> audio.paused ? audio.play() : audio.pause(); audio.onplay=()=>$("playBtn").textContent="Pause"; audio.onpause=()=>$("playBtn").textContent="Play"; $("seek").oninput=e=>audio.currentTime=Number(e.target.value); $("rate").onchange=e=>audio.playbackRate=Number(e.target.value); $("zoom").oninput=renderTimeline;
   $("exportBtn").onclick=()=>{ if(validate()) download(`${$("songId").value||"chart"}.json`, chartJson()); }; $("exportMetaBtn").onclick=()=>download(`${$("songId").value||"song"}.metadata.json`, songMetaJson()); $("validateBtn").onclick=validate;
+  async function exportCmix(allDifficulties=false){
+    const button=$(allDifficulties?"exportAllCmixBtn":"exportCmixBtn"), exporter=window.CircleMixCmixExporter, audioTools=window.CircleMixCmixAudio, m=meta();
+    if(!exporter||!audioTools||!state.audioFile){ $("validation").innerHTML='<div class="err">EXPORT ERROR: select a valid local audio file first.</div>'; return; }
+    button.disabled=true; const old=button.textContent; button.textContent="CHECKING .CMIX...";
+    try{
+      const audioName=state.audioFile.name || `${m.songId||'audio'}.wav`, file=state.audioFile.name?state.audioFile:new File([state.audioFile],audioName,{type:state.audioFile.type});
+      const inspected=await audioTools.inspect(file); const match={durationSeconds:inspected.duration,durationToleranceSeconds:Number($("cmixTolerance").value),suggestedFilename:audioName.split(/[\\/]/).pop(),title:m.title,artist:m.artist,preview:{startSeconds:Math.max(0,m.previewStart),durationSeconds:Math.min(30,inspected.duration)}};
+      const warnings=[]; if($("cmixHash").checked){if(inspected.sha256) match.sha256=inspected.sha256; else warnings.push("Web Crypto SHA-256 is unavailable; exported with duration matching only.");}
+      const descriptor={id:$("cmixChartId").value,name:$("cmixChartName").value,level:Number($("cmixLevel").value),style:$("cmixStyle").value.trim(),author:$("cmixAuthor").value.trim()};
+      let chartItems=[{descriptor,chart:chartJson()}];
+      if(allDifficulties){ if(!state.localRecord) throw new Error('No LOCAL SONGS record is loaded.'); if(!confirm('ALL DIFFICULTIES uses the saved LOCAL SONGS record. Unsaved edits on this screen are not included. Continue?')) return; chartItems=Object.entries(state.localRecord.charts||{}).map(([key,chart])=>{const d=state.localRecord.difficulties?.[key]||{};return {descriptor:{id:d.id||key,name:d.name||d.label||key,level:Number(d.level||Math.max(1,Math.min(20,Math.round(d.stars||10)))),style:d.style||'CUSTOM',author:d.author||''},chart};}); }
+      const result=await exporter.createChartPackage({song:{id:m.songId,title:m.title,artist:m.artist,bpm:m.bpm,offset:m.offset,packageVersion:Number($("cmixPackageVersion").value),audioMatch:match,preview:match.preview},charts:chartItems,jacket:$("cmixJacket").checked&&state.jacketFile?{blob:state.jacketFile,name:state.jacketFile.name}:null});
+      const summary=[`ID: ${result.manifest.id}`,...result.manifest.charts.map(d=>`CHART: ${d.id} · ${d.name} · Lv.${d.level}`),`AUDIO: ${inspected.duration.toFixed(3)}s · SHA-256 ${match.sha256?'included':'not included'}`,`JACKET: ${result.manifest.jacket||'not included'}`,`FILE: ${result.filename}`,...warnings,...result.warnings.map(x=>`WARN: ${x.message}`)].join('\n');
+      if(!confirm(`CHART .CMIX validation passed. Download?\n\n${summary}`)) return;
+      const url=URL.createObjectURL(result.blob), a=document.createElement('a'); a.href=url;a.download=result.filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000); $("validation").innerHTML=`<div>CHART .CMIX exported: ${result.filename}</div>${warnings.map(x=>`<div class="warn">${x}</div>`).join('')}`;
+    }catch(error){ $("validation").innerHTML=`<div class="err">EXPORT ERROR: ${error.message}</div>`; }
+    finally{button.disabled=false;button.textContent=old;}
+  }
+  $("exportCmixBtn").onclick=exportCmix;
+  $("exportAllCmixBtn").onclick=()=>exportCmix(true);
   $("importFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=()=>{ try{ const data=JSON.parse(rd.result); pushHistory(); state.notes=Array.isArray(data)?data:(data.notes||[]); fields.forEach(id=>{ if(data[id]!==undefined) $(id).value=data[id]; }); renderAll(); autosave(); validate(); }catch(err){ $("validation").innerHTML=`<span class="err">IMPORT ERROR ${err.message}</span>`; } }; rd.readAsText(f); };
   $("copyBtn").onclick=()=>state.clipboard=[...state.selected].map(i=>({...state.notes[i]})); $("pasteBtn").onclick=()=>{ pushHistory(); const add=state.clipboard.map(n=>({...n,beat:(n.beat||0)+Number($("snap").value)})); state.notes.push(...add); renderAll(); autosave();}; $("deleteBtn").onclick=()=>{ pushHistory(); state.notes=state.notes.filter((_,i)=>!state.selected.has(i)); state.selected.clear(); renderAll(); autosave();}; $("undoBtn").onclick=()=>{ if(state.undo.length){ state.redo.push(JSON.stringify(state.notes)); restore(state.undo.pop()); }}; $("redoBtn").onclick=()=>{ if(state.redo.length){ state.undo.push(JSON.stringify(state.notes)); restore(state.redo.pop()); }};
 
@@ -93,7 +113,7 @@
     try{ const rec=await window.CircleMixLocalSongs.get(id); if(!rec) return;
       $("songId").value=rec.id; $("title").value=rec.title||""; $("artist").value=rec.artist||""; $("bpm").value=rec.bpm||120; $("offset").value=rec.offset||0; $("previewStart").value=rec.previewStart||0;
       const diff=Object.keys(rec.charts||{})[0]; if(diff){ $("difficulty").value=rec.difficulties?.[diff]?.label || diff; state.notes=rec.charts[diff].notes||[]; }
-      state.audioFile=rec.audioBlob; state.jacketFile=rec.jacketBlob; state.jacketData=rec.jacketData; if(state.audioUrl) URL.revokeObjectURL(state.audioUrl); state.audioUrl=URL.createObjectURL(rec.audioBlob); audio.src=state.audioUrl; $("fileInfo").textContent=`${rec.title} · IndexedDB audio Blob`; renderAll(); validate();
+      state.localRecord=rec; $("exportAllCmixBtn").hidden=false; state.audioFile=rec.audioBlob; state.jacketFile=rec.jacketBlob; state.jacketData=rec.jacketData; $("cmixPackageVersion").value=rec.packageVersion||1; if(state.audioUrl) URL.revokeObjectURL(state.audioUrl); state.audioUrl=URL.createObjectURL(rec.audioBlob); audio.src=state.audioUrl; $("fileInfo").textContent=`${rec.title} · IndexedDB audio Blob`; renderAll(); validate();
     }catch(err){ $("validation").innerHTML=`<span class="err">LOCAL LOAD ERROR ${err.message}</span>`; }
   }
 

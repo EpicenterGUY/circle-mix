@@ -1,0 +1,9 @@
+const assert=require('assert');
+const E=require('../src/cmix-exporter.js'), V=require('../src/cmix-validator.js'), I=require('../src/cmix-importer.js');
+(async()=>{
+  const input={song:{id:'Test Song!',title:'Test',artist:'Artist',bpm:120,offset:0,packageVersion:1,audioMatch:{durationSeconds:12,durationToleranceSeconds:2,sha256:'a'.repeat(64),suggestedFilename:'test.wav'}},charts:[{descriptor:{id:'Hard Chart',name:'Hard',level:12,style:'CUSTOM',author:'Me'},chart:{schema:'angle-v1',notes:[{type:'traceCW',beat:2,lane:1,endLane:3,durationBeat:1,sweepAngle:90,legacy:true},{type:'cut',beat:1,lane:7,title:'drop'}]}}]};
+  const result=await E.createChartPackage(input), repeat=await E.createChartPackage(input);
+  assert.equal(result.manifest.id,'test-song'); assert.equal(result.manifest.charts[0].id,'hard-chart'); assert(V.validateManifest(result.manifest).ok); assert(V.validateChart(result.charts[0],{descriptor:result.manifest.charts[0]}).ok); assert.deepEqual([...result.bytes],[...repeat.bytes]); assert.deepEqual(result.entries.map(x=>x.path),['manifest.json','charts/hard-chart.json']); assert.equal(result.charts[0].notes[0].angle,315); assert.equal(result.charts[0].notes[1].signedSweepAngle,90); assert.throws(()=>E.createZip([{path:'../bad',data:'x'}])); assert.throws(()=>E.createZip([{path:'a',data:'x'},{path:'a',data:'x'}]));
+  assert.throws(()=>E.normalizeChart({notes:[{type:'trace',beat:0,angle:0,endAngle:0,durationBeat:1}]},{id:'x'})); assert.throws(()=>E.normalizeChart({notes:[{type:'traceCW',beat:0,angle:0,endAngle:90,durationBeat:1,sweepAngle:-90}]},{id:'x'}));
+  const file=Object.assign(new Blob([result.bytes]),{name:result.filename}); const inspected=await I.inspect(file); assert(inspected.ok,JSON.stringify(inspected.errors)); assert.equal(inspected.package.manifest.packageType,'chart'); console.log('cmix exporter tests passed');
+})().catch(error=>{console.error(error);process.exitCode=1;});

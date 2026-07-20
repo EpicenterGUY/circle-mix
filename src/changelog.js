@@ -6,6 +6,7 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.21", date: "2026-07-20", title: ".cmix CHART Export", summary: "에디터 및 LOCAL SONGS 채보를 음원 없이 검증된 CHART .cmix v1 패키지로 내보냅니다." },
   {
     version: "0.9.20", date: "2026-07-20", title: ".cmix CHART Local Audio", summary: "CHART .cmix packages can link and verify local MP3, OGG, or WAV audio before installation."
   },

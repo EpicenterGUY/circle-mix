@@ -1,10 +1,11 @@
-const VERSION = "0.9.20";
+const VERSION = "0.9.21";
 const CACHE_PREFIX = "circle-mix-v";
 const APP_CACHE = `${CACHE_PREFIX}${VERSION}-app`;
 const MEDIA_CACHE = `${CACHE_PREFIX}${VERSION}-media`;
 const APP_SHELL_URLS = [
   "./",
   "./index.html",
+  "./editor.html",
   "./style.css?v=20260720-cmix-chart-1",
   "./manifest.webmanifest",
   "./icons/circle-mix-icon-192.png",
@@ -24,6 +25,7 @@ const APP_SHELL_URLS = [
   "./src/game.js?v=20260720-cmix-chart-1",
   "./src/cmix-validator.js?v=20260720-cmix-chart-1",
   "./src/cmix-audio.js?v=20260720-cmix-chart-1",
+  "./src/cmix-exporter.js?v=20260720-cmix-export-1",
   "./src/cmix-importer.js?v=20260720-cmix-chart-1",
   "./src/cmix-local-install.js?v=20260720-cmix-chart-1",
   "./src/cmix-import-ui.js?v=20260720-cmix-chart-1",
