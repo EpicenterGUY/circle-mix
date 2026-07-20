@@ -1,0 +1,22 @@
+{
+  "format": "circle-mix-song",
+  "formatVersion": 1,
+  "packageType": "chart",
+  "packageVersion": 1,
+  "id": "example-routing",
+  "title": "Routing",
+  "artist": "Camellia",
+  "bpm": 144,
+  "jacket": "jacket.webp",
+  "audioMatch": {
+    "durationSeconds": 111,
+    "durationToleranceSeconds": 2,
+    "suggestedFilename": "Camellia - Routing.ogg",
+    "title": "Routing",
+    "artist": "Camellia",
+    "preview": {"startSeconds": 50, "durationSeconds": 15}
+  },
+  "charts": [
+    {"id": "reverb", "name": "Reverb", "level": 15, "style": "TECH", "file": "charts/reverb.json"}
+  ]
+}
