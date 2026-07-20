@@ -388,6 +388,38 @@ async function runFreshDirectPlayRegression(browser, contextOptions, label, {pro
   }
 }
 
+async function runCmixHiddenOverlayRegression(browser){
+  const hiddenState=async page=>page.evaluate(()=>Object.fromEntries(['cmixImportModal','cmixDropOverlay'].map(id=>{const el=document.getElementById(id);return [id,{hidden:el.hidden,display:getComputedStyle(el).display,intercepts:(()=>{const b=document.getElementById('safeStart').getBoundingClientRect(),hit=document.elementFromPoint(b.x+b.width/2,b.y+b.height/2);return hit===el||!!hit?.closest?.(`#${id}`);})()}]})));
+  const regular=await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}})); const page=await regular.newPage(); const errors=await collectErrors(page);
+  try{
+    await page.goto('http://127.0.0.1:4173/index.html?browserTest=1',{waitUntil:'domcontentloaded'}); await waitForStableCircleMixPage(page,'cmix regular hidden'); await dismissStartupOverlays(page);
+    assert.equal(await page.locator('#cmixImportBtn').evaluate(el=>el.hidden),true,'regular users do not enable import');
+    for(const state of Object.values(await hiddenState(page))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`regular hidden cmix overlay ${JSON.stringify(state)}`);
+    await page.locator('#tutorialPromptSkip').click(); await page.locator('#safeStart').click(); await page.waitForFunction(()=>!document.getElementById('songSelect').hidden);
+    assert.deepEqual(errors,[],`regular cmix hidden errors ${JSON.stringify(errors)}`);
+  } finally {unregisterDiagnosticContext(regular,page);await regular.close();}
+  const dev=await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}})); const devPage=await dev.newPage(); const devErrors=await collectErrors(devPage);
+  try{
+    await devPage.goto('http://127.0.0.1:4173/index.html?browserTest=1&dev=1',{waitUntil:'domcontentloaded'}); await waitForStableCircleMixPage(devPage,'cmix developer hidden'); await dismissStartupOverlays(devPage);
+    const freshDeveloperImportState=await devPage.locator('#cmixImportBtn').evaluate(el=>({hidden:el.hidden,display:getComputedStyle(el).display,visibility:getComputedStyle(el).visibility,hiddenAncestor:el.closest('[hidden]')?.id||null,songSelectHidden:document.getElementById('songSelect').hidden,activeScene:window.CircleMixTestApi?.state?.().activeScene||null}));
+    assert.equal(freshDeveloperImportState.hidden,false,`developer mode enables the button itself ${JSON.stringify(freshDeveloperImportState)}`);
+    assert.equal(freshDeveloperImportState.hiddenAncestor,'songSelect',`button remains inside hidden song-select until START ${JSON.stringify(freshDeveloperImportState)}`);
+    assert.equal(freshDeveloperImportState.songSelectHidden,true,`fresh developer page remains on title scene ${JSON.stringify(freshDeveloperImportState)}`);
+    for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`developer hidden cmix overlay ${JSON.stringify(state)}`);
+    await devPage.locator('#tutorialPromptSkip').click(); await devPage.locator('#safeStart').click(); await devPage.waitForFunction(()=>!document.getElementById('songSelect').hidden);
+    assert.equal(await devPage.locator('#cmixImportBtn').isVisible(),true,'developer import button is visible in song select');
+    await devPage.locator('#cmixImportBtn').click(); await devPage.locator('#cmixImportModal').waitFor({state:'visible'}); await devPage.locator('#cmixImportClose').click();
+    for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`closed cmix overlay ${JSON.stringify(state)}`);
+    await devPage.locator('#songPlayBtn').click();
+    await devPage.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File(['not a zip'],'mime-empty.cmix',{type:''}));window.dispatchEvent(new DragEvent('dragenter',{dataTransfer:dt,bubbles:true}));window.dispatchEvent(new DragEvent('dragleave',{dataTransfer:dt,bubbles:true}));});
+    for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`drag-cancel cmix overlay ${JSON.stringify(state)}`);
+    await devPage.evaluate(()=>{const dt=new DataTransfer();dt.items.add(new File(['not a zip'],'mime-empty.cmix',{type:''}));window.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}));});
+    await devPage.locator('#cmixImportModal').waitFor({state:'visible'}); await waitFor(devPage,()=>document.getElementById('cmixImportStatus').textContent==='PACKAGE CHECK FAILED','mime-empty cmix inspection'); await devPage.locator('#cmixImportClose').click();
+    for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`dropped cmix closed overlay ${JSON.stringify(state)}`);
+    assert.deepEqual(devErrors,[],`developer cmix hidden errors ${JSON.stringify(devErrors)}`);
+  } finally {unregisterDiagnosticContext(dev,devPage);await dev.close();}
+}
+
 async function runDeveloperSelfTestOverlayRegression(browser){
   const context=await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720},hasTouch:false,isMobile:false}));
   const page=await context.newPage(); const errors=await collectErrors(page);
@@ -635,6 +667,7 @@ async function runDeterministicAimAndCutRegression(browser){
       {viewport:{width:1280,height:720}, hasTouch:false, isMobile:false},
       'fresh desktop'
     );
+    await runCmixHiddenOverlayRegression(browser);
     await runDeveloperSelfTestOverlayRegression(browser);
     const answeredDesktopLoop = await runFreshDirectPlayRegression(
       browser,
