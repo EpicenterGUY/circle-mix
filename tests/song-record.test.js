@@ -1,0 +1,10 @@
+const assert=require('assert');
+const R=require('../src/song-record.js');
+const A=require('../src/song-package-adapter.js');
+const bundled=R.normalize({id:'same',source:'builtin',title:'Bundled',artist:'A',bpm:120,difficulties:{z:{label:'Z',chart:{notes:[{type:'cut',beat:1,angle:0}]}}}},'bundled');
+const local=R.normalize({id:'same',title:'Local',artist:'B',bpm:130,charts:{hard:{notes:[{type:'cut',beat:1,angle:0}]},easy:{notes:[{type:'cut',beat:1,angle:0}]}},difficulties:{hard:{label:'Hard',level:8},easy:{label:'Easy',level:2}},audioMatch:{durationSeconds:3}},'local');
+assert.equal(bundled.source,'bundled'); assert.equal(bundled.removable,false); assert.equal(local.source,'local'); assert.equal(local.removable,true);
+assert.equal(R.keyOf(bundled),'bundled:same'); assert.equal(R.keyOf(local),'local:same'); assert.notEqual(R.keyOf(bundled),R.keyOf(local));
+const chart=A.songRecordToChartPackageInput(local); assert.deepEqual(chart.charts.map(c=>c.descriptor.id),['easy','hard']); assert.equal(chart.song.audioMatch.durationSeconds,3);
+const before=JSON.stringify(local); const fullRecord={...local,audioBlob:Object.assign(new Blob([new Uint8Array([0x49,0x44,0x33,1])],{type:'audio/mpeg'}),{name:'a.mp3'}),audioMetadata:{duration:3}}; const full=A.songRecordToFullPackageInput(fullRecord); assert.equal(full.audioMetadata.duration,3); assert.equal(JSON.stringify(local),before); assert.throws(()=>A.songRecordToFullPackageInput(local));
+console.log('song record tests passed');
