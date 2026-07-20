@@ -1,6 +1,6 @@
 (function(){
   "use strict";
-  const VERSION="0.9.17";
+  const VERSION="0.9.18";
   const OFFLINE_KEY=`circleMixOfflineReady.${VERSION}`;
   const INSTALL_HELP_TEXT="Android Chrome / Edge / Samsung Internet: 브라우저 메뉴에서 '앱 설치' 또는 '홈 화면에 추가'를 선택하세요.\n\niPhone / iPad Safari: 공유 버튼을 누르고 '홈 화면에 추가'를 선택하세요.";
   const PWA_DEBUG=new URLSearchParams(window.location.search).get("pwaDebug")==="1";

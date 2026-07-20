@@ -7,6 +7,11 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.18", date: "2026-07-20", title: "Developer .cmix Package Inspection",
+    summary: "개발자 모드에서 .cmix 패키지를 안전하게 읽고 검사하는 기반을 추가.",
+    changes: [{ category: "DEVELOPER", text: "ZIP 사전 검사, manifest/chart/media 검증, SHA-256 및 설치 전 미리보기를 추가했습니다." }]
+  },
+  {
     version: "0.9.17",
     date: "2026-07-20",
     title: "Routing Seven-Difficulty Chart Set",
