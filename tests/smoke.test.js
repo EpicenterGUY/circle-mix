@@ -324,10 +324,10 @@ const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.22"/);
-assert.match(pwa, /const VERSION="0\.9\.22"/);
-assert.match(sw, /const VERSION = "0\.9\.22"/);
-assert.match(changelog, /version:\s*"0\.9\.22"/);
+assert.match(version, /version:\s*"0\.9\.23"/);
+assert.match(pwa, /const VERSION="0\.9\.23"/);
+assert.match(sw, /const VERSION = "0\.9\.23"/);
+assert.match(changelog, /version:\s*"0\.9\.23"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {
