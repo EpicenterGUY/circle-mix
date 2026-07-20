@@ -1,0 +1,4 @@
+.local-beatmaps/
+tmp/osu-convert/
+out/cmix/
+node_modules/
