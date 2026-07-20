@@ -1,0 +1,27 @@
+name: Windows desktop verification
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['src-tauri/**', 'scripts/prepare-desktop.js', 'scripts/audit-desktop-dist.js', 'src/**', 'index.html', 'package*.json']
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 24, cache: npm}
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - run: npm run desktop:prepare
+      - run: npm run desktop:audit
+      - run: npm test
+      - run: npm run desktop:build
+      - run: Test-Path src-tauri/target/release/circle-mix.exe | Should -BeTrue
+      - name: Write artifact notice
+        run: '"Unsigned development verification executable; not an installer." | Out-File src-tauri/target/release/README.txt'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: circle-mix-windows-test-x64
+          path: |
+            src-tauri/target/release/circle-mix.exe
+            src-tauri/target/release/README.txt

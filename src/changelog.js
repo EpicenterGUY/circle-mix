@@ -6,6 +6,12 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.28", date: "2026-07-20", title: "Windows Desktop Foundation", summary: "Tauri Windows 기반과 저작권 안전한 빈 로컬 라이브러리를 추가했습니다.", changes: [
+    { category: "DESKTOP", text: "Tauri v2 Windows desktop foundation" },
+    { category: "LOCAL", text: "Persistent local .cmix library and HTML5 drag/drop" },
+    { category: "WEB", text: "Web/PWA bundled songs remain unchanged" }
+  ] },
+
   { version: "0.9.27", date: "2026-07-20", title: "Song Select Playability Hotfix", summary: "Fixed ANiMA difficulty display, blocked audio-less local chart playback, restored song select after failed starts, and hardened bundled/local source handling." },
   { version: "0.9.26", date: "2026-07-20", title: "Unified Song Package Library", summary: "Source-safe SongRecords unify bundled and local songs, local CHART/FULL export is available, and empty no-bundled libraries are supported for future Windows builds." },
   { version: "0.9.25", date: "2026-07-20", title: ".cmix Import for Everyone", summary: "IMPORT .CMIX is now public: safely link CHART audio, install FULL packages, and update LOCAL SONGS with optional backups. Files never upload to a server." },
