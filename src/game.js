@@ -356,7 +356,9 @@
   const domCache={songAutoBtn:null,songAutoState:null,hudSongTitle:null};
 
 
-  function sourceKey(songData=selectedSong){ return (songData?.source==="local" || selectedSource==="local") ? "local" : "builtin"; }
+  function isBundledSong(songData){ return songData?.source==="bundled" || songData?.source==="builtin"; }
+  function isLocalSong(songData){ return songData?.source==="local"; }
+  function sourceKey(songData=selectedSong){ return isLocalSong(songData) ? "local" : "builtin"; }
   function difficultyIds(songData=selectedSong){
     const available=new Set([...Object.keys(songData?.difficulties||{}),...Object.keys(songData?.charts||{})]), ids=[], seen=new Set();
     for(const id of [...(Array.isArray(songData?.difficultyOrder)?songData.difficultyOrder:[]),...Object.keys(songData?.difficulties||{}),...Object.keys(songData?.charts||{})]){
@@ -370,7 +372,7 @@
   }
   function getActiveDifficultyLabel(songData=selectedSong, difficultyId=selectedDifficultyId || selectedMenuMode){
     if(!difficultyId) return "UNKNOWN";
-    if(songData?.source==="builtin") return songData?.difficulties?.[difficultyId]?.label || String(difficultyId).toUpperCase();
+    if(isBundledSong(songData)) return songData?.difficulties?.[difficultyId]?.label || String(difficultyId).toUpperCase();
     const diffMeta=songData?.difficulties?.[difficultyId];
     if(diffMeta?.label) return String(diffMeta.label);
     const chartMeta=songData?.charts?.[difficultyId]?.meta || songData?.charts?.[difficultyId]?.metadata || songData?.charts?.[difficultyId];
@@ -401,7 +403,7 @@
     if(activeLocalBlobUrl){ URL.revokeObjectURL(activeLocalBlobUrl); activeLocalBlobUrl=null; }
     if(songData?.audioBlob){
       activeLocalBlobUrl=URL.createObjectURL(songData.audioBlob); song.src=activeLocalBlobUrl;
-    }else if(songData?.source==="local"){
+    }else if(isLocalSong(songData)){
       return false;
     }else if(songData?.audio && String(songData.audio).startsWith("#")){
       song.src=embeddedAnimaSrc;
@@ -688,7 +690,7 @@
   }
 
   const RECORD_STORAGE_KEY = "circleMix.bestRecords.v1";
-  function songRecordId(songData=selectedSong){ const source=songData?.source==="local" ? "local" : "builtin"; return `${source}:${songData?.id || "unknown"}`; }
+  function songRecordId(songData=selectedSong){ const source=isLocalSong(songData) ? "local" : "builtin"; return `${source}:${songData?.id || "unknown"}`; }
   function recordKey(diff=mapMode, songData=selectedSong){ return `${songRecordId(songData)}:${diff}`; }
   function readRecords(){ try{ return JSON.parse(localStorage.getItem(RECORD_STORAGE_KEY) || "{}"); }catch(e){ return {}; } }
   function writeRecords(records){ try{ localStorage.setItem(RECORD_STORAGE_KEY, JSON.stringify(records)); }catch(e){ console.warn("record save failed", e); } }
@@ -834,8 +836,8 @@
     throw new Error(`지원하지 않는 내장 채보입니다: ${songId}/${difficultyId}`);
   }
 
-  function chartForDifficulty(mode){
-    const source=getBuiltinChartSource(selectedSong?.id || "anima", mode);
+  function chartForDifficulty(mode, songData=selectedSong){
+    const source=getBuiltinChartSource(songData?.id || "anima", mode);
     if(source.kind==="generator"){
       const raw=fillPlayableGaps(source.notes, source.gap).filter(n => (n.beat ?? 0) <= source.trimBeat);
       return raw.map(n => {
@@ -854,7 +856,7 @@
   }
 
   function getDifficulty(mode=mapMode){
-    if(selectedSong?.source==="local"){ const c=selectedSong.charts?.[mode]; return c ? {stars:chartTools.calculateStars(c), raw:0} : null; }
+    if(isLocalSong(selectedSong)){ const c=selectedSong.charts?.[mode]; return c ? {stars:chartTools.calculateStars(c), raw:0} : null; }
     const meta=selectedSong?.difficulties?.[mode];
     if(meta && Number.isFinite(Number(meta.stars))) return {stars:Number(meta.stars), raw:null, bundleStars:true};
     if(!songs.hasDifficulty(selectedSong, mode)) return null;
@@ -885,7 +887,10 @@
     if(!songData || !difficultyId) return null;
     const meta=songData.difficulties?.[difficultyId];
     const label=getActiveDifficultyLabel(songData,difficultyId);
-    if(songData.source==="builtin") return {id:difficultyId, label, stars:getDifficultySafe(difficultyId)?.stars};
+    if(isBundledSong(songData)){
+      const metaStars=Number(meta?.stars);
+      return {id:difficultyId, label, stars:Number.isFinite(metaStars) ? metaStars : calculateChartDifficulty(chartForDifficulty(difficultyId, songData))?.stars};
+    }
     const chart=songData.charts?.[difficultyId];
     const metaStars=Number(meta?.stars);
     let stars=metaStars;
@@ -1903,7 +1908,7 @@
       if(!checked.ok){ alert("채보 오류로 플레이를 시작할 수 없습니다.\n"+checked.errors.join("\n")); return []; }
       return (customChartData||[]).map(localNoteToGame).map(n=>{ n.hitTime=n.beat*BEAT*CHART_STRETCH; n.spawnTime=n.hitTime-APPROACH; return n; }).sort((a,b)=>a.hitTime-b.hitTime);
     }
-    if(selectedSong?.source==="local"){
+    if(isLocalSong(selectedSong)){
       const data=selectedSong.charts?.[mapMode];
       const checked=chartTools.validateChart(data);
       if(!checked.ok){ alert("채보 오류로 플레이를 시작할 수 없습니다.\n"+checked.errors.join("\n")); return []; }
@@ -4405,7 +4410,7 @@
   }
 
   function songEndTime(){
-    if(selectedSong?.id==="anima" && selectedSong?.source==="builtin") return SONG_END_TIME;
+    if(selectedSong?.id==="anima" && isBundledSong(selectedSong)) return SONG_END_TIME;
     const audioEnd=Number.isFinite(song.duration) ? song.duration - SONG_OFFSET : 0;
     return Math.max(audioEnd || 0, chartLastHitEnd || 0) + 1.5;
   }
@@ -5294,13 +5299,13 @@ settingsOrigin=${settingsOrigin}`);
     syncSongUrl();
     songCarousel.innerHTML = tabHtml + (list.length ? list.map(songData => {
       const active = songData.id === selectedSongId;
-      const chartEntries = songData.source==="local" ? localChartEntries(songData) : difficultyIds(songData).map(id=>({id}));
+      const chartEntries = isLocalSong(songData) ? localChartEntries(songData) : difficultyIds(songData).map(id=>({id}));
       const diffs=chartEntries.map(({id})=>{ const diff=difficultyViewForSong(songData,id); return `${escapeHtml(diff?.label || id.toUpperCase())} ${escapeHtml(formatStarValue(diff?.stars))}`; }).join(" · ");
       const songIdAttr=escapeAttribute(songData.id);
       const songTitle=escapeHtml(songData.title || "UNKNOWN");
       const artist=escapeHtml(songData.artist || "UNKNOWN");
       const bpm=escapeHtml(songData.bpm || "--");
-      const manage=songData.source==="local" ? `<div class="songManage"><button data-action="exportChart" data-song-id="${songIdAttr}">EXPORT CHART .CMIX</button><button data-action="exportFull" data-song-id="${songIdAttr}" ${songData.audioBlob?"":"disabled"}>EXPORT FULL .CMIX</button><button data-action="rename" data-song-id="${songIdAttr}">EDIT META</button><button data-action="clone" data-song-id="${songIdAttr}">CLONE</button><button data-action="restore" data-song-id="${songIdAttr}">RESTORE PREVIOUS</button><button data-action="delete" data-song-id="${songIdAttr}">DELETE</button><button data-action="deleteBackups" data-song-id="${songIdAttr}">DELETE + BACKUP</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : (songData.audioRequired ? `<div class="songManage"><button data-audio-action="${songData.audioLinked ? "unlink" : "link"}" data-song-id="${songIdAttr}">${songData.audioLinked ? "UNLINK LOCAL AUDIO" : "LINK LOCAL AUDIO"}</button><small>${escapeHtml(songData.audioLinked ? "LOCAL AUDIO LINKED · NOT UPLOADED" : songData.audioNotice)}</small></div>` : "");
+      const manage=isLocalSong(songData) ? `<div class="songManage"><button data-action="exportChart" data-song-id="${songIdAttr}">EXPORT CHART .CMIX</button><button data-action="exportFull" data-song-id="${songIdAttr}" ${songData.audioBlob?"":"disabled"}>EXPORT FULL .CMIX</button><button data-action="rename" data-song-id="${songIdAttr}">EDIT META</button><button data-action="clone" data-song-id="${songIdAttr}">CLONE</button><button data-action="restore" data-song-id="${songIdAttr}">RESTORE PREVIOUS</button><button data-action="delete" data-song-id="${songIdAttr}">DELETE</button><button data-action="deleteBackups" data-song-id="${songIdAttr}">DELETE + BACKUP</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : (songData.audioRequired ? `<div class="songManage"><button data-audio-action="${songData.audioLinked ? "unlink" : "link"}" data-song-id="${songIdAttr}">${songData.audioLinked ? "UNLINK LOCAL AUDIO" : "LINK LOCAL AUDIO"}</button><small>${escapeHtml(songData.audioLinked ? "LOCAL AUDIO LINKED · NOT UPLOADED" : songData.audioNotice)}</small></div>` : "");
       const jacketUrl=localJacketUrl(songData);
       const jacket=jacketUrl ? `<img src="${escapeAttribute(jacketUrl)}" alt="" loading="lazy" onerror="this.remove()">` : "";
       return `<div class="songCard${active ? " active" : ""}" data-song-id="${songIdAttr}">
@@ -5355,6 +5360,8 @@ settingsOrigin=${settingsOrigin}`);
         return `<button class="songDiffBtn${selectedDifficultyId===id ? " on" : ""}" type="button" data-difficulty="${escapeAttribute(id)}">${escapeHtml(label)} <span>${escapeHtml(stars)}</span>${bestHtml}</button>`;
       }).join("");
     }
+    const playability=getSelectionPlayability();
+    if(!playability.ok && selectedSong && selectedDifficultyId) diffHtml += `<div class="songDiffEmpty" data-playability-error="true">${escapeHtml(playability.message)}</div>`;
     songDifficulty.innerHTML = diffHtml + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>`;
     for(const btn of songDifficulty.querySelectorAll(".songDiffBtn[data-difficulty]")){
       bindPress(btn,()=>{ selectedDifficultyId = btn.dataset.difficulty; selectedMenuMode = selectedDifficultyId; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });
@@ -5363,7 +5370,25 @@ settingsOrigin=${settingsOrigin}`);
     startSongPreview();
     const songAutoBtn=domCache.songAutoBtn;
     bindPress(songAutoBtn,()=>{ toggleAuto("song-select"); });
-    if(songPlayBtn) songPlayBtn.disabled = !buildPlayRequest();
+    if(songPlayBtn){ songPlayBtn.disabled = !playability.ok; songPlayBtn.title=playability.ok ? "" : playability.message; }
+  }
+
+  function getSelectionPlayability(songData=selectedSong, difficultyId=selectedDifficultyId, runtimeSource=selectedSource){
+    if(!songData) return {ok:false,code:"SONG_MISSING",message:"Select a song before playing."};
+    if(!difficultyId) return {ok:false,code:"DIFFICULTY_MISSING",message:"Select a difficulty before playing."};
+    const local=runtimeSource==="local" || isLocalSong(songData);
+    const chart=songData.charts?.[difficultyId];
+    if(local){
+      if(!chart) return {ok:false,code:"CHART_MISSING",message:"The selected chart is no longer available."};
+      if(!Array.isArray(chart.notes) || !chart.notes.length) return {ok:false,code:"CHART_EMPTY",message:"This chart has no notes and cannot be played."};
+      if(!songData.audioBlob || !Number.isFinite(Number(songData.audioBlob.size)) || Number(songData.audioBlob.size)<=0) return {ok:false,code:"LOCAL_AUDIO_MISSING",message:"LOCAL AUDIO REQUIRED — LINK OR REINSTALL THIS CHART WITH ITS AUDIO."};
+      return {ok:true};
+    }
+    if(!songs.hasDifficulty(songData,difficultyId)) return {ok:false,code:"DIFFICULTY_MISSING",message:"The selected difficulty is no longer available."};
+    if(chart && (!Array.isArray(chart.notes) || !chart.notes.length)) return {ok:false,code:"CHART_EMPTY",message:"This chart has no notes and cannot be played."};
+    if(songData.audioRequired && (!songData.audioBlob || Number(songData.audioBlob.size)<=0)) return {ok:false,code:"BUNDLED_AUDIO_MISSING",message:songData.audioNotice || "LOCAL AUDIO REQUIRED — LINK AUDIO BEFORE PLAYING THIS CHART."};
+    if(!songData.audioBlob && !songData.audio) return {ok:false,code:"AUDIO_MISSING",message:"Audio is unavailable for this chart."};
+    return {ok:true};
   }
 
   function buildPlayRequest(){
@@ -5425,43 +5450,35 @@ settingsOrigin=${settingsOrigin}`);
     safeRefresh();
   }
 
+  function restoreSongSelectAfterFailedStart(message){
+    cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
+    chart=[]; chartLastHitEnd=0; resetRenderWindow();
+    safeSetState("songSelect", "failed song start rollback");
+    if(songSelect) songSelect.hidden=false;
+    if(message) alert(message);
+    renderSongSelect();
+  }
+
   async function startSelectedSong(e){
-    if(e && isMobileViewport()) await requestFullscreenEnter();
     const req=buildPlayRequest();
-    if(!req){ alert("실행할 로컬 곡과 채보를 선택해주세요."); renderSongSelect(); return false; }
+    const initial=getSelectionPlayability();
+    if(!req || !initial.ok){ restoreSongSelectAfterFailedStart(initial.message || "Select a chart before playing."); return false; }
     let resolved;
-    try{ resolved=await resolvePlayRequest(req); }catch(err){ alert(err.message); if(debugMode) console.warn("[Start Failed] resolvePlayRequest", {request:req, message:err.message}); renderSongSelect(); return false; }
-    const sceneBefore=activeSceneName();
-    selectedSource=resolved.source;
-    activePlaySource=resolved.source;
-    activeChartId=resolved.chartId;
-    selectedSong=resolved.song;
-    selectedSongId=resolved.song.id;
-    selectedDifficultyId=resolved.difficultyId;
-    selectedMenuMode=resolved.difficultyId;
-    mapMode=resolved.difficultyId;
-    stopSongPreview();
-    if(songSelect) songSelect.hidden = true;
-    closeSettingsOverlayOnly();
-    safeSetState("game", "startSelectedSong");
-    syncSongUrl();
-    const ok = await start("play");
-    if(debugMode) console.log(`[Start Selected Song]
-source=${activePlaySource}
-songId=${selectedSong?.id || "-"}
-difficulty=${activeChartId || selectedDifficultyId}
-difficultyLabel=${getActiveDifficultyLabel(selectedSong, activeChartId || selectedDifficultyId)}
-chartLength=${chart.length}
-sceneBefore= ${sceneBefore}
-sceneAfter= ${activeSceneName()}
-settingsOrigin=${settingsOrigin}
-running=${running}`);
-    if(ok && activeSceneName()!=="game"){
-      console.warn("[Start Selected Song] scene corrected to game", {scene:activeSceneName(), settingsOrigin});
-      safeSetState("game", "startSelectedSong final correction");
-      if(songSelect) songSelect.hidden = true;
+    try{ resolved=await resolvePlayRequest(req); }catch(err){ restoreSongSelectAfterFailedStart(err.message); return false; }
+    selectedSource=resolved.source; activePlaySource=resolved.source; activeChartId=resolved.chartId;
+    selectedSong=resolved.song; selectedSongId=resolved.song.id; selectedDifficultyId=resolved.difficultyId; selectedMenuMode=resolved.difficultyId; mapMode=resolved.difficultyId;
+    const current=getSelectionPlayability(selectedSong, selectedDifficultyId, selectedSource);
+    if(!current.ok){ restoreSongSelectAfterFailedStart(current.message); return false; }
+    try{
+      if(e && isMobileViewport()) await requestFullscreenEnter();
+      const ok=await start("play");
+      if(!ok) throw new Error("Unable to start the selected chart.");
+      syncSongUrl();
+      return true;
+    }catch(err){
+      restoreSongSelectAfterFailedStart(err.message || "Unable to start the selected chart.");
+      return false;
     }
-    return ok;
   }
 
   function safeInputEvent(e){
@@ -5660,7 +5677,7 @@ running=${running}`);
   bindPress(tutorialBackTitle,()=>{tutorialComplete.hidden=true; showTitleMenu();});
   bindPress(tutorialReplay,e=>{requestPointerLockForAim(e);startTutorial();});
   bindPress(songSelectBack,()=>showTitleMenu());
-  bindPress(songPlayBtn,(e)=>{requestPointerLockForAim(e);startSelectedSong(e);});
+  bindPress(songPlayBtn,(e)=>{startSelectedSong(e);});
 
   window.addEventListener("resize",()=>{ releaseMobilePointers(); scheduleStableViewportResize("resize"); handlePlayOrientation(); });
   window.addEventListener("orientationchange", () => { releaseMobilePointers(); keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; scheduleStableViewportResize("orientationchange"); setTimeout(handlePlayOrientation, 80); });

@@ -6,6 +6,7 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.27", date: "2026-07-20", title: "Song Select Playability Hotfix", summary: "Fixed ANiMA difficulty display, blocked audio-less local chart playback, restored song select after failed starts, and hardened bundled/local source handling." },
   { version: "0.9.26", date: "2026-07-20", title: "Unified Song Package Library", summary: "Source-safe SongRecords unify bundled and local songs, local CHART/FULL export is available, and empty no-bundled libraries are supported for future Windows builds." },
   { version: "0.9.25", date: "2026-07-20", title: ".cmix Import for Everyone", summary: "IMPORT .CMIX is now public: safely link CHART audio, install FULL packages, and update LOCAL SONGS with optional backups. Files never upload to a server." },
   { version: "0.9.24", date: "2026-07-20", title: "LOCAL SONGS Library Safety", summary: "DB v3 adds atomic song updates, one-version backups, restore, storage estimates, integrity checks, and cross-tab refresh." },
