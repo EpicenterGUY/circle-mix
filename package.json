@@ -8,7 +8,7 @@
     "desktop:audit": "node scripts/audit-desktop-dist.js",
     "desktop:check": "npm run desktop:prepare && npm run desktop:audit",
     "desktop:dev": "npm run desktop:icons && cargo tauri dev",
-    "desktop:build": "npm run desktop:icons && cargo tauri build -- --no-bundle",
+    "desktop:build": "npm run desktop:icons && cargo tauri build --no-bundle",
     "desktop:icons": "cargo tauri icon src-tauri/app-icon.svg -o src-tauri/icons"
   },
   "devDependencies": {
