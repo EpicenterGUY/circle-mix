@@ -101,7 +101,7 @@
       if(await store.exists(m.songId) && !confirm(`LOCAL SONGS에 ${m.songId}가 이미 있습니다. 덮어쓸까요?`)) return;
       const diffKey=(m.difficulty||"custom").toLowerCase().replace(/[^a-z0-9_-]+/g,"-") || "custom";
       const record={ id:m.songId, source:"local", title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, updatedAt:new Date().toISOString(), audioBlob:state.audioFile, audioType:state.audioFile.type, jacketBlob:state.jacketFile||null, jacketData:state.jacketData, difficulties:{ [diffKey]:{ label:m.difficulty||"CUSTOM", chart:`local:${m.songId}:${diffKey}`, stars:tools.calculateStars(chart) } }, charts:{ [diffKey]:chart } };
-      await store.put(record);
+      await store.install(record,{expectedCurrent:{exists:Boolean(await store.get(record.id)),...((await store.get(record.id))||{})},keepBackup:true});
       status.innerHTML=`<div>No errors. LOCAL SONGS에 등록되었습니다. <a class="back" href="./index.html?tab=local&song=${encodeURIComponent(m.songId)}&difficulty=${encodeURIComponent(diffKey)}">SONG SELECT로 이동</a></div>`;
     }catch(err){ status.innerHTML=`<div class="err">IndexedDB 저장 실패: ${err.message}</div>`; }
   }
