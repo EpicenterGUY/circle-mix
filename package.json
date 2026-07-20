@@ -8,5 +8,5 @@
   "devDependencies": {
     "playwright": "^1.54.0"
   },
-  "version": "0.9.26"
+  "version": "0.9.27"
 }
