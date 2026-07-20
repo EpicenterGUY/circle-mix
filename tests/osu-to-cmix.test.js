@@ -5,3 +5,8 @@ let m=lib.parseOsu(fixture(['512,192,1000,1,0,0:0:0:0:','256,192,1000,1,0,0:0:0:
 m=lib.parseOsu(fixture(['0,192,0,1,0,0:0:0:0:','0,192,0,1,0,0:0:0:0:','0,192,1000,2,0,L|256:0,1,20']));c=lib.convert(m,{});assert.ok(c.report.warnings.some(x=>x.code==='OVERLAPPING_CONVERTED_NOTES'));assert.equal(c.chart.notes[2].type,'slideCW');
 m=lib.parseOsu(fixture(['256,192,1000,8,0,2000']));c=lib.convert(m,{spinnerMode:'scratch'});assert.equal(c.chart.notes[0].type,'scratchCW');assert.equal(lib.convert(m,{spinnerMode:'skip'}).chart.notes.length,0);
 assert.throws(()=>lib.parseOsu(Buffer.from([255,254])));assert.equal(lib.safePath('../evil'),false);assert.equal(lib.angle(256,0),270);console.log('PASS osu-to-cmix');
+// Timing is accumulated over red timing segments, while inherited points do not alter it.
+const ti=lib.timingInfo({timing:[{time:0,beatLength:500,inherited:false,index:0},{time:1000,beatLength:1000/3,inherited:false,index:1},{time:1500,beatLength:-50,inherited:true,index:2}]});
+assert.equal(lib.beatAt(1000,ti),2);assert.ok(Math.abs(lib.beatAt(2000,ti)-5)<1e-9);assert.equal(lib.beatAt(-500,ti),-1);
+// RIFF chunk walking accepts metadata and rejects a declared truncated data chunk.
+const wav=Buffer.alloc(60);wav.write('RIFF');wav.writeUInt32LE(52,4);wav.write('WAVE',8);wav.write('fmt ',12);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(1000,24);wav.writeUInt32LE(1000,28);wav.writeUInt16LE(1,32);wav.writeUInt16LE(8,34);wav.write('JUNK',36);wav.writeUInt32LE(3,40);wav.write('abc',44);wav.write('data',48);wav.writeUInt32LE(4,52);assert.equal(lib.wavDuration(wav),.004);assert.throws(()=>lib.audioDuration(wav,'song.mp3'));
