@@ -7,6 +7,17 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.16",
+    date: "2026-07-20",
+    title: "TRACE Travel Judgement and Note Readability",
+    summary: "TRACE를 경로 추적이 아닌 방향 회전량 판정으로 바꾸고, 노트 식별성과 읽기 시간을 개선",
+    changes: [
+      { category: "TRACE", text: "시작점 이후의 CW/CCW 회전량, 역방향 제한, 종료점 각도로 GREAT/PERFECT를 판정" },
+      { category: "VISUAL", text: "TRACE에 진행 원호, S/E 마커, 방향 화살표와 회전 수 표시를 추가하고 CUT과 구분되는 파란색으로 변경" },
+      { category: "READABILITY", text: "기본 접근 시간을 0.60초로 늘려 hitTime은 유지하면서 노트를 더 일찍 표시" }
+    ]
+  },
+  {
     version: "0.9.15",
     date: "2026-07-19",
     title: "Adaptive Aim Visual Smoothing",

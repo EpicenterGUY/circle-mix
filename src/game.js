@@ -172,7 +172,7 @@
   // 사용자가 말한 마지막 음 기준: 약 1:51 지점에서 종료.
   const SONG_END_TIME = 111.450;
   const CHART_END_BEAT = 342.894; // beat 단위. 채보가 빠르면 +, 늦으면 - 로 조정
-  let APPROACH = 0.48;
+  let APPROACH = 0.60;
   const HIT_WINDOW = 0.17;
   const SWING_FLICK_SPEED = 0.78;
   const SCRATCH_FLICK_SPEED = 1.30;
@@ -181,19 +181,19 @@
   // Tutorial and normal play intentionally share the exact same TRACE judgement.
   // The tutorial only adds visual guidance, slower/simple charts and immediate retries.
   const COMMON_TRACE_PROFILE = {
-    innerAngularToleranceDeg:12,
-    outerAngularToleranceDeg:20,
-    innerRadialTolerancePx:22,
-    outerRadialTolerancePx:34,
-    innerRadialToleranceRatio:.06,
-    outerRadialToleranceRatio:.09,
+    // TRACE is judged by directed angular travel, not by tracking a moving dot.
+    startToleranceDeg:30,
+    endpointGreatToleranceDeg:30,
+    endpointPerfectToleranceDeg:15,
     startGrace:.25,
     endpointWindow:.25,
-    endpointRequiredTime:.10,
-    perfectQuality:.88,
-    greatQuality:.65,
-    maxFrameDt:.05,
-    graceGap:.14
+    endpointGrace:.14,
+    greatTravelRatio:.85,
+    perfectTravelRatio:.95,
+    reverseGreatRatio:.25,
+    reversePerfectRatio:.12,
+    maxReverseGreatDeg:90,
+    maxReversePerfectDeg:45
   };
   const TRACE_PROFILES = {
     normal:{...COMMON_TRACE_PROFILE},
@@ -218,7 +218,7 @@
 
   const COLORS = {
     cut:"#5cfffb", swingCW:"#79ff7d", swingCCW:"#ff72d6", slide:"#ffe15a", fx:"#b77cff",
-    trace:"#35f0c5", traceSoft:"#1ccfb8", scratch:"#d047ff", scratchCW:"#d047ff", scratchCCW:"#ff5aa8",
+    trace:"#4388ff", traceSoft:"#2466d9", scratch:"#ee3d9a", scratchCW:"#ee3d9a", scratchCCW:"#ff5aa8",
     perfect:"#fff36a", great:"#80ffdb", miss:"#ff4567"
   };
 
@@ -1940,49 +1940,42 @@
     return traceAngleAtProgress(n,traceProgress(n,t));
   }
   function traceEndpointRegion(n,profile=traceProfile()){
-    const motion=resolveTraceMotion(n);
-    const p=pointerPolar();
-    const tol=traceTolerance(profile);
-    const angleError=distAng(p.angle,motion.finalAngle);
-    const radiusError=Math.abs(p.radius-hitR);
-    return {targetAngle:motion.finalAngle,targetRadius:hitR,pointerAngle:p.angle,pointerRadius:p.radius,angleError,radiusError,angularTolerance:tol.angular,radialTolerance:tol.radial,inside:angleError<=tol.angular && radiusError<=tol.radial,motion};
+    const motion=resolveTraceMotion(n), angleError=distAng(judgementAimAngle,motion.finalAngle);
+    return {targetAngle:motion.finalAngle,targetRadius:hitR,pointerAngle:judgementAimAngle,pointerRadius:hitR,angleError,radiusError:0,inside:angleError<=profile.endpointGreatToleranceDeg*Math.PI/180,motion};
   }
-  function traceProfile(){
-    // One real judgement profile for both tutorial and normal play.
-    return TRACE_PROFILES.normal;
-  }
+  function traceProfile(){ return TRACE_PROFILES.normal; }
+  // Kept for diagnostics and guide rendering: TRACE has an angular start gate only.
   function getTraceJudgementRegion(n,t,profile=traceProfile()){
-    const targetAngle=traceTargetAngle(n,t);
-    const targetRadius=hitR;
-    const outerAngularTolerance=(profile.outerAngularToleranceDeg ?? profile.angularToleranceDeg)*Math.PI/180;
-    const innerAngularTolerance=(profile.innerAngularToleranceDeg ?? profile.angularToleranceDeg)*Math.PI/180;
-    const outerRadialTolerance=Math.max(profile.outerRadialTolerancePx ?? profile.radialTolerancePx, hitR*(profile.outerRadialToleranceRatio ?? profile.radialToleranceRatio));
-    const innerRadialTolerance=Math.max(profile.innerRadialTolerancePx ?? profile.radialTolerancePx, hitR*(profile.innerRadialToleranceRatio ?? profile.radialToleranceRatio));
-    const p=pointerPolar();
-    const angleError=Math.abs(norm(p.angle-targetAngle));
-    const radiusError=Math.abs(p.radius-targetRadius);
-    const inner=angleError<=innerAngularTolerance && radiusError<=innerRadialTolerance;
-    const outer=angleError<=outerAngularTolerance && radiusError<=outerRadialTolerance;
-    return {targetAngle,targetRadius,pointerAngle:p.angle,pointerRadius:p.radius,angleError,radiusError,
-      angularTolerance:outerAngularTolerance,radialTolerance:outerRadialTolerance,
-      innerAngularTolerance,innerRadialTolerance,outerAngularTolerance,outerRadialTolerance,
-      inner,outer,inside:outer,trackingWeight:inner?1:(outer?.55:0)};
+    const targetAngle=traceTargetAngle(n,t), angleError=Math.abs(norm(judgementAimAngle-targetAngle));
+    const tolerance=profile.startToleranceDeg*Math.PI/180;
+    return {targetAngle,targetRadius:hitR,pointerAngle:judgementAimAngle,pointerRadius:hitR,angleError,radiusError:0,angularTolerance:tolerance,radialTolerance:0,innerAngularTolerance:tolerance,innerRadialTolerance:0,outerAngularTolerance:tolerance,outerRadialTolerance:0,inner:angleError<=tolerance,outer:angleError<=tolerance,inside:angleError<=tolerance,trackingWeight:0};
   }
-  function traceTolerance(profile=traceProfile()){
-    return { angular:(profile.outerAngularToleranceDeg ?? profile.angularToleranceDeg)*Math.PI/180,
-      radial:Math.max(profile.outerRadialTolerancePx ?? profile.radialTolerancePx, hitR*(profile.outerRadialToleranceRatio ?? profile.radialToleranceRatio)) };
-  }
-  function pointerPolar(){
-    // The playable controller is the rendered dial arm: it only has an angle
-    // and is always located on the judgement ring. The physical browser cursor
-    // may sit far inside/outside that ring, but drawArm() projects it onto hitR.
-    // Judging the raw cursor radius while rendering the projected arm made a
-    // player look perfectly aligned yet fail TRACE with MOVE CLOSER TO THE RING.
-    return {angle:judgementAimAngle, radius:hitR};
-  }
+  function traceTolerance(profile=traceProfile()){ return {angular:profile.startToleranceDeg*Math.PI/180,radial:0}; }
+  function pointerPolar(){ return {angle:judgementAimAngle, radius:hitR}; }
   function insideTraceTarget(n,t){
     const region=getTraceJudgementRegion(n,t,traceProfile());
-    return {inside:region.inside, angleError:region.angleError, radiusError:region.radiusError, target:region.targetAngle, pointerAngle:region.pointerAngle, pointerRadius:region.pointerRadius, trackingWeight:region.trackingWeight, region, tol:{angular:region.angularTolerance, radial:region.radialTolerance}};
+    return {inside:region.inside,angleError:region.angleError,radiusError:0,target:region.targetAngle,pointerAngle:region.pointerAngle,pointerRadius:hitR,trackingWeight:0,region,tol:{angular:region.angularTolerance,radial:0}};
+  }
+  function traceRequiredTravel(n){ return Math.abs(resolveTraceMotion(n).signedSweepAngle); }
+  function traceMinimumMotionTime(required,duration){
+    const seconds=clamp(required/Math.PI*.30,.12,.40);
+    return Math.min(seconds,Math.max(.06,duration*.72));
+  }
+  function updateTraceTravel(n){
+    const dir=resolveTraceMotion(n).signedSweepAngle>=0?1:-1;
+    const forward=dir>0 ? aimInput.accumulatedCWTravel-n.traceStartCW : aimInput.accumulatedCCWTravel-n.traceStartCCW;
+    const reverse=dir>0 ? aimInput.accumulatedCCWTravel-n.traceStartCCW : aimInput.accumulatedCWTravel-n.traceStartCW;
+    n.reverseTravel=Math.max(0,reverse);
+    n.directedTravel=Math.max(0,forward-n.reverseTravel*.75);
+    n.progressRatio=clamp(n.directedTravel/Math.max(n.requiredTravel,.001),0,1);
+  }
+  function traceFailureReason(n,profile){
+    if(!n.startCaptured) return "START MISSED";
+    if(n.directedTravel < n.requiredTravel*profile.greatTravelRatio) return "NOT ENOUGH TURN";
+    if(n.reverseTravel > Math.min(n.requiredTravel*profile.reverseGreatRatio,profile.maxReverseGreatDeg*Math.PI/180)) return "TOO MUCH REVERSE";
+    if((n.endpointError||Infinity) > profile.endpointGreatToleranceDeg*Math.PI/180) return "ENDPOINT MISSED";
+    if(n.motionTime < n.minimumMotionTime) return "TURN TOO INSTANT";
+    return "TRACE TIMEOUT";
   }
 
   function baseJudgementTolerance(note, profile=traceProfile()){
@@ -2683,79 +2676,33 @@
       }
 
       if(n.type.startsWith("trace")){
-        const end=n.hitTime+n.duration;
-        const profile=traceProfile();
-        const a=traceTargetAngle(n,t);
-        if(n.traceQualityTime===undefined){
-          Object.assign(n,{validTrackedTime:0,traceQualityTime:0,activeTraceDuration:0,endpointInsideTime:0,endpointCaptured:false,enteredTrace:false,lateTraceStart:false,maxAngleError:0,angleErrorSum:0,errorSamples:0,maxRadiusError:0,lastTraceReason:"NOT_ENTERED"});
-        }
-        if(t>=n.hitTime&&t<=end){
-          const frameDt=Math.min(Math.max(dt,0), profile.maxFrameDt);
-          const hit=isAutoActive() ? {inside:true,trackingWeight:1,angleError:0,radiusError:0,target:a,region:{pointerAngle:a,pointerRadius:hitR,angularTolerance:profile.outerAngularToleranceDeg*Math.PI/180,radialTolerance:Math.max(profile.outerRadialTolerancePx,hitR*profile.outerRadialToleranceRatio),inside:true}} : insideTraceTarget(n,t);
-          n.activeTraceDuration += frameDt;
-          n.maxAngleError=Math.max(n.maxAngleError||0,hit.angleError||0);
-          n.maxRadiusError=Math.max(n.maxRadiusError||0,hit.radiusError||0);
-          n.angleErrorSum=(n.angleErrorSum||0)+(hit.angleError||0); n.errorSamples=(n.errorSamples||0)+1;
-          if(hit.inside){
-            if(isAutoActive())logAutoProcessing(n);
-            n.enteredTrace=true;
-            if(t>n.hitTime+profile.startGrace && n.validTrackedTime<=0) n.lateTraceStart=true;
-            n.validTrackedTime += frameDt;
-            n.lastInsideTraceTime=t;
-            if(Math.random()<.45)addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,COLORS.trace,1,.18);
-          }else if(!n.enteredTrace && t<=n.hitTime+profile.startGrace){
-            n.lastTraceReason="START_GRACE";
+        const end=n.hitTime+n.duration, profile=traceProfile(), motion=resolveTraceMotion(n);
+        if(n.requiredTravel===undefined) Object.assign(n,{requiredTravel:traceRequiredTravel(n),directedTravel:0,reverseTravel:0,progressRatio:0,startCaptured:false,endpointCaptured:false,completionTime:null,failReason:null,motionTime:0,minimumMotionTime:traceMinimumMotionTime(traceRequiredTravel(n),n.duration)});
+        if(t>=n.hitTime && !n.startCaptured && t<=n.hitTime+profile.startGrace){
+          const startError=distAng(judgementAimAngle,motion.startAngle);
+          if(isAutoActive() || startError<=profile.startToleranceDeg*Math.PI/180){
+            Object.assign(n,{startCaptured:true,traceStartCW:aimInput.accumulatedCWTravel,traceStartCCW:aimInput.accumulatedCCWTravel,traceStartedAt:t,startAngleError:startError});
           }
-          n.traceQualityTime += frameDt*(hit.trackingWeight||0);
-          const endpointRegion=isAutoActive() ? {inside:true,angleError:0,radiusError:0,pointerAngle:resolveTraceMotion(n).finalAngle,pointerRadius:hitR,motion:resolveTraceMotion(n)} : traceEndpointRegion(n,profile);
-          if(end-t<=profile.endpointWindow && endpointRegion.inside) n.endpointInsideTime += frameDt;
-          n.endpointCaptured=(n.endpointInsideTime||0) >= profile.endpointRequiredTime;
-          n.lastTraceEndpointRegion=endpointRegion;
-          n.coverageRatio=(n.validTrackedTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
-          n.traceQuality=(n.traceQualityTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
-          n.lastTraceRegion=hit.region;
         }
-        if(t>end){
-          const quality=(n.traceQualityTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
-          const coverage=(n.validTrackedTime||0)/Math.max(n.activeTraceDuration||n.duration,.001);
-          n.coverageRatio=coverage; n.traceQuality=quality;
-          const needed=profile.greatQuality;
-          const almostNever=!n.enteredTrace;
-          // Same pass/fail rule in tutorial and normal play. Reaching the endpoint
-          // upgrades a strong run to PERFECT, but missing one endpoint frame does
-          // not turn an otherwise valid TRACE into an automatic MISS.
-          const passed=quality>=needed && !almostNever;
-          n.completed=passed;
-          if(debugMode || tutorialMode){
-            n.failReason=traceFailureFeedback(n,needed);
-            console.log(`[Trace Result]
-coverage=${coverage.toFixed(2)}
-endpoint=${n.endpointCaptured===true}
-maxAngleError=${((n.maxAngleError||0)*180/Math.PI).toFixed(1)}
-avgAngleError=${(((n.angleErrorSum||0)/Math.max(n.errorSamples||0,1))*180/Math.PI).toFixed(1)}
-maxRadiusError=${(n.maxRadiusError||0).toFixed(1)}
-reason=${passed?"PASS":(!n.enteredTrace?"NOT_ENTERED":(!n.endpointCaptured?"ENDPOINT_MISSED":"LOW_COVERAGE"))}`);
-            if(!n.endpointCaptured){
-              const ep=n.lastTraceEndpointRegion||traceEndpointRegion(n,profile);
-              const m=resolveTraceMotion(n);
-              const renderedFinalAngle=norm(n.angle+slideDelta(n));
-              console.log(`[Trace Endpoint]
-startAngle=${(m.startAngle*180/Math.PI).toFixed(1)}
-signedSweepAngle=${(m.signedSweepAngle*180/Math.PI).toFixed(1)}
-renderedFinalAngle=${(renderedFinalAngle*180/Math.PI).toFixed(1)}
-expectedEndpointAngle=${(m.finalAngle*180/Math.PI).toFixed(1)}
-pointerAngle=${(ep.pointerAngle*180/Math.PI).toFixed(1)}
-endpointAngleError=${(ep.angleError*180/Math.PI).toFixed(1)}
-endpointRadiusError=${ep.radiusError.toFixed(1)}
-endpointCaptured=${n.endpointCaptured===true}`);
-              if(distAng(renderedFinalAngle,m.finalAngle)>.001) console.error("[Trace Endpoint] renderedFinalAngle/expectedEndpointAngle mismatch", n);
-            }
-          }
-          if(passed){
-            const perfect=quality>=profile.perfectQuality && n.endpointCaptured===true;
-            addWave(traceTargetAngle(n,end),COLORS.trace); addRingBurst(COLORS.trace,.55,"END");
-            judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
-          }else miss(n,n.failReason||"STAY ON THE PATH LONGER");
+        if(n.startCaptured && t>=n.hitTime && t<=end+profile.endpointGrace){
+          updateTraceTravel(n);
+          n.motionTime=t-n.traceStartedAt;
+          n.endpointError=distAng(judgementAimAngle,motion.finalAngle);
+          n.endpointCaptured=n.endpointError<=profile.endpointGreatToleranceDeg*Math.PI/180;
+        }
+        // Evaluation waits until the authored endpoint (or its small grace), so early turns must hold the endpoint.
+        if(t>end+profile.endpointGrace){
+          const greatTravel=n.directedTravel>=n.requiredTravel*profile.greatTravelRatio;
+          const perfectTravel=n.directedTravel>=n.requiredTravel*profile.perfectTravelRatio;
+          const greatReverse=n.reverseTravel<=Math.min(n.requiredTravel*profile.reverseGreatRatio,profile.maxReverseGreatDeg*Math.PI/180);
+          const perfectReverse=n.reverseTravel<=Math.min(n.requiredTravel*profile.reversePerfectRatio,profile.maxReversePerfectDeg*Math.PI/180);
+          const greatEndpoint=n.endpointError<=profile.endpointGreatToleranceDeg*Math.PI/180;
+          const perfectEndpoint=n.endpointError<=profile.endpointPerfectToleranceDeg*Math.PI/180;
+          const onTime=Math.abs((n.completionTime||end)-end)<=profile.endpointWindow;
+          const passed=n.startCaptured && greatTravel && greatReverse && greatEndpoint && n.motionTime>=n.minimumMotionTime;
+          n.completed=passed; n.failReason=passed?null:traceFailureReason(n,profile);
+          if(passed){ const perfect=perfectTravel&&perfectReverse&&perfectEndpoint&&onTime; n.completionTime=t; addWave(motion.finalAngle,COLORS.trace); addRingBurst(COLORS.trace,.42,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"}); }
+          else miss(n,n.failReason);
         }
         continue;
       }
@@ -3198,63 +3145,20 @@ endpointCaptured=${n.endpointCaptured===true}`);
   }
 
   function drawTrace(n,t){
-    const active=t>=n.hitTime;
-    const focus=n===focusNote;
-    const motion=resolveTraceMotion(n);
-    const d=motion.signedSweepAngle;
-    const dur=Math.max(n.duration,.001);
-    const ratio=clamp(active?((t-n.hitTime)/dur):0,0,1);
-    const r=active?hitR:clamp(noteR(n,t)-10,hitR-14,outerR-18);
-    const curr=active?traceTargetAngle(n,t):motion.startAngle;
-    const endA=motion.finalAngle;
-    const dir=d>=0?1:-1;
-    const pathScale=visualScale("path");
-    const futureAlpha=clamp((active?.40:.32)*pathScale,.14,.58);
-    const pastAlpha=clamp(.16*pathScale,.07,.25);
-    const hotAlpha=focus?.90:.82;
-    const fullDelta=Math.abs(d)>.03?d:dir*Math.PI*.26;
-    const region=getTraceJudgementRegion(n,t,traceProfile());
-    const activeHalf=region.outerAngularTolerance;
-    const innerHalf=region.innerAngularTolerance;
-    // These widths are rendering-only; TRACE judgement radial tolerances remain in getTraceJudgementRegion().
+    const active=t>=n.hitTime, focus=n===focusNote, motion=resolveTraceMotion(n), full=motion.signedSweepAngle;
+    const r=active?hitR:clamp(noteR(n,t)-10,hitR-14,outerR-18), progress=active?(n.progressRatio||0):0;
+    const dir=full>=0?1:-1;
     const visual=traceVisualProfile();
-
-    if(active && Math.abs(fullDelta*ratio)>0.003) drawDirectedArcSegments(r,motion.startAngle,fullDelta*ratio,`rgba(35,240,197,${pastAlpha})`,visual.pastWidth,1,null,0);
-    const farStart=active?curr:motion.startAngle;
-    const farDelta=active?(motion.finalUnwrappedAngle-(motion.startAngle+d*ratio)):fullDelta;
-    if(Math.abs(farDelta)>0.003) drawDirectedArcSegments(r,farStart,farDelta,`rgba(35,240,197,${futureAlpha})`,visual.futureWidth,1,null,0);
-    if(active){
-      drawDirectedArcSegments(r,curr-activeHalf,activeHalf*2,`rgba(53,240,197,${hotAlpha*.18})`,visual.activeOuterWidth,1,null,0);
-      drawDirectedArcSegments(r,curr-innerHalf,innerHalf*2,`rgba(255,255,255,${hotAlpha*.48})`,visual.activeInnerWidth,1,COLORS.trace,2*visualScale("effect"));
-    }
-
-    ctx.save();
-    ctx.translate(cx,cy);
-    ctx.lineCap="round";
-    ctx.shadowBlur=2*visualScale("effect");
-    ctx.shadowColor=COLORS.trace;
-    ctx.lineWidth=2;
-    ctx.strokeStyle=`rgba(53,240,197,${focus?.9:.72})`;
-    ctx.beginPath();ctx.arc(Math.cos(motion.startAngle)*r,Math.sin(motion.startAngle)*r,6,0,TAU);ctx.stroke();
-    ctx.strokeStyle=`rgba(255,225,90,${focus?.98:.86})`;
-    ctx.beginPath();ctx.arc(Math.cos(endA)*r,Math.sin(endA)*r,7,0,TAU);ctx.stroke();
-
-    const tx=Math.cos(curr)*r, ty=Math.sin(curr)*r;
-    const pointerInside=insideTraceTarget(n,t).inside;
-    ctx.fillStyle=pointerInside?"#fff36a":"#35f0c5"; ctx.beginPath();ctx.arc(tx,ty,visual.targetDotRadius,0,TAU);ctx.fill();
-    ctx.strokeStyle=pointerInside?"rgba(255,243,106,.98)":`rgba(53,240,197,${focus?.98:.86})`;
-    ctx.lineWidth=2;
-    ctx.beginPath();ctx.arc(tx,ty,visual.targetRingRadius,0,TAU);ctx.stroke();
-
-    const aa=curr+dir*(Math.PI*.06);
-    const ar=Math.max(hitR-18,r-8);
-    ctx.save();ctx.translate(Math.cos(aa)*ar,Math.sin(aa)*ar);ctx.rotate(aa+(dir>0?Math.PI/2:-Math.PI/2));
-    ctx.fillStyle=`rgba(53,240,197,${focus?.82:.62})`;
-    const size=6; ctx.beginPath();ctx.moveTo(size,0);ctx.lineTo(-size*.55,-size*.55);ctx.lineTo(-size*.25,0);ctx.lineTo(-size*.55,size*.55);ctx.closePath();ctx.fill();ctx.restore();
-    if(tutorialMode && !active && n.hitTime-t<.8){
-      ctx.fillStyle="rgba(53,240,197,.88)"; ctx.font="900 10px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText("TRACE",Math.cos(n.angle)*(r-26),Math.sin(n.angle)*(r-26));
-    }
+    const pathScale=visualScale("path");
+    // A thin blue future route and a bright completed arc communicate travel, not target chasing.
+    drawDirectedArcSegments(r,motion.startAngle,full,`rgba(67,136,255,${.28*pathScale})`,visual.futureWidth,1,null,0);
+    if(progress>0) drawDirectedArcSegments(r,motion.startAngle,full*progress,"rgba(104,181,255,.98)",visual.pastWidth+1,1,COLORS.trace,4);
+    ctx.save(); ctx.translate(cx,cy); ctx.lineCap="round";
+    const marker=(a,color,label,size)=>{ const x=Math.cos(a)*r,y=Math.sin(a)*r; ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,size,0,TAU);ctx.fill();ctx.fillStyle="#071326";ctx.font="900 9px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(label,x,y+.5); };
+    marker(motion.startAngle,"#fff","S",7); marker(motion.finalAngle,"#ffe15a","E",8);
+    const arrows=Math.max(1,Math.ceil(Math.abs(full)/(Math.PI*.55)));
+    for(let i=1;i<=arrows;i++){ const a=motion.startAngle+full*(i/(arrows+1));ctx.save();ctx.translate(Math.cos(a)*r,Math.sin(a)*r);ctx.rotate(a+(dir>0?Math.PI/2:-Math.PI/2));ctx.fillStyle="rgba(139,188,255,.92)";ctx.beginPath();ctx.moveTo(7,0);ctx.lineTo(-5,-4);ctx.lineTo(-2,0);ctx.lineTo(-5,4);ctx.closePath();ctx.fill();ctx.restore(); }
+    if(focus&&active){ const turns=n.requiredTravel ? n.directedTravel/n.requiredTravel : 0;ctx.fillStyle="#d9e9ff";ctx.font="800 11px system-ui";ctx.textAlign="center";ctx.fillText(n.requiredTravel>=TAU?`${turns.toFixed(1)} / ${(n.requiredTravel/TAU).toFixed(1)} TURN`:`TRACE ${Math.round(progress*100)}%`,0,-Math.max(34,r*.26)); if((n.reverseTravel||0)>.08){ctx.fillStyle="#ff6c80";ctx.fillText("↶",0,-Math.max(18,r*.15));} }
     ctx.restore();
   }
 
@@ -3973,7 +3877,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
   function isMobileInput(){ return isMobileViewport && isMobileViewport(); }
   function tutorialInputFor(kind){
     if(isMobileInput()) return ({aim:"터치해서 에임 이동",cut:"화면 탭",hold:"화면을 길게 누르기",slide:"누른 채 목표를 따라가기",trace:"누르지 말고 목표를 따라가기",traceSwing:"TRACE 후 표시 방향으로 짧게 밀기",swing:"표시 방향으로 짧고 빠르게 밀기",scratch:"두 손가락을 누른 채 짧게 긁기",mix:"탭 · 홀드 · 추적 · 스와이프"})[kind] || "화면 터치";
-    return ({aim:"마우스 이동 / A·D로 에임 조작",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 왼쪽`,hold:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 오른쪽을 길게 누르기`,slide:`${keyLabel("KeyZ")} 또는 ${keyLabel("KeyX")}를 누른 채 따라가기`,trace:"버튼을 누르지 말고 현재 목표를 따라가기",traceSwing:"TRACE 완료 후 같은 방향으로 에임을 짧게 튕기기",swing:"표시 방향으로 에임을 짧고 빠르게 움직이기",scratch:"마우스 오른쪽을 누른 채 짧게 긁기",mix:"Z / X / 마우스 입력 + 에임 조작"})[kind] || "입력";
+    return ({aim:"마우스 이동 / A·D로 에임 조작",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 왼쪽`,hold:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 오른쪽을 길게 누르기`,slide:`${keyLabel("KeyZ")} 또는 ${keyLabel("KeyX")}를 누른 채 따라가기`,trace:"시작점에 맞춘 뒤 표시 방향으로 필요한 만큼 회전하기",traceSwing:"TRACE 완료 후 같은 방향으로 에임을 짧게 튕기기",swing:"표시 방향으로 에임을 짧고 빠르게 움직이기",scratch:"마우스 오른쪽을 누른 채 짧게 긁기",mix:"Z / X / 마우스 입력 + 에임 조작"})[kind] || "입력";
   }
   const tutorialSteps=[
     {name:"에임 · 위치 익히기",kind:"aim",phase:"explore",desc:"노란 목표 안으로 에임을 옮겨 판정 위치를 익혀보세요.",targets:[0,2,5],notes:[]},
@@ -3985,14 +3889,14 @@ endpointCaptured=${n.endpointCaptured===true}`);
     {name:"HOLD · 실전 표시",kind:"hold",phase:"standard",desc:"일반 표시 상태에서 HOLD 두 개를 끝까지 유지하세요.",notes:[{type:"fx",beat:4,lane:1,durationBeat:2.5},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
     {name:"SLIDE · 가이드",kind:"slide",phase:"guided",desc:"버튼을 누른 상태와 현재 목표 위치를 따로 확인하며 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4},{type:"slideCCW",beat:10,lane:2,endLane:6,durationBeat:4}]},
     {name:"SLIDE · 흐린 가이드",kind:"slide",phase:"faded",desc:"버튼을 누른 채 흐린 목표를 끝까지 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:3.2},{type:"slideCCW",beat:9,lane:2,endLane:6,durationBeat:3.2}]},
-    {name:"TRACE · 45° 입문",kind:"trace",phase:"guided",desc:"버튼을 누르지 말고 천천히 움직이는 목표를 따라가세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:0,durationBeat:3.2}]},
-    {name:"TRACE · 90° 가이드",kind:"trace",phase:"guided",desc:"밝게 움직이는 현재 목표를 따라 90도 이동하세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:1,durationBeat:3}]},
-    {name:"TRACE · 180° 가이드",kind:"trace",phase:"guided",desc:"현재 목표는 밝게, 앞으로 갈 경로는 흐리게 표시됩니다.",notes:[{type:"traceCCW",beat:4,lane:3,endLane:7,durationBeat:3.4}]},
-    {name:"TRACE · 180° 흐린 가이드",kind:"trace",phase:"faded",desc:"현재 목표와 짧은 활성 호를 보며 끝까지 따라가세요.",notes:[{type:"traceCW",beat:4,lane:6,endLane:2,durationBeat:2.8}]},
-    {name:"TRACE · 실전 표시",kind:"trace",phase:"standard",desc:"일반 플레이와 같은 TRACE 표시로 경로를 따라가세요.",notes:[{type:"traceCCW",beat:4,lane:2,endLane:6,durationBeat:2.5}]},
+    {name:"TRACE · 45° 입문",kind:"trace",phase:"guided",desc:"시작점에 에임을 맞춘 뒤 표시 방향으로 45° 회전하세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:0,durationBeat:3.2}]},
+    {name:"TRACE · 90° 가이드",kind:"trace",phase:"guided",desc:"시작점에서 표시 방향으로 90° 회전하고 끝점에 도달하세요.",notes:[{type:"traceCW",beat:4,lane:7,endLane:1,durationBeat:3}]},
+    {name:"TRACE · 180° 가이드",kind:"trace",phase:"guided",desc:"진행 원호를 보며 표시 방향으로 180° 회전하세요.",notes:[{type:"traceCCW",beat:4,lane:3,endLane:7,durationBeat:3.4}]},
+    {name:"TRACE · 180° 흐린 가이드",kind:"trace",phase:"faded",desc:"밝은 진행 원호를 채워 끝점까지 회전하세요.",notes:[{type:"traceCW",beat:4,lane:6,endLane:2,durationBeat:2.8}]},
+    {name:"TRACE · 실전 표시",kind:"trace",phase:"standard",desc:"일반 플레이와 같은 방식으로 필요한 회전량을 채우세요.",notes:[{type:"traceCCW",beat:4,lane:2,endLane:6,durationBeat:2.5}]},
     {name:"SWING · 가이드",kind:"swing",phase:"guided",desc:"접선 화살표가 가리키는 방향으로 에임을 짧고 빠르게 움직이세요.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
     {name:"SCRATCH · 가이드",kind:"scratch",phase:"guided",desc:"마우스 오른쪽을 누른 채 표시 방향으로 짧게 긁으세요.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
-    {name:"360° TRACE → SWING",kind:"traceSwing",phase:"TRACE_ACTIVE",desc:"버튼을 누르지 말고 목표를 따라 한 바퀴 회전하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360}]},
+    {name:"360° TRACE → SWING",kind:"traceSwing",phase:"TRACE_ACTIVE",desc:"시작점에서 한 바퀴 회전해 끝점에 도달한 뒤 SWING 하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360}]},
     {name:"종합 연습",kind:"mix",phase:"standard",desc:"상세 가이드 없이 배운 노트를 순서대로 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
   ];
   function buildTutorialStepRuntime(idx){
@@ -4023,7 +3927,7 @@ endpointCaptured=${n.endpointCaptured===true}`);
     const nextPending=displayChart.find(n=>!n.done&&!n.missed);
     const pendingKind=nextPending?noteFamily(nextPending.type):st.kind;
     if(st.kind==="traceSwing" && (tutorialState.traceSwingPhase==="SWING_ARMING" || tutorialState.traceSwingPhase==="SWING_ACTIVE" || pendingKind==="swing")) tutorialDesc.textContent="이제 같은 방향으로 에임을 새로 짧게 튕기세요.";
-    else if(st.kind==="traceSwing") tutorialDesc.textContent="버튼을 누르지 말고 목표를 따라 한 바퀴 회전하세요.";
+    else if(st.kind==="traceSwing") tutorialDesc.textContent="시작점에서 한 바퀴 회전해 끝점에 도달한 뒤 SWING 하세요.";
     else tutorialDesc.textContent=st.desc;
     const hintKind=(st.kind==="traceSwing"?pendingKind:(st.kind==="mix"?pendingKind:st.kind));
     tutorialInputHint.textContent=(tutorialState.autoSuppressed&&tutorialState.previousAutoEnabled?"튜토리얼에서는 AUTO 비활성 · ":"")+tutorialInputFor(hintKind);
@@ -5797,7 +5701,7 @@ running=${running}`);
   // interaction and keep developer mode limited to the Settings entry button.
   deactivateSelfTestSurface({releaseInputs:true});
   function selfTestNumber(value){ return Number.isFinite(value)?Number(value.toFixed(4)):null; }
-  function selfTestSnapshot(){ const n=chart.find(note=>!note.done&&!note.missed)||null, target=selfTest.active?(SELF_TEST_STEPS[selfTest.index]?.type? n?.angle:selfTest.aimTarget):null; return {stepId:SELF_TEST_STEPS[selfTest.index]?.id||null,stepName:SELF_TEST_STEPS[selfTest.index]?.name||null,status:selfTest.status,device:selfTest.device,pcAimMode:inputSettings.pcAimMode,pointerLockActive:!!pointerLockActive(),rawInputAngle:selfTestNumber(rawInputAngle),judgementAimAngle:selfTestNumber(judgementAimAngle),visualArmAngle:selfTestNumber(visualArmAngle),angularVelocity:selfTestNumber(aimInput.sampleAngularVelocity),targetAngle:selfTestNumber(target),shortestAngleError:target==null?null:selfTestNumber(norm(judgementAimAngle-target)),note:n?{id:String(n.id||""),type:String(n.type||"")}:null,score:Number(score),combo:Number(combo),judgedCount:Number(judgedCount),actionHeld:!!keys.MouseLeft,scratchHeld:!!scratchHeld,mouseDownRight:!!mouseDownRight,slideProgress:n?selfTestNumber(n.slideProgress||0):0,traceCoverage:n?selfTestNumber(n.coverageRatio||0):0,traceQuality:n?selfTestNumber(n.traceQuality||0):0,failReason:selfTest.failReason||null}; }
+  function selfTestSnapshot(){ const n=chart.find(note=>!note.done&&!note.missed)||null, target=selfTest.active?(SELF_TEST_STEPS[selfTest.index]?.type? n?.angle:selfTest.aimTarget):null; return {stepId:SELF_TEST_STEPS[selfTest.index]?.id||null,stepName:SELF_TEST_STEPS[selfTest.index]?.name||null,status:selfTest.status,device:selfTest.device,pcAimMode:inputSettings.pcAimMode,pointerLockActive:!!pointerLockActive(),rawInputAngle:selfTestNumber(rawInputAngle),judgementAimAngle:selfTestNumber(judgementAimAngle),visualArmAngle:selfTestNumber(visualArmAngle),angularVelocity:selfTestNumber(aimInput.sampleAngularVelocity),targetAngle:selfTestNumber(target),shortestAngleError:target==null?null:selfTestNumber(norm(judgementAimAngle-target)),note:n?{id:String(n.id||""),type:String(n.type||"")}:null,score:Number(score),combo:Number(combo),judgedCount:Number(judgedCount),actionHeld:!!keys.MouseLeft,scratchHeld:!!scratchHeld,mouseDownRight:!!mouseDownRight,slideProgress:n?selfTestNumber(n.slideProgress||0):0,traceRequiredTravelDegrees:n?selfTestNumber((n.requiredTravel||traceRequiredTravel(n))*180/Math.PI):0,traceDirectedTravelDegrees:n?selfTestNumber((n.directedTravel||0)*180/Math.PI):0,traceReverseTravelDegrees:n?selfTestNumber((n.reverseTravel||0)*180/Math.PI):0,traceProgressRatio:n?selfTestNumber(n.progressRatio||0):0,traceStartCaptured:!!n?.startCaptured,traceEndpointErrorDegrees:n?selfTestNumber((n.endpointError||0)*180/Math.PI):0,traceEndpointCaptured:!!n?.endpointCaptured,traceCompletionTime:n?.completionTime??null,traceFailReason:n?.failReason||null,failReason:selfTest.failReason||null}; }
   function selfTestResult(status){ const s=selfTestSnapshot(), ended=performance.now(); return {...s,status,startedAt:selfTest.startedAt||null,completedAt:ended,duration:selfTest.startedAt?Math.max(0,ended-selfTest.startedAt):0,expectedAction:SELF_TEST_STEPS[selfTest.index]?.action||"",actualJudgement:chart.find(n=>n.done)?.judgement||null}; }
   function renderSelfTest(){ if(!selfTestOverlay||!selfTest.active)return; const step=SELF_TEST_STEPS[selfTest.index]; const s=selfTestSnapshot(); selfTestEls.label.textContent=`${selfTest.index+1}/${SELF_TEST_STEPS.length} · ${step.name} · ${selfTest.status}`; selfTestEls.instruction.textContent=step.action; selfTestEls.diagnostics.textContent=JSON.stringify(s,null,2); selfTestEls.next.disabled=selfTest.status!=="PASS"; requestAnimationFrame(renderSelfTest); }
   function selfTestResetInput(){ releasePointerLock(); releaseMobilePointers(); keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; resetAimInput(-Math.PI/2); }
