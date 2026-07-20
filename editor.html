@@ -4,13 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>CIRCLE MIX Chart Editor</title>
-<link rel="stylesheet" href="./src/editor.css" />
+<link rel="stylesheet" href="./src/editor.css?v=20260720-cmix-export-1" />
 </head>
 <body>
 <header class="topbar">
   <a class="back" href="./index.html">← TITLE</a>
   <div><strong>CIRCLE MIX CHART EDITOR</strong><span>local files only · PC recommended</span></div>
-  <button id="exportBtn" type="button">Export Chart JSON</button>
+  <button id="exportBtn" type="button">Export Chart JSON</button><button id="exportCmixBtn" type="button">EXPORT CHART .CMIX</button><button id="exportAllCmixBtn" type="button" hidden>EXPORT ALL DIFFICULTIES AS CHART .CMIX</button>
 </header>
 <main class="layout">
   <section class="panel meta">
@@ -26,6 +26,15 @@
       <label>Difficulty <input id="difficulty" value="CUSTOM" /></label>
       <label>Preview start <input id="previewStart" type="number" step="0.01" value="0" /></label>
       <label>Jacket <input id="jacketFile" type="file" accept="image/*" /></label>
+      <label>Chart ID <input id="cmixChartId" value="custom" /></label>
+      <label>Chart name <input id="cmixChartName" value="CUSTOM" /></label>
+      <label>Level (1–20) <input id="cmixLevel" type="number" min="1" max="20" value="10" /></label>
+      <label>Style <input id="cmixStyle" value="CUSTOM" /></label>
+      <label>Author <input id="cmixAuthor" value="" /></label>
+      <label>Package version <input id="cmixPackageVersion" type="number" min="1" step="1" value="1" /></label>
+      <label>Duration tolerance <input id="cmixTolerance" type="number" min="0" max="10" step="0.1" value="2" /></label>
+      <label class="check"><input id="cmixHash" type="checkbox" checked /> include SHA-256</label>
+      <label class="check"><input id="cmixJacket" type="checkbox" /> include jacket</label>
     </div>
     <div class="actions"><button id="saveProject" type="button">Save Project</button><button id="addLocalSong" type="button">Add to LOCAL SONGS</button><button id="newProject" type="button">New</button><label class="check"><input id="autosave" type="checkbox" checked /> autosave</label></div><div class="validation" id="localSongStatus">LOCAL SONGS 등록 전입니다.</div>
     <p class="notice">IndexedDB 임시 저장은 브라우저 데이터를 지우면 사라질 수 있습니다. 음악은 서버에 업로드되지 않습니다.</p>
@@ -67,7 +76,10 @@
   </aside>
 </main>
 <audio id="audio" preload="metadata"></audio>
-<script src="./src/songs.js"></script>
-<script src="./src/editor.js"></script>
+<script src="./src/songs.js?v=20260720-cmix-export-1"></script>
+<script src="./src/cmix-validator.js?v=20260720-cmix-export-1"></script>
+<script src="./src/cmix-audio.js?v=20260720-cmix-export-1"></script>
+<script src="./src/cmix-exporter.js?v=20260720-cmix-export-1"></script>
+<script src="./src/editor.js?v=20260720-cmix-export-1"></script>
 </body>
 </html>
