@@ -1,0 +1,10 @@
+{
+  "format": "circle-mix-chart",
+  "formatVersion": 1,
+  "id": "reverb",
+  "notes": [
+    {"id": "reverb-001", "type": "cut", "beat": 0, "angle": 0},
+    {"id": "reverb-002", "type": "slideCW", "beat": 2, "angle": 45, "endAngle": 135, "durationBeat": 1},
+    {"id": "reverb-003", "type": "traceCCW", "beat": 4, "angle": 180, "endAngle": 90, "durationBeat": 2, "signedSweepAngle": -450}
+  ]
+}
