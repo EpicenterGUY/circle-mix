@@ -1,4 +1,4 @@
-const VERSION = "0.9.22";
+const VERSION = "0.9.23";
 const CACHE_PREFIX = "circle-mix-v";
 const APP_CACHE = `${CACHE_PREFIX}${VERSION}-app`;
 const MEDIA_CACHE = `${CACHE_PREFIX}${VERSION}-media`;
@@ -25,6 +25,7 @@ const APP_SHELL_URLS = [
   "./src/game.js?v=20260720-cmix-full-1",
   "./src/cmix-validator.js?v=20260720-cmix-full-1",
   "./src/cmix-audio.js?v=20260720-cmix-full-1",
+  "./src/cmix-zip.js?v=20260720-cmix-full-1",
   "./src/cmix-exporter.js?v=20260720-cmix-full-1",
   "./src/cmix-importer.js?v=20260720-cmix-full-1",
   "./src/cmix-local-install.js?v=20260720-cmix-full-1",

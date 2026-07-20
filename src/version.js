@@ -1,4 +1,4 @@
 window.CircleMixVersion = {
-  version: "0.9.22",
+  version: "0.9.23",
   buildDate: "2026-07-20"
 };
