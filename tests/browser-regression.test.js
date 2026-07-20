@@ -393,6 +393,7 @@ async function runCmixHiddenOverlayRegression(browser){
   const regular=await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}})); const page=await regular.newPage(); const errors=await collectErrors(page);
   try{
     await page.goto('http://127.0.0.1:4173/index.html?browserTest=1',{waitUntil:'domcontentloaded'}); await waitForStableCircleMixPage(page,'cmix regular hidden'); await dismissStartupOverlays(page);
+    assert.equal(await page.locator('#cmixImportBtn').evaluate(el=>el.hidden),true,'regular users do not enable import');
     for(const state of Object.values(await hiddenState(page))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`regular hidden cmix overlay ${JSON.stringify(state)}`);
     await page.locator('#tutorialPromptSkip').click(); await page.locator('#safeStart').click(); await page.waitForFunction(()=>!document.getElementById('songSelect').hidden);
     assert.deepEqual(errors,[],`regular cmix hidden errors ${JSON.stringify(errors)}`);
@@ -400,9 +401,13 @@ async function runCmixHiddenOverlayRegression(browser){
   const dev=await registerDiagnosticContext(await browser.newContext({viewport:{width:1280,height:720}})); const devPage=await dev.newPage(); const devErrors=await collectErrors(devPage);
   try{
     await devPage.goto('http://127.0.0.1:4173/index.html?browserTest=1&dev=1',{waitUntil:'domcontentloaded'}); await waitForStableCircleMixPage(devPage,'cmix developer hidden'); await dismissStartupOverlays(devPage);
-    assert.equal(await devPage.locator('#cmixImportBtn').isVisible(),true,'developer import button is visible');
+    const freshDeveloperImportState=await devPage.locator('#cmixImportBtn').evaluate(el=>({hidden:el.hidden,display:getComputedStyle(el).display,visibility:getComputedStyle(el).visibility,hiddenAncestor:el.closest('[hidden]')?.id||null,songSelectHidden:document.getElementById('songSelect').hidden,activeScene:window.CircleMixTestApi?.state?.().activeScene||null}));
+    assert.equal(freshDeveloperImportState.hidden,false,`developer mode enables the button itself ${JSON.stringify(freshDeveloperImportState)}`);
+    assert.equal(freshDeveloperImportState.hiddenAncestor,'songSelect',`button remains inside hidden song-select until START ${JSON.stringify(freshDeveloperImportState)}`);
+    assert.equal(freshDeveloperImportState.songSelectHidden,true,`fresh developer page remains on title scene ${JSON.stringify(freshDeveloperImportState)}`);
     for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`developer hidden cmix overlay ${JSON.stringify(state)}`);
     await devPage.locator('#tutorialPromptSkip').click(); await devPage.locator('#safeStart').click(); await devPage.waitForFunction(()=>!document.getElementById('songSelect').hidden);
+    assert.equal(await devPage.locator('#cmixImportBtn').isVisible(),true,'developer import button is visible in song select');
     await devPage.locator('#cmixImportBtn').click(); await devPage.locator('#cmixImportModal').waitFor({state:'visible'}); await devPage.locator('#cmixImportClose').click();
     for(const state of Object.values(await hiddenState(devPage))) assert.deepEqual(state,{hidden:true,display:'none',intercepts:false},`closed cmix overlay ${JSON.stringify(state)}`);
     await devPage.locator('#songPlayBtn').click();
