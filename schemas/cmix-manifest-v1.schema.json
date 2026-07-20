@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://circle-mix.invalid/schemas/cmix-manifest-v1.schema.json",
+  "title": "CIRCLE MIX song package manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "formatVersion", "packageType", "packageVersion", "id", "title", "artist", "bpm", "charts"],
+  "properties": {
+    "format": {"const": "circle-mix-song"},
+    "formatVersion": {"const": 1},
+    "packageType": {"enum": ["full", "chart"]},
+    "packageVersion": {"type": "integer", "minimum": 1},
+    "id": {"$ref": "#/$defs/id"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "artist": {"type": "string", "minLength": 1, "maxLength": 200},
+    "bpm": {"type": "number", "minimum": 20, "maximum": 1000},
+    "offset": {"type": "number", "minimum": -60, "maximum": 60, "default": 0},
+    "audio": {"$ref": "#/$defs/audioPath"},
+    "jacket": {"$ref": "#/$defs/imagePath"},
+    "preview": {"$ref": "#/$defs/preview"},
+    "audioMatch": {"$ref": "#/$defs/audioMatch"},
+    "charts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {"$ref": "#/$defs/chartDescriptor"}
+    },
+    "extensions": {"$ref": "#/$defs/extensions"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"packageType": {"const": "full"}}, "required": ["packageType"]},
+      "then": {"required": ["audio"]}
+    },
+    {
+      "if": {"properties": {"packageType": {"const": "chart"}}, "required": ["packageType"]},
+      "then": {"required": ["audioMatch"], "not": {"required": ["audio"]}}
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 64},
+    "safePath": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//).+$"},
+    "audioPath": {"allOf": [{"$ref": "#/$defs/safePath"}, {"pattern": "\\.(?:ogg|mp3|wav)$"}]},
+    "imagePath": {"allOf": [{"$ref": "#/$defs/safePath"}, {"pattern": "\\.(?:webp|png|jpg|jpeg)$"}]},
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startSeconds", "durationSeconds"],
+      "properties": {
+        "startSeconds": {"type": "number", "minimum": 0},
+        "durationSeconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 60}
+      }
+    },
+    "audioMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["durationSeconds"],
+      "properties": {
+        "durationSeconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 7200},
+        "durationToleranceSeconds": {"type": "number", "minimum": 0, "maximum": 10, "default": 2},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "suggestedFilename": {"type": "string", "minLength": 1, "maxLength": 255},
+        "title": {"type": "string", "minLength": 1, "maxLength": 200},
+        "artist": {"type": "string", "minLength": 1, "maxLength": 200},
+        "preview": {"$ref": "#/$defs/preview"}
+      }
+    },
+    "chartDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "level", "file"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 64},
+        "level": {"type": "number", "minimum": 1, "maximum": 20},
+        "style": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9_-]{0,23}$"},
+        "author": {"type": "string", "minLength": 1, "maxLength": 100},
+        "file": {"type": "string", "pattern": "^charts/[a-z0-9]+(?:-[a-z0-9]+)*\\.json$"}
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z0-9][a-z0-9.-]{1,62}$"},
+      "additionalProperties": true
+    }
+  }
+}
