@@ -7,6 +7,9 @@
 */
 window.CircleMixChangelog = [
   {
+    version: "0.9.20", date: "2026-07-20", title: ".cmix CHART Local Audio", summary: "CHART .cmix packages can link and verify local MP3, OGG, or WAV audio before installation."
+  },
+  {
     version: "0.9.19", date: "2026-07-20", title: ".cmix FULL Local Installation",
     summary: "검증된 FULL .cmix 패키지를 기존 LOCAL SONGS 라이브러리에 설치하고 플레이할 수 있습니다.",
     changes: [{ category: "DEVELOPER", text: "설치, 버전 충돌 확인, Blob 영구 저장, LOCAL SONGS 이동 및 삭제 호환을 추가했습니다." }]

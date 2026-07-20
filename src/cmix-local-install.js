@@ -14,6 +14,11 @@
     if(!Object.keys(charts).length) throw new Error('The package has no playable charts.');
     return {id:manifest.id,source:'local',cmixInstalled:true,title:manifest.title,artist:manifest.artist,bpm:manifest.bpm,offset:manifest.offset||0,previewStart:manifest.preview?.startSeconds||0,previewDuration:manifest.preview?.durationSeconds||15,audioBlob:pkg.audioBlob,audioType:pkg.audioBlob.type||null,jacketBlob:pkg.jacketBlob||null,difficulties,charts,packageType:manifest.packageType,packageVersion:manifest.packageVersion,packageHash:pkg.packageHash||null,sourceFileName:pkg.sourceFileName||null,installedAt:now,updatedAt:now};
   }
+  function recordFromChartPackage(pkg,linked,now=new Date().toISOString()){
+    if(pkg?.manifest?.packageType!=='chart'||!(linked?.blob instanceof Blob)) throw new Error('Validated CHART package and local audio are required.');
+    const base=recordFromPackage({...pkg,manifest:{...pkg.manifest,packageType:'full'},audioBlob:linked.blob},now), match=pkg.manifest.audioMatch||{};
+    return {...base,packageType:'chart',audioBlob:linked.blob,audioType:linked.audioType||linked.blob.type||null,linkedAudio:true,localAudioFileName:String(linked.fileName||'').split(/[\\/]/).pop(),actualDuration:linked.duration,actualSha256:linked.sha256||null,expectedDuration:match.durationSeconds,durationTolerance:linked.tolerance,expectedSha256:match.sha256||null,matchMethod:linked.matchMethod,hashOverride:Boolean(linked.hashOverride)};
+  }
   function replacementInfo(existing,incoming){
     if(!existing)return {kind:'new',message:'NEW INSTALL'};
     const removed=Object.keys(existing.charts||{}).filter(id=>!Object.prototype.hasOwnProperty.call(incoming.charts||{},id));
@@ -22,5 +27,5 @@
     if(comparison===null)return {kind:'editor-conflict',removed,message:'An editor-created local song uses this ID and has no package version.'};
     return {kind:'replace',removed,message:'This package version is the same or older than the installed version.'};
   }
-  return Object.freeze({compareVersions,recordFromPackage,replacementInfo});
+  return Object.freeze({compareVersions,recordFromPackage,recordFromChartPackage,replacementInfo});
 });

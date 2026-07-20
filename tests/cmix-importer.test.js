@@ -12,3 +12,8 @@ const LocalInstall = require('../src/cmix-local-install.js');
   assert.equal(LocalInstall.replacementInfo({packageVersion:1,charts:{old:{}}},record).kind,'upgrade');
   assert.equal(LocalInstall.replacementInfo({charts:{}},record).kind,'editor-conflict');
 })();
+
+(function testChartLinkedAudioRecord(){
+ const blob=new Blob(['ID3 linked audio']); const pkg={manifest:{id:'chart-link',packageType:'chart',packageVersion:1,title:'Chart',artist:'Artist',bpm:120,audioMatch:{durationSeconds:10,durationToleranceSeconds:2,sha256:'a'.repeat(64)},charts:[{id:'easy',name:'EASY',level:1,file:'charts/easy.json'}]},charts:{'charts/easy.json':{notes:[{type:'cut'}]}}};
+ const r=LocalInstall.recordFromChartPackage(pkg,{blob,fileName:'music.mp3',audioType:'audio/mpeg',duration:10,sha256:'a'.repeat(64),tolerance:2,matchMethod:'exact-hash'}); assert.equal(r.packageType,'chart');assert.equal(r.linkedAudio,true);assert.equal(r.matchMethod,'exact-hash');assert.equal(r.localAudioFileName,'music.mp3');
+})();
