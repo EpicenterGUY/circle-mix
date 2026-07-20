@@ -1,0 +1,18 @@
+{
+  "format": "circle-mix-song",
+  "formatVersion": 1,
+  "packageType": "full",
+  "packageVersion": 1,
+  "id": "example-routing",
+  "title": "Routing",
+  "artist": "Camellia",
+  "bpm": 144,
+  "offset": 0,
+  "audio": "audio.ogg",
+  "jacket": "jacket.webp",
+  "preview": {"startSeconds": 50, "durationSeconds": 15},
+  "charts": [
+    {"id": "beginner", "name": "Beginner", "level": 3, "file": "charts/beginner.json"},
+    {"id": "reverb", "name": "Reverb", "level": 15, "style": "TECH", "file": "charts/reverb.json"}
+  ]
+}
