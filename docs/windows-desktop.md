@@ -3,6 +3,7 @@
 CIRCLE MIX uses **Tauri v2** for the Windows desktop foundation. Windows 10/11 development requires Node, Rust stable, Microsoft C++ Build Tools with **Desktop development with C++**, and the WebView2 Runtime.
 
 ```powershell
+cargo install tauri-cli --version "^2.0.0" --locked # one-time Tauri CLI installation
 npm ci
 npm run desktop:dev # generates Tauri icons from src-tauri/app-icon.svg first
 npm run desktop:build

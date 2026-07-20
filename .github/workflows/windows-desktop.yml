@@ -11,6 +11,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 24, cache: npm}
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
       - run: npm ci
       - run: npm run desktop:prepare
       - run: npm run desktop:audit

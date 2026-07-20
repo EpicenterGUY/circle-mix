@@ -7,14 +7,12 @@
     "desktop:prepare": "node scripts/prepare-desktop.js",
     "desktop:audit": "node scripts/audit-desktop-dist.js",
     "desktop:check": "npm run desktop:prepare && npm run desktop:audit",
-    "desktop:dev": "npm run desktop:icons && npm run tauri -- dev",
-    "desktop:build": "npm run desktop:icons && npm run tauri -- build -- --no-bundle",
-    "tauri": "tauri",
-    "desktop:icons": "npm run tauri -- icon src-tauri/app-icon.svg -o src-tauri/icons"
+    "desktop:dev": "npm run desktop:icons && cargo tauri dev",
+    "desktop:build": "npm run desktop:icons && cargo tauri build -- --no-bundle",
+    "desktop:icons": "cargo tauri icon src-tauri/app-icon.svg -o src-tauri/icons"
   },
   "devDependencies": {
-    "playwright": "^1.54.0",
-    "@tauri-apps/cli": "^2.0.0"
+    "playwright": "^1.54.0"
   },
   "version": "0.9.28"
 }
