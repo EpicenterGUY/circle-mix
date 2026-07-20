@@ -3,10 +3,16 @@
     "test": "node --check src/build-config.js && node --check src/song-record.js && node --check src/song-package-adapter.js && node --check src/local-library.js && node --check src/game.js && node --check src/version.js && node --check src/changelog.js && node --check src/pwa.js && node --check src/cmix-validator.js && node --check src/cmix-zip.js && node --check src/cmix-audio.js && node --check src/cmix-exporter.js && node --check src/cmix-importer.js && node --check src/cmix-import-ui.js && node --check src/cmix-local-install.js && node --check src/editor.js && node --check service-worker.js && node tests/smoke.test.js && node tests/song-record.test.js && node tests/local-library.test.js && node tests/cmix-validator.test.js && node tests/cmix-importer.test.js && node tests/cmix-exporter.test.js",
     "test:browser": "node tests/browser-regression.test.js",
     "test:osu-to-cmix": "node --check scripts/osu-to-cmix.js && node --check scripts/osu-to-cmix-lib.js && node tests/osu-to-cmix.test.js",
-    "verify": "node scripts/verify.js"
+    "verify": "node scripts/verify.js",
+    "desktop:prepare": "node scripts/prepare-desktop.js",
+    "desktop:audit": "node scripts/audit-desktop-dist.js",
+    "desktop:check": "npm run desktop:prepare && npm run desktop:audit",
+    "desktop:dev": "npm run desktop:icons && cargo tauri dev",
+    "desktop:build": "npm run desktop:icons && cargo tauri build --no-bundle",
+    "desktop:icons": "cargo tauri icon src-tauri/app-icon.svg -o src-tauri/icons"
   },
   "devDependencies": {
     "playwright": "^1.54.0"
   },
-  "version": "0.9.27"
+  "version": "0.9.28"
 }

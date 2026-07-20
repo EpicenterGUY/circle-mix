@@ -161,7 +161,8 @@
   if(devModeFromQuery){ try{ localStorage.setItem("circleMixDevMode", "true"); }catch(e){} }
   let circleMixDevMode = devModeFromQuery || (()=>{ try{return localStorage.getItem("circleMixDevMode") === "true";}catch(e){return false;} })();
   const LAST_SEEN_VERSION_KEY = "circleMixLastSeenVersion";
-  let selectedSource = initialParams.get("tab")==="local" ? "local" : "builtin";
+  const desktopBuild=window.CircleMixBuildConfig?.includeBundledSongs===false;
+  let selectedSource = desktopBuild || initialParams.get("tab")==="local" ? "local" : "builtin";
   let selectedSongId = selectedSource==="builtin" ? (initialParams.get("song") || "anima") : (initialParams.get("song") || null);
   let selectedDifficultyId = selectedSource==="builtin" ? ((initialParams.get("difficulty") || "tech").toLowerCase()) : (initialParams.get("chart") || null);
   let selectedSong = selectedSource==="builtin" ? songs.get(selectedSongId || "anima") : null;
@@ -5279,7 +5280,7 @@ settingsOrigin=${settingsOrigin}`);
   function renderSongSelect(){
     if(!songCarousel || !songDifficulty) return;
     selectedSource = songTab==="local" ? "local" : "builtin";
-    const tabHtml = `<div class="songTabs"><button class="songTab ${selectedSource!=="local"?"on":""}" data-tab="built-in" type="button">BUILT-IN</button><button class="songTab ${selectedSource==="local"?"on":""}" data-tab="local" type="button">LOCAL</button></div>`;
+    const tabHtml = desktopBuild ? `<div class="songTabs"><button class="songTab on" data-tab="local" type="button">LOCAL</button></div>` : `<div class="songTabs"><button class="songTab ${selectedSource!=="local"?"on":""}" data-tab="built-in" type="button">BUILT-IN</button><button class="songTab ${selectedSource==="local"?"on":""}" data-tab="local" type="button">LOCAL</button></div>`;
     const list = selectedSource==="local" ? songs.localAll() : songs.all();
     if(selectedSource==="builtin"){
       if(!selectedSongId || !list.some(s=>s.id===selectedSongId)) selectedSongId=list[0]?.id || null;

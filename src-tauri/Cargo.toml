@@ -1,0 +1,16 @@
+[package]
+name = "circle-mix"
+version = "0.9.28"
+description = "CIRCLE MIX Windows desktop foundation"
+authors = ["CIRCLE MIX"]
+edition = "2021"
+
+[lib]
+name = "circle_mix_lib"
+crate-type = ["cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
