@@ -357,9 +357,16 @@
 
 
   function sourceKey(songData=selectedSong){ return (songData?.source==="local" || selectedSource==="local") ? "local" : "builtin"; }
+  function difficultyIds(songData=selectedSong){
+    const available=new Set([...Object.keys(songData?.difficulties||{}),...Object.keys(songData?.charts||{})]), ids=[], seen=new Set();
+    for(const id of [...(Array.isArray(songData?.difficultyOrder)?songData.difficultyOrder:[]),...Object.keys(songData?.difficulties||{}),...Object.keys(songData?.charts||{})]){
+      if(typeof id==="string"&&available.has(id)&&!seen.has(id)){ seen.add(id); ids.push(id); }
+    }
+    return ids;
+  }
   function localChartEntries(songData=selectedSong){
-    const charts=songData?.charts || {};
-    return Object.keys(charts).filter(id=>charts[id]?.notes?.length).map(id=>({id, chart:charts[id], meta:songData?.difficulties?.[id] || charts[id]?.meta || {}}));
+    const charts=songData?.charts||{};
+    return difficultyIds(songData).filter(id=>charts[id]?.notes?.length).map(id=>({id,chart:charts[id],meta:songData?.difficulties?.[id]||charts[id]?.meta||{}}));
   }
   function getActiveDifficultyLabel(songData=selectedSong, difficultyId=selectedDifficultyId || selectedMenuMode){
     if(!difficultyId) return "UNKNOWN";
@@ -446,9 +453,9 @@
 
   function resolveSelectedSong(songId, source=selectedSource){
     selectedSource = source==="local" ? "local" : "builtin";
-    selectedSongId = songId || (selectedSource==="builtin" ? "anima" : null);
-    selectedSong = selectedSource==="local" ? songs.localAll().find(s=>s.id===selectedSongId) : songs.get(selectedSongId || "anima");
-    if(!selectedSong && selectedSource==="builtin") selectedSong = {id:"anima", source:"builtin", title:"ANiMA", artist:"xi", bpm:184.6, offset:-0.04, difficulties:{normal:{label:"NORMAL"}, tech:{label:"TECH"}}};
+    selectedSongId = songId || (selectedSource==="builtin" ? songs.all()[0]?.id || null : null);
+    selectedSong = selectedSource==="local" ? songs.localAll().find(s=>s.id===selectedSongId) : (songs.getByKey ? songs.getByKey(`bundled:${selectedSongId}`) : songs.get(selectedSongId));
+
     BPM = selectedSong?.bpm || 184.6;
     BEAT = 60 / BPM;
     SONG_OFFSET = typeof selectedSong?.offset === "number" ? selectedSong.offset : -0.04;
@@ -5270,9 +5277,9 @@ settingsOrigin=${settingsOrigin}`);
     const tabHtml = `<div class="songTabs"><button class="songTab ${selectedSource!=="local"?"on":""}" data-tab="built-in" type="button">BUILT-IN</button><button class="songTab ${selectedSource==="local"?"on":""}" data-tab="local" type="button">LOCAL</button></div>`;
     const list = selectedSource==="local" ? songs.localAll() : songs.all();
     if(selectedSource==="builtin"){
-      if(!selectedSongId || !list.some(s=>s.id===selectedSongId)) selectedSongId="anima";
-      resolveSelectedSong(selectedSongId,"builtin");
-      if(!songs.hasDifficulty(selectedSong, selectedDifficultyId || selectedMenuMode)) selectedDifficultyId=Object.keys(selectedSong?.difficulties||{})[0] || null;
+      if(!selectedSongId || !list.some(s=>s.id===selectedSongId)) selectedSongId=list[0]?.id || null;
+      selectedSong=selectedSongId ? resolveSelectedSong(selectedSongId,"builtin") : null;
+      if(!songs.hasDifficulty(selectedSong, selectedDifficultyId || selectedMenuMode)) selectedDifficultyId=difficultyIds(selectedSong)[0] || null;
       selectedMenuMode=selectedDifficultyId || "tech";
       mapMode=selectedMenuMode;
     }else{
@@ -5287,27 +5294,28 @@ settingsOrigin=${settingsOrigin}`);
     syncSongUrl();
     songCarousel.innerHTML = tabHtml + (list.length ? list.map(songData => {
       const active = songData.id === selectedSongId;
-      const chartEntries = songData.source==="local" ? localChartEntries(songData) : Object.keys(songData.difficulties||{}).map(id=>({id}));
+      const chartEntries = songData.source==="local" ? localChartEntries(songData) : difficultyIds(songData).map(id=>({id}));
       const diffs=chartEntries.map(({id})=>{ const diff=difficultyViewForSong(songData,id); return `${escapeHtml(diff?.label || id.toUpperCase())} ${escapeHtml(formatStarValue(diff?.stars))}`; }).join(" · ");
       const songIdAttr=escapeAttribute(songData.id);
       const songTitle=escapeHtml(songData.title || "UNKNOWN");
       const artist=escapeHtml(songData.artist || "UNKNOWN");
       const bpm=escapeHtml(songData.bpm || "--");
-      const manage=songData.source==="local" ? `<div class="songManage"><button data-action="rename" data-song-id="${songIdAttr}">EDIT META</button><button data-action="clone" data-song-id="${songIdAttr}">CLONE</button><button data-action="restore" data-song-id="${songIdAttr}">RESTORE PREVIOUS</button><button data-action="delete" data-song-id="${songIdAttr}">DELETE</button><button data-action="deleteBackups" data-song-id="${songIdAttr}">DELETE + BACKUP</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : (songData.audioRequired ? `<div class="songManage"><button data-audio-action="${songData.audioLinked ? "unlink" : "link"}" data-song-id="${songIdAttr}">${songData.audioLinked ? "UNLINK LOCAL AUDIO" : "LINK LOCAL AUDIO"}</button><small>${escapeHtml(songData.audioLinked ? "LOCAL AUDIO LINKED · NOT UPLOADED" : songData.audioNotice)}</small></div>` : "");
+      const manage=songData.source==="local" ? `<div class="songManage"><button data-action="exportChart" data-song-id="${songIdAttr}">EXPORT CHART .CMIX</button><button data-action="exportFull" data-song-id="${songIdAttr}" ${songData.audioBlob?"":"disabled"}>EXPORT FULL .CMIX</button><button data-action="rename" data-song-id="${songIdAttr}">EDIT META</button><button data-action="clone" data-song-id="${songIdAttr}">CLONE</button><button data-action="restore" data-song-id="${songIdAttr}">RESTORE PREVIOUS</button><button data-action="delete" data-song-id="${songIdAttr}">DELETE</button><button data-action="deleteBackups" data-song-id="${songIdAttr}">DELETE + BACKUP</button><a href="./editor.html?localSong=${encodeURIComponent(songData.id)}">OPEN EDITOR</a></div>` : (songData.audioRequired ? `<div class="songManage"><button data-audio-action="${songData.audioLinked ? "unlink" : "link"}" data-song-id="${songIdAttr}">${songData.audioLinked ? "UNLINK LOCAL AUDIO" : "LINK LOCAL AUDIO"}</button><small>${escapeHtml(songData.audioLinked ? "LOCAL AUDIO LINKED · NOT UPLOADED" : songData.audioNotice)}</small></div>` : "");
       const jacketUrl=localJacketUrl(songData);
       const jacket=jacketUrl ? `<img src="${escapeAttribute(jacketUrl)}" alt="" loading="lazy" onerror="this.remove()">` : "";
       return `<div class="songCard${active ? " active" : ""}" data-song-id="${songIdAttr}">
         <button class="songCardPick" type="button" data-song-id="${songIdAttr}"><div class="songJacket" aria-hidden="true">${jacket}<span>${songTitle}</span></div>
         <div class="songMeta"><span>${artist}</span><strong>${songTitle}</strong><em>${bpm} BPM</em><small>${diffs || "NO CHART"}</small></div></button>${manage}
       </div>`;
-    }).join("") : `<div class="localEmpty"><p>로컬 라이브러리가 비어 있습니다. 에디터에서 곡을 만들어주세요.</p><button class="songPlayBtn" id="openEditorFromEmpty" type="button">OPEN EDITOR</button></div>`);
-    for(const tab of songCarousel.querySelectorAll(".songTab")){ bindPress(tab,async()=>{ songTab=tab.dataset.tab; selectedSource=songTab==="local"?"local":"builtin"; if(selectedSource==="local"){ selectedSongId=null; selectedDifficultyId=null; selectedSong=null; }else{ selectedSongId="anima"; selectedDifficultyId="tech"; } try{ pauseSong("reset"); setSongCurrentTime(0,"reset"); }catch(e){} await songs.refreshLocal(); renderSongSelect(); }); }
-    const emptyBtn=document.getElementById("openEditorFromEmpty"); if(emptyBtn) bindPress(emptyBtn,()=>{ location.href="./editor.html"; });
+    }).join("") : `<div class="localEmpty"><p>NO SONGS INSTALLED<br>IMPORT A .CMIX PACKAGE TO BEGIN</p><button class="songPlayBtn" id="openImportFromEmpty" type="button">IMPORT .CMIX</button></div>`);
+    for(const tab of songCarousel.querySelectorAll(".songTab")){ bindPress(tab,async()=>{ songTab=tab.dataset.tab; selectedSource=songTab==="local"?"local":"builtin"; if(selectedSource==="local"){ selectedSongId=null; selectedDifficultyId=null; selectedSong=null; }else{ selectedSongId=songs.all()[0]?.id || null; selectedDifficultyId=null; } try{ pauseSong("reset"); setSongCurrentTime(0,"reset"); }catch(e){} await songs.refreshLocal(); renderSongSelect(); }); }
+    const emptyBtn=document.getElementById("openImportFromEmpty"); if(emptyBtn) bindPress(emptyBtn,()=>window.CircleMixCmixImport?.open?.());
     for(const card of songCarousel.querySelectorAll(".songCardPick")){
       bindPress(card,()=>{ try{ pauseSong("reset"); setSongCurrentTime(0,"reset"); }catch(e){} resolveSelectedSong(card.dataset.songId, selectedSource); selectedDifficultyId=null; renderSongSelect(); });
     }
     for(const btn of songCarousel.querySelectorAll(".songManage button[data-action]")){
-      bindPress(btn,async()=>{ const id=btn.dataset.songId, action=btn.dataset.action; const rec=await window.CircleMixLocalSongs.get(id); if(!rec)return; if(action==="restore"){ try{ await window.CircleMixLocalSongs.restorePrevious(id); await songs.refreshLocal(); renderSongSelect(); }catch(error){ alert(`RESTORE FAILED: ${error.message}`); } } if(action==="delete"||action==="deleteBackups"){ if(confirm(`${rec.title}을(를) 삭제할까요? 오디오와 모든 채보${action==="deleteBackups"?" 및 backup":""}도 함께 삭제됩니다.`)){ await window.CircleMixLocalSongs.delete(id,{withBackup:action==="deleteBackups"}); revokeLocalJacketUrl(id); await songs.refreshLocal(); selectedSongId=null; selectedDifficultyId=null; selectedSong=null; renderSongSelect(); } } if(action==="clone"){ const copy={...rec,id:rec.id+"-copy",title:rec.title+" Copy",updatedAt:new Date().toISOString()}; await window.CircleMixLocalSongs.put(copy); await songs.refreshLocal(); resolveSelectedSong(copy.id,"local"); renderSongSelect(); } if(action==="rename"){ const title=prompt("곡명",rec.title); if(title===null)return; const artist=prompt("아티스트",rec.artist||""); if(artist===null)return; await window.CircleMixLocalSongs.put({...rec,title:title.trim()||rec.title,artist:artist.trim()||rec.artist,updatedAt:new Date().toISOString()}); await songs.refreshLocal(); renderSongSelect(); } });
+      bindPress(btn,async()=>{ const id=btn.dataset.songId, action=btn.dataset.action; const rec=await window.CircleMixLocalSongs.get(id); if(!rec)return;
+        if(action==="exportChart"||action==="exportFull"){ try{ btn.disabled=true; btn.textContent="EXPORTING…"; const adapter=window.CircleMixSongPackageAdapter, exporter=window.CircleMixCmixExporter; let duration=rec.actualDuration||rec.audioMetadata?.duration||rec.duration; if(!duration&&rec.audioBlob) duration=await window.CircleMixCmixAudio.metadata(rec.audioBlob); const exportRecord={...rec,audioMetadata:{...(rec.audioMetadata||{}),duration}}; const input=action==="exportChart"?adapter.songRecordToChartPackageInput(exportRecord,rec.audioMatch||{durationSeconds:duration,durationToleranceSeconds:rec.durationTolerance||2,sha256:rec.actualSha256||undefined,suggestedFilename:rec.localAudioFileName||undefined}):adapter.songRecordToFullPackageInput(exportRecord); const pkg=action==="exportChart"?await exporter.createChartPackage(input):await exporter.createFullPackage(input); const url=URL.createObjectURL(pkg.blob), a=document.createElement("a"); a.href=url;a.download=pkg.filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),0); }catch(error){ alert(`EXPORT FAILED: ${error.message}`); }finally{ btn.disabled=false; btn.textContent=action==="exportChart"?"EXPORT CHART .CMIX":"EXPORT FULL .CMIX"; } return; } if(action==="restore"){ try{ await window.CircleMixLocalSongs.restorePrevious(id); await songs.refreshLocal(); renderSongSelect(); }catch(error){ alert(`RESTORE FAILED: ${error.message}`); } } if(action==="delete"||action==="deleteBackups"){ if(confirm(`${rec.title}을(를) 삭제할까요? 오디오와 모든 채보${action==="deleteBackups"?" 및 backup":""}도 함께 삭제됩니다.`)){ await window.CircleMixLocalSongs.delete(id,{withBackup:action==="deleteBackups"}); revokeLocalJacketUrl(id); await songs.refreshLocal(); selectedSongId=null; selectedDifficultyId=null; selectedSong=null; renderSongSelect(); } } if(action==="clone"){ const copy={...rec,id:rec.id+"-copy",title:rec.title+" Copy",updatedAt:new Date().toISOString()}; await window.CircleMixLocalSongs.put(copy); await songs.refreshLocal(); resolveSelectedSong(copy.id,"local"); renderSongSelect(); } if(action==="rename"){ const title=prompt("곡명",rec.title); if(title===null)return; const artist=prompt("아티스트",rec.artist||""); if(artist===null)return; await window.CircleMixLocalSongs.put({...rec,title:title.trim()||rec.title,artist:artist.trim()||rec.artist,updatedAt:new Date().toISOString()}); await songs.refreshLocal(); renderSongSelect(); } });
     }
     for(const btn of songCarousel.querySelectorAll(".songManage button[data-audio-action]")){
       bindPress(btn,async()=>{
@@ -5336,7 +5344,7 @@ settingsOrigin=${settingsOrigin}`);
     if(selectedSource==="local" && !selectedSong){
       diffHtml = `<div class="songDiffEmpty">로컬 곡을 선택하거나 에디터에서 곡을 만들어주세요.</div>`;
     }else{
-      const entries = selectedSource==="local" ? localChartEntries(selectedSong) : Object.keys(selectedSong?.difficulties||{}).filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff=>({id:diff, meta:selectedSong.difficulties[diff]}));
+      const entries = selectedSource==="local" ? localChartEntries(selectedSong) : difficultyIds(selectedSong).filter(diff => songs.hasDifficulty(selectedSong, diff)).map(diff=>({id:diff, meta:selectedSong.difficulties[diff]}));
       if(selectedSource==="local" && !entries.length) diffHtml = `<div class="songDiffEmpty">선택한 로컬 곡에 저장된 채보가 없습니다.</div>`;
       else diffHtml = entries.map(({id,meta,chart}) => {
         const label = getActiveDifficultyLabel(selectedSong,id);
@@ -5400,7 +5408,7 @@ settingsOrigin=${settingsOrigin}`);
     const params=new URLSearchParams(window.location.search);
     selectedSource=params.get("tab")==="local" ? "local" : "builtin";
     songTab=selectedSource==="local" ? "local" : "built-in";
-    selectedSongId=selectedSource==="local" ? (params.get("song") || null) : (params.get("song") || selectedSongId || "anima");
+    selectedSongId=selectedSource==="local" ? (params.get("song") || null) : (params.get("song") || selectedSongId || songs.all()[0]?.id || null);
     selectedDifficultyId=selectedSource==="local" ? (params.get("chart") || null) : ((params.get("difficulty") || selectedDifficultyId || "tech").toLowerCase());
     stopSongPreview();
     safeSetState("songSelect");

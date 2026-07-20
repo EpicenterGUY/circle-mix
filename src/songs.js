@@ -13,20 +13,21 @@
     },{});
   }
   const BUILT_INS = [
-    { id:"anima", source:"builtin", title:"ANiMA", artist:"xi", audio:"#embedded-anima", jacket:null, bpm:184.6, offset:-0.04, previewStart:20, previewDuration:15,
+    { id:"anima", source:"bundled", title:"ANiMA", artist:"xi", audio:"#embedded-anima", jacket:null, bpm:184.6, offset:-0.04, previewStart:20, previewDuration:15,
       difficulties:{ normal:{label:"NORMAL",chart:"builtin:anima-normal"}, tech:{label:"TECH",chart:"builtin:anima-tech"} } }
   ];
   if(ghostBundle?.song && ghostBundle?.charts){
     BUILT_INS.push({
       ...ghostBundle.song,
-      id:"ghost-rule", source:"builtin", title:"Ghost Rule", titleUnicode:"ゴーストルール", artist:"DECO*27", bpm:210, offset:0.148,
-      audio:"./assets/audio/ghost-rule.mp3", jacket:"./assets/jackets/ghost-rule.jpg",
+      id:"ghost-rule", source:"bundled", title:"Ghost Rule", titleUnicode:"ゴーストルール", artist:"DECO*27", bpm:210, offset:0.148,
+      audio:"./assets/audio/ghost-rule.mp3", jacket:"./assets/jackets/ghost-rule.jpg", charts:ghostBundle.charts,
       difficulties:cloneGhostDifficulties(ghostBundle)
     });
   }
   if(routingBundle?.song && routingBundle?.charts){
     BUILT_INS.push({
       ...routingBundle.song,
+      source:"bundled", charts:routingBundle.charts,
       difficulties:cloneGhostDifficulties(routingBundle)
     });
   }
@@ -77,5 +78,20 @@
   window.CircleMixLocalSongs = LocalSongs;
   window.CircleMixBuiltinAudio = BuiltinAudio;
   window.CircleMixChartTools = { validateChart, calculateStars, validTypes:[...VALID_TYPES], normalizeAngle, noteAngle, noteEndAngle, shortestAngleDifference };
-  window.CircleMixSongRegistry = { all(){ return BUILT_INS.slice(); }, localAll(){ return LocalSongs.cached(); }, async refreshLocal(){ return LocalSongs.all(); }, async refreshBuiltinAudio(){ return BuiltinAudio.refresh(); }, get(id){ return BUILT_INS.find(s=>s.id===id) || LocalSongs.cached().find(s=>s.id===id) || BUILT_INS[0]; }, hasDifficulty(song,d){ return Boolean(song?.difficulties?.[d]); } };
+  const Record=window.CircleMixSongRecord;
+  const bundled=()=>window.CircleMixBuildConfig?.includeBundledSongs===false?[]:BUILT_INS.map(song=>Record?Record.normalize(song,"bundled"):song);
+  const locals=()=>LocalSongs.cached().map(song=>Record?Record.normalize(song,"local"):song);
+  const listeners=new Set();
+  const notify=()=>listeners.forEach(listener=>listener());
+  window.CircleMixSongRegistry = {
+    listAll(){ return [...bundled(),...locals()]; }, listBundled(){ return bundled(); }, listLocal(){ return locals(); },
+    // Legacy names remain available to old callers.
+    all(){ return bundled(); }, localAll(){ return locals(); },
+    async refreshLocal(){ const result=await LocalSongs.all(); notify(); return result.map(song=>Record?Record.normalize(song,"local"):song); },
+    async refreshBuiltinAudio(){ const result=await BuiltinAudio.refresh(); notify(); return result; },
+    get(identity){ if(typeof identity==="string") return this.get({source:"bundled",id:identity}) || this.get({source:"local",id:identity}); const source=identity?.source==="local"?"local":"bundled", id=identity?.id; return (source==="local"?locals():bundled()).find(song=>song.id===id)||null; },
+    getByKey(key){ const [source,...rest]=String(key||"").split(":"); return this.get({source,id:rest.join(":")}); },
+    keyOf(identity){ return Record?.keyOf(identity) || `${identity?.source==="local"?"local":"bundled"}:${identity?.id||""}`; },
+    subscribe(listener){ listeners.add(listener); return ()=>listeners.delete(listener); }, hasDifficulty(song,d){ return Boolean(song?.difficulties?.[d]); }
+  };
 })();
