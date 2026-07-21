@@ -4,12 +4,12 @@
   function recordFromPackage(pkg, now=new Date().toISOString()){
     const manifest=pkg?.manifest;
     if(!manifest || manifest.packageType!=='full' || !(pkg.audioBlob instanceof Blob)) throw new Error('FULL .cmix package with audio is required.');
-    const difficulties=Object.create(null), charts=Object.create(null), difficultyOrder=[];
+    const difficulties=Object.create(null), charts=Object.create(null), difficultyOrder=[], songBpm=Number(manifest.bpm)||0;
     for(const descriptor of manifest.charts||[]){
       difficultyOrder.push(descriptor.id);
       const chart=pkg.charts?.[descriptor.file];
       if(!chart || !Array.isArray(chart.notes)) throw new Error(`Validated chart is missing: ${descriptor.id}`);
-      charts[descriptor.id]=chart;
+      charts[descriptor.id]=Number.isFinite(Number(chart.bpm))&&Number(chart.bpm)>0?chart:{...chart,bpm:songBpm};
       difficulties[descriptor.id]={label:descriptor.name,chart:descriptor.id,level:descriptor.level,style:descriptor.style||null,declaredStars:Number.isFinite(Number(descriptor.stars??descriptor.level))?Number(descriptor.stars??descriptor.level):undefined,stars:Number.isFinite(Number(descriptor.level))?Number(descriptor.level):undefined};
     }
     if(!Object.keys(charts).length) throw new Error('The package has no playable charts.');
@@ -18,7 +18,7 @@
   function recordFromChartPackage(pkg,linked,now=new Date().toISOString()){
     if(pkg?.manifest?.packageType!=='chart'||!(linked?.blob instanceof Blob)) throw new Error('Validated CHART package and local audio are required.');
     const base=recordFromPackage({...pkg,manifest:{...pkg.manifest,packageType:'full'},audioBlob:linked.blob},now), match=pkg.manifest.audioMatch||{};
-    return {...base,packageType:'chart',audioBlob:linked.blob,audioMatch:match,audioMetadata:{duration:linked.duration,extension:String(linked.fileName||'').split('.').pop()},audioType:linked.audioType||linked.blob.type||null,linkedAudio:true,localAudioFileName:String(linked.fileName||'').split(/[\\/]/).pop(),actualDuration:linked.duration,actualSha256:linked.sha256||null,expectedDuration:match.durationSeconds,durationTolerance:linked.tolerance,expectedSha256:match.sha256||null,matchMethod:linked.matchMethod,hashOverride:Boolean(linked.hashOverride)};
+    return {...base,packageType:'chart',audioBlob:linked.blob,audioMatch:match,audioMetadata:{duration:linked.duration,extension:String(linked.fileName||'').split('.').pop()},audioType:linked.audioType||linked.blob.type||null,linkedAudio:true,localAudioFileName:String(linked.fileName||'').split(/[\/]/).pop(),actualDuration:linked.duration,actualSha256:linked.sha256||null,expectedDuration:match.durationSeconds,durationTolerance:linked.tolerance,expectedSha256:match.sha256||null,matchMethod:linked.matchMethod,hashOverride:Boolean(linked.hashOverride)};
   }
   function replacementInfo(existing,incoming){
     if(!existing)return {kind:'new',message:'NEW INSTALL'};
