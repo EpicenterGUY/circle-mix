@@ -1,23 +1,73 @@
 /* Public .cmix import surface. Validation and installation remain in the hardened modules. */
-(function(){'use strict';
-const $=id=>document.getElementById(id), fmt=n=>`${Math.max(0,Number(n)||0).toLocaleString()} bytes`;
+(function(){
+'use strict';
+
+const $=id=>document.getElementById(id);
+const fmt=n=>`${Math.max(0,Number(n)||0).toLocaleString()} bytes`;
 let generation=0,aborter=null,jacketUrl=null,installing=false,returnFocus=null,firstUseOpen=false;
+
 const status=v=>{$('cmixImportStatus').textContent=v;};
 const err=e=>`${e?.code||'STORAGE_ACCESS_FAILED'}: ${e?.message||'The package could not be processed.'}`;
 function safeScene(){ return !!window.CircleMixCanImportCmix?.() || (!document.getElementById('songSelect')?.hidden && !document.getElementById('tutorialHud')?.hidden===false); }
 function clear(){ generation++; aborter?.abort(); aborter=null; if(jacketUrl)URL.revokeObjectURL(jacketUrl),jacketUrl=null; }
 function close(){ clear(); installing=false; firstUseOpen=false; $('cmixDropOverlay').hidden=true; $('cmixImportModal').hidden=true; $('cmixImportContent').replaceChildren(); returnFocus?.focus?.(); returnFocus=null; }
 function btn(label,fn,kind=''){ const b=document.createElement('button'); b.type='button'; b.className=`songPlayBtn ${kind}`; b.textContent=label; b.onclick=fn; return b; }
+
+function autoButtonState(button){
+  if(!button)return false;
+  const pressed=button.getAttribute?.('aria-pressed');
+  if(pressed==='true')return true;
+  if(pressed==='false')return false;
+  if(button.classList?.contains?.('on'))return true;
+  return /(?:^|\s)ON(?:\s|$)/i.test(String(button.textContent||''));
+}
+
+function installAutoToggleFallback(doc=document){
+  if(!doc?.addEventListener || doc.__circleMixLocalAutoFallbackInstalled)return false;
+  doc.__circleMixLocalAutoFallbackInstalled=true;
+  const initialStates=new WeakMap();
+  const findButton=event=>event?.target?.closest?.('[data-auto-play]')||null;
+  const remember=event=>{
+    const button=findButton(event);
+    if(button)initialStates.set(button,autoButtonState(button));
+  };
+  const verify=event=>{
+    const button=findButton(event);
+    if(!button)return;
+    const initial=initialStates.has(button)?initialStates.get(button):autoButtonState(button);
+    initialStates.delete(button);
+    setTimeout(()=>{
+      const live=doc.querySelector?.('[data-auto-play]')||button;
+      if(autoButtonState(live)!==initial)return;
+      const fallback=doc.getElementById?.('safeAuto')||doc.getElementById?.('autoToggle');
+      if(fallback && fallback!==live && typeof fallback.click==='function')fallback.click();
+    },0);
+  };
+  doc.addEventListener('pointerdown',remember,true);
+  doc.addEventListener('touchstart',remember,true);
+  doc.addEventListener('click',verify,true);
+  return true;
+}
+
 function open(){ if(!safeScene())return; returnFocus=document.activeElement; clear(); $('cmixImportContent').replaceChildren(); $('cmixImportModal').hidden=false; $('cmixImportTitle').focus(); status('SELECT .CMIX PACKAGE'); try{ if(localStorage.getItem('circleMixCmixImportNotice')!=='seen')notice(); else $('cmixImportInput').click(); }catch(_){ notice(); } }
 function notice(){ if(firstUseOpen)return; firstUseOpen=true; const c=$('cmixImportContent'), p=document.createElement('p'); p.textContent='.cmix is a local song package. Files are never uploaded to a server and are stored only in this browser. CHART packages need an audio file you own; FULL packages may include audio. Import only packages from sources you trust. Copyright and distribution rights remain with the package provider and you.'; const dont=document.createElement('label'), check=document.createElement('input'); check.type='checkbox'; dont.append(check,' DO NOT SHOW AGAIN'); c.append(p,dont,document.createElement('br'),btn('CONTINUE',()=>{firstUseOpen=false;try{if(check.checked)localStorage.setItem('circleMixCmixImportNotice','seen');}catch(_){} $('cmixImportInput').click();}),btn('CANCEL',close)); }
 function packageInfo(pkg,file){ const m=pkg.manifest, box=document.createElement('section'), pre=document.createElement('p'); pre.textContent=`${m.title}\n${m.artist}\n${m.packageType.toUpperCase()} · VERSION ${m.packageVersion}\n${m.charts.length} CHART${m.charts.length===1?'':'S'} · PACKAGE ${fmt(file.size)}\nESTIMATED LOCAL STORAGE: ${fmt(file.size)}`; box.append(pre); if(pkg.jacketBlob){const i=document.createElement('img'); jacketUrl=URL.createObjectURL(pkg.jacketBlob); i.src=jacketUrl;i.alt=`Jacket for ${m.title}`;i.className='cmixJacket';box.append(i);} const levels=(m.charts||[]).map(x=>`${x.difficulty||x.id||'CHART'} ${x.level??''}`.trim()); if(levels.length)box.append(Object.assign(document.createElement('p'),{textContent:`DIFFICULTIES: ${levels.join(', ')}`})); return box; }
 async function install(pkg,link,override){ if(installing)return; installing=true; status('PREPARING ATOMIC INSTALL'); try{ const record=pkg.manifest.packageType==='full'?CircleMixCmixLocalInstall.recordFromPackage(pkg):CircleMixCmixLocalInstall.recordFromChartPackage(pkg,{...link,hashOverride:!!override}); const library=window.CircleMixLocalLibrary, old=await CircleMixLocalSongs.get(record.id), policy=CircleMixCmixLocalInstall.replacementInfo(old,record); const c=$('cmixImportContent'); if(old&&!c.querySelector('[data-replace]')){ const p=document.createElement('p');p.dataset.replace='1';p.textContent=`UPDATE ${old.packageVersion} → ${record.packageVersion}\nAdded: ${(policy.added||[]).join(', ')||'none'}\nChanged: ${(policy.changed||[]).join(', ')||'none'}\nRemoved: ${(policy.removed||[]).join(', ')||'none'}\nBackup space: ${fmt(library.estimateRecordBytes(old))}`; c.append(p,btn('INSTALL UPDATE WITH BACKUP',()=>install(pkg,link,override)),btn('REPLACE WITHOUT BACKUP',()=>install(pkg,link,override))); installing=false; status('REVIEW UPDATE'); return; } await library.install(record,{expectedCurrent:{exists:!!old,...(old||{})},keepBackup:!!old}); await CircleMixSongRegistry.refreshLocal(); status('INSTALL COMPLETE'); c.append(btn('OPEN IN LOCAL SONGS',async()=>{await window.CircleMixOpenLocalSong?.(record.id);close();}),btn('IMPORT ANOTHER',open)); }catch(e){status(`INSTALL FAILED [${err(e)}]`);}finally{installing=false;} }
 function chartUi(pkg){ const m=pkg.manifest, match=m.audioMatch, tol=match.durationToleranceSeconds??2, box=document.createElement('section'), out=document.createElement('p'), input=document.createElement('input'); input.type='file';input.hidden=true;input.accept='.mp3,.ogg,.wav,audio/mpeg,audio/ogg,audio/wav'; box.append(Object.assign(document.createElement('p'),{textContent:`LOCAL AUDIO REQUIRED: ${match.suggestedFilename||'audio file'}\nEXPECTED DURATION: ${match.durationSeconds}s ± ${tol}s\nSHA-256: ${match.sha256?'provided':'not provided'}\nYour audio is not uploaded to a server.`}),btn('SELECT LOCAL AUDIO',()=>input.click()),input,out); input.onchange=async()=>{const file=input.files[0];input.value='';if(!file)return; const token=++generation;status('CHECKING LOCAL AUDIO');out.textContent=`CHECKING ${file.name}…`;try{const a=await CircleMixCmixAudio.inspect(file);if(token!==generation)return;const delta=Math.abs(a.duration-match.durationSeconds),durationOk=delta<=tol+1e-7,hashOk=!match.sha256||a.sha256===match.sha256;out.textContent=`FILE: ${file.name}\nDuration: ${a.duration.toFixed(3)}s (difference ${delta.toFixed(3)}s; allowed ${tol}s)\nSHA-256 expected: ${match.sha256||'not provided'}\nSHA-256 actual: ${a.sha256||'unavailable'}`; if(!durationOk){status('AUDIO_DURATION_MISMATCH: select another audio file');return;} if(!hashOk){status('AUDIO_HASH_MISMATCH: automatic installation blocked');box.append(btn('OVERRIDE HASH MISMATCH',()=>install(pkg,{...a,fileName:file.name,matchMethod:'hash-override'},true),'cmixDanger'));return;}status(match.sha256?'EXACT HASH MATCH':'DURATION MATCH');box.append(btn('INSTALL',()=>install(pkg,{...a,fileName:file.name,matchMethod:match.sha256?'exact-hash':'duration-only'})));}catch(e){if(token===generation)status(`AUDIO CHECK FAILED [${err(e)}]`);}}; return box; }
 function inspect(file){ const token=++generation;clear();generation=token; aborter=new AbortController(); $('cmixImportModal').hidden=false;const c=$('cmixImportContent');c.replaceChildren();status('READING PACKAGE'); CircleMixCmixImporter.inspect(file,{signal:aborter.signal,onProgress:x=>token===generation&&status(x)}).then(async r=>{if(token!==generation)return;if(!r.ok){status('PACKAGE CHECK FAILED');c.textContent=r.errors.map(err).join('\n');return;} const old=await CircleMixLocalSongs.get(r.package.manifest.id); if(token!==generation)return;c.append(packageInfo(r.package,file),Object.assign(document.createElement('p'),{textContent:old?`UPDATE AVAILABLE · installed version ${old.packageVersion}`:'NEW LOCAL SONG'})); c.append(r.package.manifest.packageType==='full'?btn('INSTALL',()=>install(r.package)):chartUi(r.package));status('PACKAGE READY');}).catch(e=>token===generation&&status(`PACKAGE CHECK FAILED [${err(e)}]`)); }
-function fileDragCandidate(dt){
-  return [...(dt?.types||[])].includes('Files') || [...(dt?.items||[])].some(item=>item?.kind==='file') || (dt?.files?.length||0)>0;
-}
+function fileDragCandidate(dt){ return [...(dt?.types||[])].includes('Files') || [...(dt?.items||[])].some(item=>item?.kind==='file') || (dt?.files?.length||0)>0; }
 function cmixFiles(dt){return [...(dt?.files||[])].filter(f=>/\.cmix$/i.test(f.name)||f.type==='application/vnd.circle-mix.cmix');}
-document.addEventListener('DOMContentLoaded',()=>{const input=$('cmixImportInput'), b=$('cmixImportBtn'); b.onclick=open; input.onchange=()=>{const f=input.files[0];input.value='';if(f)inspect(f);}; $('cmixImportClose').onclick=close; document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('cmixImportModal').hidden)close();}); for(const type of ['dragover','dragleave','drop'])window.addEventListener(type,e=>{if(type==='dragleave'){if(safeScene())$('cmixDropOverlay').hidden=true;return;}if(!safeScene()||['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)||!fileDragCandidate(e.dataTransfer))return;e.preventDefault();if(type==='dragover'){if(e.dataTransfer)e.dataTransfer.dropEffect='copy';$('cmixDropOverlay').hidden=false;return;}$('cmixDropOverlay').hidden=true;const files=cmixFiles(e.dataTransfer);if(files.length===1)inspect(files[0]);else if(files.length>1){$('cmixImportModal').hidden=false;status('SELECT ONE .CMIX PACKAGE AT A TIME');}});window.addEventListener('beforeunload',clear);});
-window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles};
+
+document.addEventListener('DOMContentLoaded',()=>{
+  installAutoToggleFallback(document);
+  const input=$('cmixImportInput'), b=$('cmixImportBtn');
+  b.onclick=open;
+  input.onchange=()=>{const f=input.files[0];input.value='';if(f)inspect(f);};
+  $('cmixImportClose').onclick=close;
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('cmixImportModal').hidden)close();});
+  for(const type of ['dragover','dragleave','drop'])window.addEventListener(type,e=>{if(type==='dragleave'){if(safeScene())$('cmixDropOverlay').hidden=true;return;}if(!safeScene()||['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)||!fileDragCandidate(e.dataTransfer))return;e.preventDefault();if(type==='dragover'){if(e.dataTransfer)e.dataTransfer.dropEffect='copy';$('cmixDropOverlay').hidden=false;return;}$('cmixDropOverlay').hidden=true;const files=cmixFiles(e.dataTransfer);if(files.length===1)inspect(files[0]);else if(files.length>1){$('cmixImportModal').hidden=false;status('SELECT ONE .CMIX PACKAGE AT A TIME');}});
+  window.addEventListener('beforeunload',clear);
+});
+
+window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,autoButtonState};
 })();
