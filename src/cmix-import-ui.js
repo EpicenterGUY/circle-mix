@@ -49,6 +49,32 @@ function installAutoToggleFallback(doc=document){
     pending={id:++sequence,button,initialButton:autoButtonState(button),initialStable:autoButtonState(stable),scheduled:false,done:false};
     return pending;
   };
+  const finish=(gesture,enabled)=>{
+    const current=doc.querySelector?.('[data-auto-play]')||gesture.button;
+    syncAutoButton(current,enabled);
+    gesture.done=true;
+    if(pending===gesture)pending=null;
+  };
+  const recover=(gesture,attempt=0)=>{
+    if(gesture.done)return;
+    const stable=stableAutoControl(doc);
+    if(!stable || typeof stable.click!=='function'){ finish(gesture,gesture.initialStable); return; }
+    const before=autoButtonState(stable);
+    stable.click();
+    setTimeout(()=>{
+      if(gesture.done)return;
+      const currentStable=stableAutoControl(doc);
+      const after=autoButtonState(currentStable);
+      if(after===before && attempt<1){
+        // safeBind intentionally ignores activations within 180 ms. A previous
+        // real click may therefore suppress this synthetic bridge; retry once
+        // after that guard expires instead of leaving LOCAL visually stuck.
+        setTimeout(()=>recover(gesture,attempt+1),220);
+        return;
+      }
+      finish(gesture,after);
+    },0);
+  };
   const verify=event=>{
     const button=findButton(event);
     if(!button)return;
@@ -61,17 +87,9 @@ function installAutoToggleFallback(doc=document){
       const stable=stableAutoControl(doc);
       const liveChanged=autoButtonState(live)!==gesture.initialButton;
       const stableChanged=autoButtonState(stable)!==gesture.initialStable;
-      if(stableChanged || liveChanged){
-        if(stable)syncAutoButton(live,autoButtonState(stable));
-      }else if(stable && stable!==live && typeof stable.click==='function'){
-        stable.click();
-        setTimeout(()=>{
-          const current=doc.querySelector?.('[data-auto-play]')||live;
-          syncAutoButton(current,autoButtonState(stableAutoControl(doc)));
-        },0);
-      }
-      gesture.done=true;
-      if(pending===gesture)pending=null;
+      if(stableChanged || liveChanged) finish(gesture,stable?autoButtonState(stable):autoButtonState(live));
+      else if(stable && stable!==live) recover(gesture);
+      else finish(gesture,gesture.initialButton);
     },0);
   };
   doc.addEventListener('pointerdown',begin,true);
