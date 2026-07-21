@@ -169,14 +169,14 @@ async function snapshot(page){
         assert(state.lastCard&&state.lastCard.bottom<=state.carousel.bottom+2&&state.lastCard.bottom>state.carousel.top,`${viewport.name} last card not reachable ${JSON.stringify(state)}`);
         assert(state.lastCard.top<state.carousel.bottom-8,`${viewport.name} last card not visible after scroll ${JSON.stringify(state)}`);
 
-        stage='verify tab interaction';
+        stage='verify LOCAL tab interaction';
         await page.evaluate(()=>{const carousel=document.getElementById('songCarousel');carousel.scrollTop=0;});
         await dismissBlockingOverlays(page);
-        const bundled=page.locator('.songTab').filter({hasText:/BUNDLED/i}).first();
         const local=page.locator('.songTab').filter({hasText:/LOCAL/i}).first();
-        await bundled.click();
         await local.click();
         await page.waitForFunction(()=>document.querySelectorAll('.songCard').length>=7,{timeout:3000});
+        state=await snapshot(page);
+        assertInside(state.localTab,state.tabs,`${viewport.name} LOCAL tab after tap`);
         assert.deepEqual(errors,[],`${viewport.name} page errors: ${JSON.stringify(errors)}`);
         console.log(`mobile song select layout passed: ${viewport.name}`);
       }catch(error){
