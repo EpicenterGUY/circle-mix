@@ -49,8 +49,8 @@ function cacheNameForUrl(url){ return BUILTIN_OFFLINE_URLS.includes(url) ? MEDIA
 async function putRequired(url, port, done, total){
   const cache = await caches.open(cacheNameForUrl(url));
   const cached = await cache.match(url, {ignoreSearch:false});
-  const refreshSongSelectUi=url.includes("cmix-import-ui.js");
-  if(cached?.ok && cached.status === 200 && !refreshSongSelectUi) return {ok:true, reused:true};
+  const refreshDynamicUi=url.includes("cmix-import-ui.js");
+  if(cached?.ok && cached.status === 200 && !refreshDynamicUi) return {ok:true, reused:true};
   const response = await fetch(new Request(url, {cache:"reload"}));
   if(!response.ok || response.status !== 200) return {ok:false, url, status:response.status};
   await cache.put(url, response.clone());

@@ -72,9 +72,6 @@ function installAutoToggleFallback(doc=document){
     if(gesture.done)return;
     const stable=stableAutoControl(doc);
     if(!stable){
-      // The current song-select DOM has no persistent AUTO control. Route the
-      // recovery through the production KeyO handler, which owns gameState,
-      // then repaint the dynamically rendered LOCAL control explicitly.
       if(dispatchAutoShortcut(doc)) finish(gesture,!gesture.initialButton);
       else finish(gesture,gesture.initialButton);
       return;
@@ -87,9 +84,6 @@ function installAutoToggleFallback(doc=document){
       const currentStable=stableAutoControl(doc);
       const after=autoButtonState(currentStable);
       if(after===before && attempt<1){
-        // safeBind intentionally ignores activations within 180 ms. A previous
-        // real click may therefore suppress this synthetic bridge; retry once
-        // after that guard expires instead of leaving LOCAL visually stuck.
         setTimeout(()=>recover(gesture,attempt+1),220);
         return;
       }
@@ -219,6 +213,18 @@ function installMobileSongSelectLayout(doc=document){
   return true;
 }
 
+function loadPlayerProfile(doc=document){
+  if(window.CircleMixPlayerProfile){window.CircleMixPlayerProfile.installResultRecorder?.(doc);return true;}
+  if(doc.querySelector?.('script[data-circle-mix-player-profile]'))return false;
+  const script=doc.createElement('script');
+  script.src='./src/player-profile.js?v=20260722-local-profile-records';
+  script.dataset.circleMixPlayerProfile='1';
+  script.onload=()=>window.CircleMixPlayerProfile?.installResultRecorder?.(doc);
+  script.onerror=()=>console.warn('Player profile module failed to load');
+  doc.head.append(script);
+  return true;
+}
+
 function open(){ if(!safeScene())return; returnFocus=document.activeElement; clear(); $('cmixImportContent').replaceChildren(); $('cmixImportModal').hidden=false; $('cmixImportTitle').focus(); status('SELECT .CMIX PACKAGE'); try{ if(localStorage.getItem('circleMixCmixImportNotice')!=='seen')notice(); else $('cmixImportInput').click(); }catch(_){ notice(); } }
 function notice(){ if(firstUseOpen)return; firstUseOpen=true; const c=$('cmixImportContent'), p=document.createElement('p'); p.textContent='.cmix is a local song package. Files are never uploaded to a server and are stored only in this browser. CHART packages need an audio file you own; FULL packages may include audio. Import only packages from sources you trust. Copyright and distribution rights remain with the package provider and you.'; const dont=document.createElement('label'), check=document.createElement('input'); check.type='checkbox'; dont.append(check,' DO NOT SHOW AGAIN'); c.append(p,dont,document.createElement('br'),btn('CONTINUE',()=>{firstUseOpen=false;try{if(check.checked)localStorage.setItem('circleMixCmixImportNotice','seen');}catch(_){} $('cmixImportInput').click();}),btn('CANCEL',close)); }
 function packageInfo(pkg,file){ const m=pkg.manifest, box=document.createElement('section'), pre=document.createElement('p'); pre.textContent=`${m.title}\n${m.artist}\n${m.packageType.toUpperCase()} · VERSION ${m.packageVersion}\n${m.charts.length} CHART${m.charts.length===1?'':'S'} · PACKAGE ${fmt(file.size)}\nESTIMATED LOCAL STORAGE: ${fmt(file.size)}`; box.append(pre); if(pkg.jacketBlob){const i=document.createElement('img'); jacketUrl=URL.createObjectURL(pkg.jacketBlob); i.src=jacketUrl;i.alt=`Jacket for ${m.title}`;i.className='cmixJacket';box.append(i);} const levels=(m.charts||[]).map(x=>`${x.difficulty||x.id||'CHART'} ${x.level??''}`.trim()); if(levels.length)box.append(Object.assign(document.createElement('p'),{textContent:`DIFFICULTIES: ${levels.join(', ')}`})); return box; }
@@ -231,6 +237,7 @@ function cmixFiles(dt){return [...(dt?.files||[])].filter(f=>/\.cmix$/i.test(f.n
 document.addEventListener('DOMContentLoaded',()=>{
   installMobileSongSelectLayout(document);
   installAutoToggleFallback(document);
+  loadPlayerProfile(document);
   const input=$('cmixImportInput'), b=$('cmixImportBtn');
   b.onclick=open;
   input.onchange=()=>{const f=input.files[0];input.value='';if(f)inspect(f);};
@@ -240,5 +247,5 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.addEventListener('beforeunload',clear);
 });
 
-window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,installMobileSongSelectLayout,autoButtonState,syncAutoButton,dispatchAutoShortcut};
+window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,installMobileSongSelectLayout,autoButtonState,syncAutoButton,dispatchAutoShortcut,loadPlayerProfile};
 })();
