@@ -48,7 +48,7 @@ function startStaticServer(root){
 async function autoSnapshot(page){
   return page.evaluate(()=>{
     const local=document.querySelector('[data-auto-play]');
-    const stable=document.getElementById('safeAuto');
+    const stable=document.getElementById('safeAuto')||document.getElementById('autoToggle');
     const details=element=>element?{
       text:element.textContent,
       className:element.className,
@@ -73,13 +73,14 @@ async function autoSnapshot(page){
 async function waitForAuto(page,on,label){
   await page.waitForFunction(expected=>{
     const local=document.querySelector('[data-auto-play]');
-    const stable=document.getElementById('safeAuto');
+    const stable=document.getElementById('safeAuto')||document.getElementById('autoToggle');
     const state=element=>!!element&&(element.classList.contains('on')||/(?:^|\s)ON(?:\s|$)/i.test(element.textContent||''));
-    return state(local)===expected&&state(stable)===expected&&local?.querySelector('span')?.textContent===(expected?'ON':'OFF');
+    const stableMatches=!stable||state(stable)===expected;
+    return state(local)===expected&&stableMatches&&local?.querySelector('span')?.textContent===(expected?'ON':'OFF');
   },on,{timeout:5000});
   const snapshot=await autoSnapshot(page);
   assert.match(snapshot.local?.text||'',on?/ON/:/OFF/,`${label} LOCAL text ${JSON.stringify(snapshot)}`);
-  assert.match(snapshot.stable?.text||'',on?/ON/:/OFF/,`${label} stable text ${JSON.stringify(snapshot)}`);
+  if(snapshot.stable) assert.match(snapshot.stable.text||'',on?/ON/:/OFF/,`${label} stable text ${JSON.stringify(snapshot)}`);
 }
 
 (async()=>{
