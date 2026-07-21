@@ -45,6 +45,16 @@ function assertInside(inner,outer,label,tolerance=2){
   assert(inner.bottom<=outer.bottom+tolerance,`${label} bottom ${inner.bottom} > ${outer.bottom}`);
 }
 
+async function dismissBlockingOverlays(page){
+  await page.evaluate(()=>{
+    const update=document.getElementById('updateLogOverlay');
+    if(update){update.classList.remove('show');update.hidden=true;}
+    document.body.classList.remove('updateLogOpen');
+    const prompt=document.getElementById('tutorialPrompt');
+    if(prompt)prompt.hidden=true;
+  });
+}
+
 async function installFixture(page){
   await page.evaluate(async()=>{
     const chartIds=['beginner','normal','advanced','expert','master'];
@@ -86,6 +96,7 @@ async function snapshot(page){
       coarse:matchMedia('(pointer:coarse)').matches,
       styleInstalled:!!document.getElementById('circleMixMobileSongSelectLayout'),
       bodyClass:document.body.className,
+      updateLogVisible:!!document.getElementById('updateLogOverlay')?.classList.contains('show'),
       shell:rect(document.querySelector('.songSelectShell')),
       header:rect(document.querySelector('.songSelectHeader')),
       carousel:rect(carousel),
@@ -113,6 +124,7 @@ async function snapshot(page){
     browser=await chromium.launch({headless:true});
     for(const viewport of VIEWPORTS){
       const context=await browser.newContext({viewport:{width:viewport.width,height:viewport.height},isMobile:true,hasTouch:true,deviceScaleFactor:1,serviceWorkers:'block'});
+      await context.addInitScript(()=>{try{localStorage.setItem('circleMixLastSeenVersion','0.9.30');}catch(_){}});
       const page=await context.newPage();
       const errors=[];
       let stage='load';
@@ -120,15 +132,10 @@ async function snapshot(page){
       try{
         await page.goto(`http://127.0.0.1:${port}/index.html?browserTest=1&tab=local`,{waitUntil:'domcontentloaded'});
         await page.waitForFunction(()=>window.CircleMixLocalSongs&&window.CircleMixSongRegistry&&window.CircleMixTestApi&&window.CircleMixCmixImportUi,{timeout:10000});
-        await page.evaluate(()=>{
-          const update=document.getElementById('updateLogOverlay');
-          if(update){update.classList.remove('show');update.hidden=true;}
-          document.body.classList.remove('updateLogOpen');
-          const prompt=document.getElementById('tutorialPrompt');
-          if(prompt)prompt.hidden=true;
-        });
+        await dismissBlockingOverlays(page);
         stage='install local fixtures';
         await installFixture(page);
+        await dismissBlockingOverlays(page);
         await page.locator('.songSelectShell').waitFor({state:'visible',timeout:5000});
         await page.waitForFunction(()=>document.querySelectorAll('.songCard').length>=7&&[...document.querySelectorAll('.songTab')].some(button=>/LOCAL/i.test(button.textContent||'')),{timeout:5000});
 
@@ -136,6 +143,7 @@ async function snapshot(page){
         let state=await snapshot(page);
         const viewportRect={left:0,top:0,right:viewport.width,bottom:viewport.height,width:viewport.width,height:viewport.height};
         assert.equal(state.songSelectHidden,false,`${viewport.name} song select hidden ${JSON.stringify(state)}`);
+        assert.equal(state.updateLogVisible,false,`${viewport.name} update log blocks song select ${JSON.stringify(state)}`);
         assert.equal(state.styleInstalled,true,`${viewport.name} responsive style missing`);
         assert.equal(state.coarse,true,`${viewport.name} coarse pointer media query missing`);
         assert.equal(state.cardCount,7,`${viewport.name} LOCAL cards ${JSON.stringify(state)}`);
@@ -163,14 +171,12 @@ async function snapshot(page){
 
         stage='verify tab interaction';
         await page.evaluate(()=>{const carousel=document.getElementById('songCarousel');carousel.scrollTop=0;});
-        const tabs=page.locator('.songTab');
-        const tabCount=await tabs.count();
-        assert(tabCount>=2,`${viewport.name} expected BUNDLED and LOCAL tabs`);
-        for(let index=0;index<tabCount;index++){
-          const text=await tabs.nth(index).textContent();
-          if(/LOCAL/i.test(text||'')){await tabs.nth(index).click();break;}
-        }
-        await page.locator('.songCard').first().waitFor({state:'visible',timeout:3000});
+        await dismissBlockingOverlays(page);
+        const bundled=page.locator('.songTab').filter({hasText:/BUNDLED/i}).first();
+        const local=page.locator('.songTab').filter({hasText:/LOCAL/i}).first();
+        await bundled.click();
+        await local.click();
+        await page.waitForFunction(()=>document.querySelectorAll('.songCard').length>=7,{timeout:3000});
         assert.deepEqual(errors,[],`${viewport.name} page errors: ${JSON.stringify(errors)}`);
         console.log(`mobile song select layout passed: ${viewport.name}`);
       }catch(error){
