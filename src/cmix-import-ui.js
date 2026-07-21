@@ -4,6 +4,7 @@
 
 const $=id=>document.getElementById(id);
 const fmt=n=>`${Math.max(0,Number(n)||0).toLocaleString()} bytes`;
+const MOBILE_SONG_SELECT_STYLE_ID='circleMixMobileSongSelectLayout';
 let generation=0,aborter=null,jacketUrl=null,installing=false,returnFocus=null,firstUseOpen=false;
 
 const status=v=>{$('cmixImportStatus').textContent=v;};
@@ -119,6 +120,105 @@ function installAutoToggleFallback(doc=document){
   return true;
 }
 
+function installMobileSongSelectLayout(doc=document){
+  if(!doc?.createElement || doc.getElementById?.(MOBILE_SONG_SELECT_STYLE_ID))return false;
+  const target=doc.head||doc.documentElement;
+  if(!target?.appendChild)return false;
+  const style=doc.createElement('style');
+  style.id=MOBILE_SONG_SELECT_STYLE_ID;
+  style.textContent=`
+@media (pointer:coarse), (max-width:932px){
+  body.safeSongSelect{overflow:hidden!important;}
+  body.safeSongSelect .songSelect{
+    align-items:stretch!important;
+    justify-content:center;
+    overflow:hidden!important;
+    box-sizing:border-box;
+    padding:max(8px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))!important;
+  }
+  body.safeSongSelect .songSelectShell{
+    width:min(920px,100%);
+    height:100%;
+    max-height:100%!important;
+    min-height:0;
+    overflow:hidden!important;
+    box-sizing:border-box;
+    grid-template-rows:auto minmax(0,1fr) auto;
+    gap:clamp(8px,1.8vh,14px);
+    padding:clamp(10px,2.2vw,18px);
+  }
+  body.safeSongSelect .songSelectHeader,
+  body.safeSongSelect .songSelectFooter{min-width:0;}
+  body.safeSongSelect .songCarousel{
+    min-height:0;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    align-content:flex-start!important;
+    justify-content:center;
+    padding:0 4px max(12px,env(safe-area-inset-bottom));
+    scroll-snap-type:none!important;
+    scroll-padding-top:54px;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+  body.safeSongSelect .songTabs{
+    position:sticky;
+    top:0;
+    z-index:6;
+    flex:0 0 100%;
+    box-sizing:border-box;
+    margin:0 0 8px;
+    padding:6px 6px 10px;
+    background:linear-gradient(180deg,rgba(5,12,28,.98) 0 76%,rgba(5,12,28,0));
+    backdrop-filter:blur(8px);
+  }
+  body.safeSongSelect .songSelectFooter{
+    position:relative!important;
+    z-index:7;
+    padding-top:2px;
+  }
+  body.safeSongSelect .songCard{box-sizing:border-box;max-width:100%;}
+  body.safeSongSelect .songManage{flex:0 0 100%;box-sizing:border-box;}
+}
+@media (pointer:coarse) and (min-width:540px), (min-width:540px) and (max-width:932px){
+  body.safeSongSelect .songSelectHeader{grid-template-columns:auto minmax(0,1fr)!important;text-align:center;}
+  body.safeSongSelect .songCardPick{grid-template-columns:110px minmax(0,1fr)!important;text-align:left!important;}
+  body.safeSongSelect .songJacket{width:110px!important;}
+  body.safeSongSelect .songSelectFooter{grid-template-columns:minmax(0,1fr) auto!important;}
+  body.safeSongSelect .songPlayBtn{width:auto!important;}
+}
+@media (orientation:landscape) and (max-height:700px){
+  body.safeSongSelect .songSelect{
+    padding:max(5px,env(safe-area-inset-top)) max(7px,env(safe-area-inset-right)) max(5px,env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-left))!important;
+  }
+  body.safeSongSelect .songSelectShell{padding:8px 10px;gap:6px;border-radius:18px;}
+  body.safeSongSelect .songSelectHeader{grid-template-columns:auto minmax(0,1fr)!important;gap:8px;text-align:center;}
+  body.safeSongSelect .songSelectEyebrow{font-size:9px;letter-spacing:.18em;}
+  body.safeSongSelect .songSelectHeader h2{margin:0;font-size:clamp(22px,6vh,32px);line-height:1;}
+  body.safeSongSelect .songSelectBack{min-height:36px;padding:6px 10px;font-size:11px;}
+  body.safeSongSelect .songCarousel{gap:8px;padding:0 2px 4px;scroll-padding-top:40px;}
+  body.safeSongSelect .songTabs{gap:6px;margin:0;padding:2px 4px 5px;}
+  body.safeSongSelect .songTab,
+  body.safeSongSelect .songManage button,
+  body.safeSongSelect .songManage a{padding:6px 9px;font-size:10px;}
+  body.safeSongSelect .songCard{width:min(330px,calc(50% - 6px));padding:8px;border-radius:16px;}
+  body.safeSongSelect .songCardPick{grid-template-columns:68px minmax(0,1fr)!important;gap:8px;text-align:left!important;}
+  body.safeSongSelect .songJacket{width:68px!important;border-radius:11px;}
+  body.safeSongSelect .songMeta span,
+  body.safeSongSelect .songMeta em{font-size:9px;}
+  body.safeSongSelect .songMeta strong{margin:3px 0 2px;font-size:20px;line-height:1;}
+  body.safeSongSelect .songSelectFooter{grid-template-columns:minmax(0,1fr) auto!important;gap:8px;}
+  body.safeSongSelect .songDifficulty{min-width:0;justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;overscroll-behavior-x:contain;}
+  body.safeSongSelect .songDiffBtn{min-height:38px;padding:7px 9px;font-size:10px;white-space:nowrap;}
+  body.safeSongSelect .songDiffBtn small{display:none;}
+  body.safeSongSelect .songAutoBtn{min-width:112px;}
+  body.safeSongSelect .songPlayBtn{width:auto!important;min-width:88px;min-height:40px;padding:8px 16px;font-size:12px;}
+}
+`;
+  target.appendChild(style);
+  return true;
+}
+
 function open(){ if(!safeScene())return; returnFocus=document.activeElement; clear(); $('cmixImportContent').replaceChildren(); $('cmixImportModal').hidden=false; $('cmixImportTitle').focus(); status('SELECT .CMIX PACKAGE'); try{ if(localStorage.getItem('circleMixCmixImportNotice')!=='seen')notice(); else $('cmixImportInput').click(); }catch(_){ notice(); } }
 function notice(){ if(firstUseOpen)return; firstUseOpen=true; const c=$('cmixImportContent'), p=document.createElement('p'); p.textContent='.cmix is a local song package. Files are never uploaded to a server and are stored only in this browser. CHART packages need an audio file you own; FULL packages may include audio. Import only packages from sources you trust. Copyright and distribution rights remain with the package provider and you.'; const dont=document.createElement('label'), check=document.createElement('input'); check.type='checkbox'; dont.append(check,' DO NOT SHOW AGAIN'); c.append(p,dont,document.createElement('br'),btn('CONTINUE',()=>{firstUseOpen=false;try{if(check.checked)localStorage.setItem('circleMixCmixImportNotice','seen');}catch(_){} $('cmixImportInput').click();}),btn('CANCEL',close)); }
 function packageInfo(pkg,file){ const m=pkg.manifest, box=document.createElement('section'), pre=document.createElement('p'); pre.textContent=`${m.title}\n${m.artist}\n${m.packageType.toUpperCase()} · VERSION ${m.packageVersion}\n${m.charts.length} CHART${m.charts.length===1?'':'S'} · PACKAGE ${fmt(file.size)}\nESTIMATED LOCAL STORAGE: ${fmt(file.size)}`; box.append(pre); if(pkg.jacketBlob){const i=document.createElement('img'); jacketUrl=URL.createObjectURL(pkg.jacketBlob); i.src=jacketUrl;i.alt=`Jacket for ${m.title}`;i.className='cmixJacket';box.append(i);} const levels=(m.charts||[]).map(x=>`${x.difficulty||x.id||'CHART'} ${x.level??''}`.trim()); if(levels.length)box.append(Object.assign(document.createElement('p'),{textContent:`DIFFICULTIES: ${levels.join(', ')}`})); return box; }
@@ -129,6 +229,7 @@ function fileDragCandidate(dt){ return [...(dt?.types||[])].includes('Files') ||
 function cmixFiles(dt){return [...(dt?.files||[])].filter(f=>/\.cmix$/i.test(f.name)||f.type==='application/vnd.circle-mix.cmix');}
 
 document.addEventListener('DOMContentLoaded',()=>{
+  installMobileSongSelectLayout(document);
   installAutoToggleFallback(document);
   const input=$('cmixImportInput'), b=$('cmixImportBtn');
   b.onclick=open;
@@ -139,5 +240,5 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.addEventListener('beforeunload',clear);
 });
 
-window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,autoButtonState,syncAutoButton,dispatchAutoShortcut};
+window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,installMobileSongSelectLayout,autoButtonState,syncAutoButton,dispatchAutoShortcut};
 })();
