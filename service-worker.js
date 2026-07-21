@@ -49,7 +49,8 @@ function cacheNameForUrl(url){ return BUILTIN_OFFLINE_URLS.includes(url) ? MEDIA
 async function putRequired(url, port, done, total){
   const cache = await caches.open(cacheNameForUrl(url));
   const cached = await cache.match(url, {ignoreSearch:false});
-  if(cached?.ok && cached.status === 200) return {ok:true, reused:true};
+  const refreshSongSelectUi=url.includes("cmix-import-ui.js");
+  if(cached?.ok && cached.status === 200 && !refreshSongSelectUi) return {ok:true, reused:true};
   const response = await fetch(new Request(url, {cache:"reload"}));
   if(!response.ok || response.status !== 200) return {ok:false, url, status:response.status};
   await cache.put(url, response.clone());
@@ -121,6 +122,7 @@ self.addEventListener("fetch", event=>{
   }
   const isStatic=/\.(?:js|css|png|jpg|jpeg|svg|webp|gif|json|webmanifest)$/i.test(url.pathname);
   const isAudio=/\.(?:mp3|ogg|wav|m4a)$/i.test(url.pathname);
-  if(isStatic){ event.respondWith(caches.match(request).then(cached=>cached || fetch(request).then(async response=>{ if(response.ok && response.status===200){ const cache=await caches.open(APP_CACHE); cache.put(request,response.clone()); } return response; }))); return; }
+  if(isStatic){ event.respondWith(caches.match(request).then(cached=>cached || fetch(request).then(async response=>{ if(response.ok && response.status===200){ const cache=await caches.open(APP_CACHE); cache.put(request,response.clone()); } return response; }))); return;
+  }
   if(isAudio){ event.respondWith(caches.open(MEDIA_CACHE).then(cache=>cache.match(request, {ignoreSearch:false}).then(cached=> cached ? rangeResponse(request,cached) : fetch(request).then(async response=>{ if(response.ok && response.status===200) cache.put(request,response.clone()); return response; })))); }
 });
