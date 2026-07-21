@@ -213,13 +213,26 @@ function installMobileSongSelectLayout(doc=document){
   return true;
 }
 
+function loadPlayerProfileUi(doc=document){
+  if(window.CircleMixPlayerProfileUi){window.CircleMixPlayerProfileUi.install?.(doc);return true;}
+  if(doc.querySelector?.('script[data-circle-mix-player-profile-ui]'))return false;
+  const script=doc.createElement('script');
+  script.src='./src/player-profile-ui.js?v=20260722-local-profile-screen';
+  script.dataset.circleMixPlayerProfileUi='1';
+  script.onload=()=>window.CircleMixPlayerProfileUi?.install?.(doc);
+  script.onerror=()=>console.warn('Player profile UI module failed to load');
+  doc.head.append(script);
+  return true;
+}
+
 function loadPlayerProfile(doc=document){
-  if(window.CircleMixPlayerProfile){window.CircleMixPlayerProfile.installResultRecorder?.(doc);return true;}
+  const ready=()=>{window.CircleMixPlayerProfile?.installResultRecorder?.(doc);loadPlayerProfileUi(doc);};
+  if(window.CircleMixPlayerProfile){ready();return true;}
   if(doc.querySelector?.('script[data-circle-mix-player-profile]'))return false;
   const script=doc.createElement('script');
-  script.src='./src/player-profile.js?v=20260722-local-profile-records';
+  script.src='./src/player-profile.js?v=20260722-local-profile-screen';
   script.dataset.circleMixPlayerProfile='1';
-  script.onload=()=>window.CircleMixPlayerProfile?.installResultRecorder?.(doc);
+  script.onload=ready;
   script.onerror=()=>console.warn('Player profile module failed to load');
   doc.head.append(script);
   return true;
@@ -247,5 +260,5 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.addEventListener('beforeunload',clear);
 });
 
-window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,installMobileSongSelectLayout,autoButtonState,syncAutoButton,dispatchAutoShortcut,loadPlayerProfile};
+window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,installMobileSongSelectLayout,autoButtonState,syncAutoButton,dispatchAutoShortcut,loadPlayerProfile,loadPlayerProfileUi};
 })();
