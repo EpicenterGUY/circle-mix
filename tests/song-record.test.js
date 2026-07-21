@@ -8,6 +8,7 @@ assert.deepEqual(bundled.difficultyOrder,routing); assert.deepEqual(Object.keys(
 const localInput={id:'same',title:'Local',artist:'B',bpm:130,difficultyOrder:['easy','missing','hard','easy'],charts:{hard:note('hard'),easy:note('easy'),chartOnly:note('chartOnly')},difficulties:{hard:{label:'Hard',level:8},easy:{label:'Easy',level:2}},audioMatch:{durationSeconds:3}};
 const before=JSON.stringify(localInput), local=R.normalize(localInput,'local');
 assert.deepEqual(local.difficultyOrder,['easy','hard','chartOnly']); assert.deepEqual(Object.keys(local.difficulties),['easy','hard','chartOnly']); assert.equal(JSON.stringify(localInput),before); assert.equal(local.removable,true);
+assert.equal(local.charts.easy.bpm,130); assert.equal(local.charts.hard.bpm,130); assert.equal(localInput.charts.easy.bpm,undefined);
 assert.equal(R.keyOf(bundled),'bundled:routing'); assert.equal(R.keyOf(local),'local:same');
 const chart=A.songRecordToChartPackageInput(local); assert.deepEqual(chart.charts.map(c=>c.descriptor.id),['easy','hard','chartOnly']);
 const fullRecord={...local,audioBlob:Object.assign(new Blob([new Uint8Array([0x49,0x44,0x33,1])],{type:'audio/mpeg'}),{name:'a.mp3'}),audioMetadata:{duration:3}};
@@ -17,4 +18,4 @@ console.log('song record tests passed');
 const Install=require('../src/cmix-local-install.js');
 const manifestOrder=['normal','beginner','hard'];
 const installed=Install.recordFromPackage({manifest:{packageType:'full',id:'manifest-order',title:'M',artist:'A',bpm:120,offset:0,charts:manifestOrder.map(id=>({id,name:id,level:1,file:`charts/${id}.json`}))},charts:Object.fromEntries(manifestOrder.map(id=>[`charts/${id}.json`,note(id)])),audioBlob:new Blob(['audio'])});
-assert.deepEqual(installed.difficultyOrder,manifestOrder); assert.deepEqual(R.normalize(installed,'local').difficultyOrder,manifestOrder);
+assert.deepEqual(installed.difficultyOrder,manifestOrder); assert.deepEqual(R.normalize(installed,'local').difficultyOrder,manifestOrder); assert.equal(installed.charts.normal.bpm,120);
