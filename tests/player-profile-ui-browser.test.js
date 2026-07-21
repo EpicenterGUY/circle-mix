@@ -81,6 +81,7 @@ async function snapshot(page){
     stage='open and verify profile';
     await page.click('#circleMixProfileBtn');
     await page.waitForFunction(()=>!document.getElementById('circleMixProfileOverlay').hidden);
+    await page.waitForFunction(()=>document.getElementById('circleMixProfilePlayCount')?.textContent==='2'&&document.querySelectorAll('.circleMixProfileRecord').length===2,{timeout:5000});
     assert.equal(await page.textContent('#circleMixProfilePlayCount'),'2');
     assert.equal(await page.textContent('#circleMixProfileFcCount'),'1');
     assert.equal(await page.textContent('#circleMixProfileAccuracy'),'96.88%');
