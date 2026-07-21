@@ -22,29 +22,62 @@ function autoButtonState(button){
   return /(?:^|\s)ON(?:\s|$)/i.test(String(button.textContent||''));
 }
 
+function syncAutoButton(button,enabled){
+  if(!button)return;
+  const on=!!enabled;
+  button.classList?.toggle?.('on',on);
+  button.setAttribute?.('aria-pressed',on?'true':'false');
+  const state=button.querySelector?.('span');
+  if(state)state.textContent=on?'ON':'OFF';
+  else if(/AUTO PLAY/i.test(String(button.textContent||'')))button.textContent=`AUTO PLAY ${on?'ON':'OFF'}`;
+}
+
+function stableAutoControl(doc){
+  return doc.getElementById?.('safeAuto')||doc.getElementById?.('autoToggle')||null;
+}
+
 function installAutoToggleFallback(doc=document){
   if(!doc?.addEventListener || doc.__circleMixLocalAutoFallbackInstalled)return false;
   doc.__circleMixLocalAutoFallbackInstalled=true;
-  const initialStates=new WeakMap();
+  let sequence=0,pending=null;
   const findButton=event=>event?.target?.closest?.('[data-auto-play]')||null;
-  const remember=event=>{
+  const begin=event=>{
     const button=findButton(event);
-    if(button)initialStates.set(button,autoButtonState(button));
+    if(!button)return null;
+    if(pending && !pending.done && pending.button===button)return pending;
+    const stable=stableAutoControl(doc);
+    pending={id:++sequence,button,initialButton:autoButtonState(button),initialStable:autoButtonState(stable),scheduled:false,done:false};
+    return pending;
   };
   const verify=event=>{
     const button=findButton(event);
     if(!button)return;
-    const initial=initialStates.has(button)?initialStates.get(button):autoButtonState(button);
-    initialStates.delete(button);
+    const gesture=pending && !pending.done && pending.button===button ? pending : begin(event);
+    if(!gesture || gesture.scheduled)return;
+    gesture.scheduled=true;
     setTimeout(()=>{
-      const live=doc.querySelector?.('[data-auto-play]')||button;
-      if(autoButtonState(live)!==initial)return;
-      const fallback=doc.getElementById?.('safeAuto')||doc.getElementById?.('autoToggle');
-      if(fallback && fallback!==live && typeof fallback.click==='function')fallback.click();
+      if(gesture.done)return;
+      const live=doc.querySelector?.('[data-auto-play]')||gesture.button;
+      const stable=stableAutoControl(doc);
+      const liveChanged=autoButtonState(live)!==gesture.initialButton;
+      const stableChanged=autoButtonState(stable)!==gesture.initialStable;
+      if(stableChanged || liveChanged){
+        if(stable)syncAutoButton(live,autoButtonState(stable));
+      }else if(stable && stable!==live && typeof stable.click==='function'){
+        stable.click();
+        setTimeout(()=>{
+          const current=doc.querySelector?.('[data-auto-play]')||live;
+          syncAutoButton(current,autoButtonState(stableAutoControl(doc)));
+        },0);
+      }
+      gesture.done=true;
+      if(pending===gesture)pending=null;
     },0);
   };
-  doc.addEventListener('pointerdown',remember,true);
-  doc.addEventListener('touchstart',remember,true);
+  doc.addEventListener('pointerdown',begin,true);
+  doc.addEventListener('touchstart',begin,true);
+  doc.addEventListener('pointerup',verify,true);
+  doc.addEventListener('touchend',verify,true);
   doc.addEventListener('click',verify,true);
   return true;
 }
@@ -69,5 +102,5 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.addEventListener('beforeunload',clear);
 });
 
-window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,autoButtonState};
+window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,autoButtonState,syncAutoButton};
 })();
