@@ -6,6 +6,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require('playwright');
 
+const artifactDir = process.env.BROWSER_ARTIFACTS_DIR;
 const MIME = {
   '.html':'text/html; charset=utf-8',
   '.js':'text/javascript; charset=utf-8',
@@ -44,6 +45,31 @@ function startStaticServer(root){
   });
 }
 
+async function autoSnapshot(page){
+  return page.evaluate(()=>{
+    const local=document.querySelector('[data-auto-play]');
+    const stable=document.getElementById('safeAuto');
+    const details=element=>element?{
+      text:element.textContent,
+      className:element.className,
+      ariaPressed:element.getAttribute('aria-pressed'),
+      hidden:element.hidden,
+      connected:element.isConnected,
+      span:element.querySelector('span')?.textContent||null
+    }:null;
+    return {
+      url:location.href,
+      bodyClass:document.body.className,
+      local:details(local),
+      stable:details(stable),
+      songSelectHidden:document.getElementById('songSelect')?.hidden,
+      updateLogVisible:!!document.getElementById('updateLogOverlay')?.classList.contains('show'),
+      gameState:window.CircleMixTestApi?.state?.()||null,
+      localSongs:window.CircleMixSongRegistry?.localAll?.().map(song=>({id:song.id,title:song.title,difficulties:Object.keys(song.difficulties||{})}))||[]
+    };
+  });
+}
+
 async function waitForAuto(page,on,label){
   await page.waitForFunction(expected=>{
     const local=document.querySelector('[data-auto-play]');
@@ -51,26 +77,24 @@ async function waitForAuto(page,on,label){
     const state=element=>!!element&&(element.classList.contains('on')||/(?:^|\s)ON(?:\s|$)/i.test(element.textContent||''));
     return state(local)===expected&&state(stable)===expected&&local?.querySelector('span')?.textContent===(expected?'ON':'OFF');
   },on,{timeout:5000});
-  const snapshot=await page.evaluate(()=>({
-    local:document.querySelector('[data-auto-play]')?.textContent,
-    stable:document.getElementById('safeAuto')?.textContent,
-    localClass:document.querySelector('[data-auto-play]')?.className
-  }));
-  assert.match(snapshot.local||'',on?/ON/:/OFF/,`${label} LOCAL text ${JSON.stringify(snapshot)}`);
-  assert.match(snapshot.stable||'',on?/ON/:/OFF/,`${label} stable text ${JSON.stringify(snapshot)}`);
+  const snapshot=await autoSnapshot(page);
+  assert.match(snapshot.local?.text||'',on?/ON/:/OFF/,`${label} LOCAL text ${JSON.stringify(snapshot)}`);
+  assert.match(snapshot.stable?.text||'',on?/ON/:/OFF/,`${label} stable text ${JSON.stringify(snapshot)}`);
 }
 
 (async()=>{
   const server=await startStaticServer(process.cwd());
   const address=server.address();
   const url=`http://127.0.0.1:${address.port}/index.html?browserTest=1&tab=local`;
-  let browser;
+  let browser,context,page;
+  let stage='launch';
+  const errors=[];
   try{
     browser=await chromium.launch({headless:true});
-    const context=await browser.newContext({viewport:{width:1280,height:720},serviceWorkers:'block'});
-    const page=await context.newPage();
-    const errors=[];
+    context=await browser.newContext({viewport:{width:1280,height:720},serviceWorkers:'block'});
+    page=await context.newPage();
     page.on('pageerror',error=>errors.push(error.message));
+    stage='load page';
     await page.goto(url,{waitUntil:'domcontentloaded'});
     await page.waitForFunction(()=>window.CircleMixLocalSongs&&window.CircleMixSongRegistry&&window.CircleMixTestApi&&window.CircleMixCmixImportUi,{timeout:10000});
     await page.evaluate(()=>{
@@ -81,6 +105,7 @@ async function waitForAuto(page,on,label){
       if(prompt)prompt.hidden=true;
     });
 
+    stage='install LOCAL fixture';
     await page.evaluate(async()=>{
       const id='local-auto-browser-test';
       const existing=await window.CircleMixLocalSongs.get(id).catch(()=>null);
@@ -99,17 +124,18 @@ async function waitForAuto(page,on,label){
     });
 
     const selector='[data-auto-play]';
+    stage='wait for LOCAL AUTO button';
     await page.locator(selector).waitFor({state:'visible',timeout:5000});
     await waitForAuto(page,false,'initial');
 
-    // Production path on the real dynamically rendered LOCAL song-select button.
+    stage='normal click ON';
     await page.locator(selector).click();
     await waitForAuto(page,true,'normal click on');
+    stage='normal click OFF';
     await page.locator(selector).click();
     await waitForAuto(page,false,'normal click off');
 
-    // Reproduce the Windows failure mode: the live node has no target listener,
-    // pointerup reaches document capture, and no synthetic click follows.
+    stage='pointer release fallback';
     await page.evaluate(selector=>{
       const original=document.querySelector(selector);
       const clone=original.cloneNode(true);
@@ -120,11 +146,24 @@ async function waitForAuto(page,on,label){
     },selector);
     await waitForAuto(page,true,'pointer release fallback');
 
+    stage='page errors';
     assert.deepEqual(errors,[],`LOCAL AUTO browser page errors: ${JSON.stringify(errors)}`);
-    await context.close();
     console.log('LOCAL AUTO browser regression passed');
+  }catch(error){
+    const report={stage,error:{message:error?.message||String(error),stack:error?.stack||null},errors,snapshot:null};
+    if(page){
+      try{report.snapshot=await autoSnapshot(page);}catch(snapshotError){report.snapshotError=snapshotError.message;}
+    }
+    console.error('LOCAL_AUTO_BROWSER_FAILURE',JSON.stringify(report));
+    if(artifactDir){
+      fs.mkdirSync(artifactDir,{recursive:true});
+      fs.writeFileSync(path.join(artifactDir,'local-auto-browser-failure.json'),JSON.stringify(report,null,2));
+      if(page)await page.screenshot({path:path.join(artifactDir,'local-auto-browser-failure.png'),fullPage:true}).catch(()=>{});
+    }
+    throw error;
   }finally{
-    if(browser)await browser.close();
+    if(context)await context.close().catch(()=>{});
+    if(browser)await browser.close().catch(()=>{});
     await new Promise(resolve=>server.close(resolve));
   }
 })().catch(error=>{
