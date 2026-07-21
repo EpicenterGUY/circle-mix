@@ -10,6 +10,7 @@ const scheduled = [];
 let liveButton = null;
 let stableButton = null;
 let fallbackClicks = 0;
+let blockedStableClicks = 0;
 
 function createAutoButton(on = false, label = 'AUTO PLAY') {
   let enabled = !!on;
@@ -70,8 +71,10 @@ assert.strictEqual(api.installAutoToggleFallback(document), false, 'fallback mus
 function reset(on = false) {
   liveButton = createAutoButton(on);
   stableButton = createAutoButton(on, 'AUTO');
+  blockedStableClicks = 0;
   stableButton.click = () => {
     fallbackClicks += 1;
+    if(blockedStableClicks > 0){ blockedStableClicks -= 1; return; }
     stableButton.setState(!stableButton.state());
   };
   fallbackClicks = 0;
@@ -92,6 +95,18 @@ dispatch('pointerdown');
 dispatch('pointerup');
 flushScheduled();
 assert.strictEqual(fallbackClicks, 1);
+assert.strictEqual(stableButton.state(), true);
+assert.strictEqual(liveButton.state(), true);
+assert.strictEqual(liveButton.stateLabel.textContent, 'ON');
+
+// A recent safeBind activation can suppress the first bridge click for 180 ms.
+// The fallback must verify the stable state and retry once after the guard.
+reset(false);
+blockedStableClicks = 1;
+dispatch('pointerdown');
+dispatch('pointerup');
+flushScheduled();
+assert.strictEqual(fallbackClicks, 2);
 assert.strictEqual(stableButton.state(), true);
 assert.strictEqual(liveButton.state(), true);
 assert.strictEqual(liveButton.stateLabel.textContent, 'ON');
