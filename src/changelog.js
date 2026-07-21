@@ -6,6 +6,10 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.29", date: "2026-07-21", title: "Windows .cmix Drag and Drop", summary: "Windows desktop에서 .cmix 파일 드래그앤드롭 가져오기를 복구했습니다.", changes: [
+    { category: "DESKTOP", text: "WebView2 file drags now open the existing HTML5 .cmix import flow." }
+  ] },
+
   { version: "0.9.28", date: "2026-07-20", title: "Windows Desktop Foundation", summary: "Tauri Windows 기반과 저작권 안전한 빈 로컬 라이브러리를 추가했습니다.", changes: [
     { category: "DESKTOP", text: "Tauri v2 Windows desktop foundation" },
     { category: "LOCAL", text: "Persistent local .cmix library and HTML5 drag/drop" },
