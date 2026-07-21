@@ -597,8 +597,11 @@
     return 0;
   }
   function signedSweepRad(type, extra, rawDelta){
-    if(extra.signedSweepAngle !== undefined && Number.isFinite(Number(extra.signedSweepAngle))) return Number(extra.signedSweepAngle) * Math.PI / 180;
-    if(extra.sweepAngle !== undefined && Number.isFinite(Number(extra.sweepAngle))) return Number(extra.sweepAngle) * Math.PI / 180;
+    const asRadians=value=>Math.abs(Number(value))<=TAU*2.1 ? Number(value) : Number(value)*Math.PI/180;
+    if(extra.signedSweepAngle !== undefined && Number.isFinite(Number(extra.signedSweepAngle))) return asRadians(extra.signedSweepAngle);
+    if(extra.sweepAngle !== undefined && Number.isFinite(Number(extra.sweepAngle))) return asRadians(extra.sweepAngle);
+    if(extra.slideAmount !== undefined && Number.isFinite(Number(extra.slideAmount))) return asRadians(extra.slideAmount);
+    if(extra.amount !== undefined && Number.isFinite(Number(extra.amount))) return asRadians(extra.amount);
     if(extra.turns !== undefined && Number.isFinite(Number(extra.turns)) && Number(extra.turns)!==0){
       const dir=directionSign(extra.direction) || (type.endsWith("CW")&&!type.endsWith("CCW")?1:(type.endsWith("CCW")?-1:Math.sign(rawDelta)||1));
       return dir * Math.abs(Number(extra.turns)) * TAU;
@@ -626,7 +629,7 @@
 
       n.turns = extra.turns || 0;
       let raw = n.endAngle - n.angle;
-      const explicitSweep = type.startsWith("trace") ? signedSweepRad(type, extra, raw) : null;
+      const explicitSweep = signedSweepRad(type, extra, raw);
 
       if(explicitSweep !== null){
         n.slideAmount = explicitSweep;
@@ -1836,7 +1839,7 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; const runtime=make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT*CHART_STRETCH, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); if(n.id!==undefined) runtime.id=String(n.id); return runtime; }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; const runtime=make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT*CHART_STRETCH, amount:n.amount, slideAmount:n.slideAmount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); if(n.id!==undefined) runtime.id=String(n.id); return runtime; }
 
   function generateChart(){
     if(useCustomChart){
