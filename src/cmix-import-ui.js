@@ -36,6 +36,18 @@ function stableAutoControl(doc){
   return doc.getElementById?.('safeAuto')||doc.getElementById?.('autoToggle')||null;
 }
 
+function dispatchAutoShortcut(doc){
+  const view=doc?.defaultView||window;
+  if(!view?.dispatchEvent)return false;
+  try{
+    const event=typeof view.KeyboardEvent==='function'
+      ? new view.KeyboardEvent('keydown',{code:'KeyO',key:'o',bubbles:true,cancelable:true,repeat:false})
+      : {type:'keydown',code:'KeyO',key:'o',bubbles:true,cancelable:true,repeat:false};
+    view.dispatchEvent(event);
+    return true;
+  }catch(_){return false;}
+}
+
 function installAutoToggleFallback(doc=document){
   if(!doc?.addEventListener || doc.__circleMixLocalAutoFallbackInstalled)return false;
   doc.__circleMixLocalAutoFallbackInstalled=true;
@@ -58,7 +70,15 @@ function installAutoToggleFallback(doc=document){
   const recover=(gesture,attempt=0)=>{
     if(gesture.done)return;
     const stable=stableAutoControl(doc);
-    if(!stable || typeof stable.click!=='function'){ finish(gesture,gesture.initialStable); return; }
+    if(!stable){
+      // The current song-select DOM has no persistent AUTO control. Route the
+      // recovery through the production KeyO handler, which owns gameState,
+      // then repaint the dynamically rendered LOCAL control explicitly.
+      if(dispatchAutoShortcut(doc)) finish(gesture,!gesture.initialButton);
+      else finish(gesture,gesture.initialButton);
+      return;
+    }
+    if(typeof stable.click!=='function'){finish(gesture,gesture.initialStable);return;}
     const before=autoButtonState(stable);
     stable.click();
     setTimeout(()=>{
@@ -86,10 +106,9 @@ function installAutoToggleFallback(doc=document){
       const live=doc.querySelector?.('[data-auto-play]')||gesture.button;
       const stable=stableAutoControl(doc);
       const liveChanged=autoButtonState(live)!==gesture.initialButton;
-      const stableChanged=autoButtonState(stable)!==gesture.initialStable;
+      const stableChanged=stable?autoButtonState(stable)!==gesture.initialStable:false;
       if(stableChanged || liveChanged) finish(gesture,stable?autoButtonState(stable):autoButtonState(live));
-      else if(stable && stable!==live) recover(gesture);
-      else finish(gesture,gesture.initialButton);
+      else recover(gesture);
     },0);
   };
   doc.addEventListener('pointerdown',begin,true);
@@ -120,5 +139,5 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.addEventListener('beforeunload',clear);
 });
 
-window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,autoButtonState,syncAutoButton};
+window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,autoButtonState,syncAutoButton,dispatchAutoShortcut};
 })();
