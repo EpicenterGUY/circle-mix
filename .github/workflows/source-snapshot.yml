@@ -13,10 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Package source snapshot
-        run: tar --exclude=.git --exclude=node_modules --exclude=desktop-dist -czf source-snapshot.tar.gz .
+        run: tar --exclude=.git --exclude=node_modules --exclude=desktop-dist -czf /tmp/source-snapshot.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
           name: pulse-source-snapshot
-          path: source-snapshot.tar.gz
+          path: /tmp/source-snapshot.tar.gz
           if-no-files-found: error
           retention-days: 1
