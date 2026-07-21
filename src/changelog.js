@@ -6,6 +6,7 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.30", date: "2026-07-21", title: "LOCAL DIFFICULTY CALIBRATION", summary: "LOCAL chart stars now use one shared automatic difficulty estimator.", changes: [{ category: "LOCAL", text: "Fast slides, full rotations, aim speed, overlaps, and sustained strain are reflected." },{ category: "LOCAL", text: "Package-declared stars no longer override runtime LOCAL difficulty." }] },
   { version: "0.9.29", date: "2026-07-21", title: "Windows .cmix Drag and Drop", summary: "Windows desktop에서 .cmix 파일 드래그앤드롭 가져오기를 복구했습니다.", changes: [
     { category: "DESKTOP", text: "WebView2 file drags now open the existing HTML5 .cmix import flow." }
   ] },

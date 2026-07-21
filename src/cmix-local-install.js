@@ -10,7 +10,7 @@
       const chart=pkg.charts?.[descriptor.file];
       if(!chart || !Array.isArray(chart.notes)) throw new Error(`Validated chart is missing: ${descriptor.id}`);
       charts[descriptor.id]=chart;
-      difficulties[descriptor.id]={label:descriptor.name,chart:descriptor.id,level:descriptor.level,style:descriptor.style||null,stars:Number.isFinite(Number(descriptor.level))?Number(descriptor.level):undefined};
+      difficulties[descriptor.id]={label:descriptor.name,chart:descriptor.id,level:descriptor.level,style:descriptor.style||null,declaredStars:Number.isFinite(Number(descriptor.stars??descriptor.level))?Number(descriptor.stars??descriptor.level):undefined,stars:Number.isFinite(Number(descriptor.level))?Number(descriptor.level):undefined};
     }
     if(!Object.keys(charts).length) throw new Error('The package has no playable charts.');
     return {id:manifest.id,source:'local',cmixInstalled:true,title:manifest.title,artist:manifest.artist,bpm:manifest.bpm,offset:manifest.offset||0,previewStart:manifest.preview?.startSeconds||0,previewDuration:manifest.preview?.durationSeconds||15,audioBlob:pkg.audioBlob,audioType:pkg.audioBlob.type||null,audioMetadata:{duration:pkg.manifest.audioMetadata?.duration||pkg.manifest.duration||0},jacketBlob:pkg.jacketBlob||null,difficultyOrder,difficulties,charts,packageType:manifest.packageType,packageVersion:manifest.packageVersion,packageHash:pkg.packageHash||null,sourceFileName:pkg.sourceFileName||null,installedAt:now,updatedAt:now};

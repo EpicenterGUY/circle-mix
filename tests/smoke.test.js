@@ -18,7 +18,7 @@ setAttribute(){}, removeAttribute(){}, focus(){}, blur(){}, getBoundingClientRec
 }
 function loadGameExports(){
 const src = fs.readFileSync("src/game.js", "utf8");
-const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty, calculateChartDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
+const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
 const patched = src.replace(/\r?\n\s*updateModeButtons\(\);\r?\n\s*updateButtons\(\);\r?\n\}\)\(\);\s*$/, `${exportPatch}\n updateModeButtons();\n updateButtons();\n})();`);
 const elements = new Map();
 const document = {
@@ -30,7 +30,7 @@ const routing=loadRoutingBundle();
 const anima={id:"anima",source:"builtin",title:"ANiMA",artist:"xi",bpm:184.6,offset:-0.04,difficulties:{normal:{label:"NORMAL"},tech:{label:"TECH"}}};
 const routingSong={...routing.song,difficulties:routing.song.difficulties};
 const builtins=[anima,routingSong];
-const window = { document, location:{search:"", href:"http://localhost/index.html"}, CircleMixRoutingBundle:routing, CircleMixSongRegistry:{ all:()=>builtins, localAll:()=>[], refreshLocal:async()=>[], refreshBuiltinAudio:async()=>builtins, get:id=>builtins.find(song=>song.id===id)||anima, hasDifficulty:(s,d)=>!!s?.difficulties?.[d] }, CircleMixChartTools:{calculateStars:()=>1}, CircleMixVersion:{version:"0.0.0"}, CircleMixChangelog:[], history:{replaceState(){}}, addEventListener(){}, removeEventListener(){}, PointerEvent:function PointerEvent(){} };
+const window = { document, location:{search:"", href:"http://localhost/index.html"}, CircleMixRoutingBundle:routing, CircleMixSongRegistry:{ all:()=>builtins, localAll:()=>[], refreshLocal:async()=>[], refreshBuiltinAudio:async()=>builtins, get:id=>builtins.find(song=>song.id===id)||anima, hasDifficulty:(s,d)=>!!s?.difficulties?.[d] }, CircleMixChartDifficulty:require("../src/chart-difficulty.js"), CircleMixChartTools:{calculateStars:()=>1}, CircleMixVersion:{version:"0.0.0"}, CircleMixChangelog:[], history:{replaceState(){}}, addEventListener(){}, removeEventListener(){}, PointerEvent:function PointerEvent(){} };
 const sandbox = { window, document, console, URLSearchParams, URL, setTimeout, clearTimeout, setInterval, clearInterval,
 localStorage:{getItem:()=>null,setItem(){},removeItem(){}}, performance:{now:()=>0}, requestAnimationFrame:()=>0, cancelAnimationFrame(){},
 screen:{orientation:{unlock(){}}}, alert(){}, confirm:()=>false, prompt:()=>null, AudioContext:function(){}, webkitAudioContext:function(){} };
@@ -234,8 +234,8 @@ assert.doesNotMatch(animaHtml,/data-difficulty="reverb"/);
 test("index and service worker use the same PWA cache query", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260721-windows-cmix-drag-drop-929/);
-assert.match(sw, /20260721-windows-cmix-drag-drop-929/);
+assert.match(index, /20260721-local-difficulty-930/);
+assert.match(sw, /20260721-local-difficulty-930/);
 assert.match(index, /src\/charts\/routing\.js\?v=/);
 assert.match(sw, /src\/charts\/routing\.js\?v=/);
 assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
@@ -319,15 +319,15 @@ assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOver
 });
 
 
-test("direct play startup release versions are synchronized at 0.9.29", () => {
+test("direct play startup release versions are synchronized at 0.9.30", () => {
 const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.29"/);
-assert.match(pwa, /const VERSION="0\.9\.29"/);
-assert.match(sw, /const VERSION = "0\.9\.29"/);
-assert.match(changelog, /version:\s*"0\.9\.29"/);
+assert.match(version, /version:\s*"0\.9\.30"/);
+assert.match(pwa, /const VERSION="0\.9\.30"/);
+assert.match(sw, /const VERSION = "0\.9\.30"/);
+assert.match(changelog, /version:\s*"0\.9\.30"/);
 });
 
 test("index and service worker app shell cache-bust URLs match exactly", () => {
