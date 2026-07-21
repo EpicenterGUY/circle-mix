@@ -32,13 +32,17 @@ function startServer(root){
 }
 
 async function dismissBlockingUi(page){
-  await page.evaluate(()=>{
-    const update=document.getElementById('updateLogOverlay');
-    if(update){update.classList.remove('show');update.hidden=true;}
-    document.body.classList.remove('updateLogOpen');
-    const prompt=document.getElementById('tutorialPrompt');
-    if(prompt)prompt.hidden=true;
-  });
+  for(let attempt=0;attempt<4;attempt++){
+    await page.evaluate(()=>{
+      document.getElementById('updateLogClose')?.click?.();
+      const update=document.getElementById('updateLogOverlay');
+      if(update){update.classList.remove('show');update.hidden=true;update.style.pointerEvents='none';}
+      document.body.classList.remove('updateLogOpen');
+      const prompt=document.getElementById('tutorialPrompt');
+      if(prompt)prompt.hidden=true;
+    });
+    await page.waitForTimeout(100);
+  }
 }
 
 async function snapshot(page){
@@ -79,6 +83,7 @@ async function snapshot(page){
     });
 
     stage='open and verify profile';
+    await dismissBlockingUi(page);
     await page.click('#circleMixProfileBtn');
     await page.waitForFunction(()=>!document.getElementById('circleMixProfileOverlay').hidden);
     await page.waitForFunction(()=>document.getElementById('circleMixProfilePlayCount')?.textContent==='2'&&document.querySelectorAll('.circleMixProfileRecord').length===2,{timeout:5000});
