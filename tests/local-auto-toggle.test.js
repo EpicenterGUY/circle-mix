@@ -8,7 +8,35 @@ const source = fs.readFileSync('src/cmix-import-ui.js', 'utf8');
 const listeners = new Map();
 const scheduled = [];
 let liveButton = null;
+let stableButton = null;
 let fallbackClicks = 0;
+
+function createAutoButton(on = false, label = 'AUTO PLAY') {
+  let enabled = !!on;
+  let ariaPressed = String(enabled);
+  const stateLabel = { textContent: enabled ? 'ON' : 'OFF' };
+  const button = {
+    textContent: '',
+    classList: {
+      contains(name) { return name === 'on' && enabled; },
+      toggle(name, next) { if(name === 'on') enabled = !!next; }
+    },
+    getAttribute(name) { return name === 'aria-pressed' ? ariaPressed : null; },
+    setAttribute(name, value) { if(name === 'aria-pressed') ariaPressed = String(value); },
+    querySelector(selector) { return selector === 'span' ? stateLabel : null; },
+    closest(selector) { return selector === '[data-auto-play]' ? button : null; },
+    setState(next) {
+      enabled = !!next;
+      ariaPressed = String(enabled);
+      stateLabel.textContent = enabled ? 'ON' : 'OFF';
+      button.textContent = `${label} ${enabled ? 'ON' : 'OFF'}`;
+    },
+    state() { return enabled; },
+    stateLabel
+  };
+  button.setState(on);
+  return button;
+}
 
 const document = {
   addEventListener(type, handler, capture) {
@@ -16,14 +44,7 @@ const document = {
     listeners.get(type).push({ handler, capture: !!capture });
   },
   getElementById(id) {
-    if (id === 'safeAuto') {
-      return {
-        click() {
-          fallbackClicks += 1;
-          liveButton?.setState(!liveButton.state());
-        }
-      };
-    }
+    if (id === 'safeAuto') return stableButton;
     return null;
   },
   querySelector(selector) {
@@ -46,24 +67,17 @@ assert(api, 'cmix import UI API must be exported');
 assert.strictEqual(api.installAutoToggleFallback(document), true, 'fallback must install once');
 assert.strictEqual(api.installAutoToggleFallback(document), false, 'fallback must not install twice');
 
-function createAutoButton(on = false) {
-  let enabled = !!on;
-  const button = {
-    textContent: '',
-    classList: { contains(name) { return name === 'on' && enabled; } },
-    getAttribute(name) { return name === 'aria-pressed' ? String(enabled) : null; },
-    closest(selector) { return selector === '[data-auto-play]' ? button : null; },
-    setState(next) {
-      enabled = !!next;
-      button.textContent = `AUTO PLAY ${enabled ? 'ON' : 'OFF'}`;
-    },
-    state() { return enabled; }
+function reset(on = false) {
+  liveButton = createAutoButton(on);
+  stableButton = createAutoButton(on, 'AUTO');
+  stableButton.click = () => {
+    fallbackClicks += 1;
+    stableButton.setState(!stableButton.state());
   };
-  button.setState(on);
-  return button;
+  fallbackClicks = 0;
 }
 
-function dispatch(type, target) {
+function dispatch(type, target = liveButton) {
   for (const { handler } of listeners.get(type) || []) handler({ target });
 }
 
@@ -71,35 +85,62 @@ function flushScheduled() {
   while (scheduled.length) scheduled.shift()();
 }
 
-// Regression: the dynamically rendered LOCAL button received a click but its
-// original binding did not change state. The bridge must toggle through the
-// stable safeAuto control exactly once.
-liveButton = createAutoButton(false);
-fallbackClicks = 0;
-dispatch('pointerdown', liveButton);
-dispatch('click', liveButton);
+// Windows/WebView2 regression: pointerup is delivered but the target binding and
+// synthetic click are lost. Capture-phase verification must recover the toggle.
+reset(false);
+dispatch('pointerdown');
+dispatch('pointerup');
+flushScheduled();
+assert.strictEqual(fallbackClicks, 1);
+assert.strictEqual(stableButton.state(), true);
+assert.strictEqual(liveButton.state(), true);
+assert.strictEqual(liveButton.stateLabel.textContent, 'ON');
+
+// pointerup and click from one physical gesture must still produce one toggle.
+reset(false);
+dispatch('pointerdown');
+dispatch('pointerup');
+dispatch('click');
 flushScheduled();
 assert.strictEqual(fallbackClicks, 1);
 assert.strictEqual(liveButton.state(), true);
 
-// Normal path: when the original song-select handler already changed the state,
-// the bridge must remain idle and avoid a double toggle.
-liveButton = createAutoButton(false);
-fallbackClicks = 0;
-dispatch('pointerdown', liveButton);
-dispatch('click', liveButton);
+// Normal production path: the target handler already changed both controls.
+reset(false);
+dispatch('pointerdown');
+dispatch('pointerup');
 liveButton.setState(true);
+stableButton.setState(true);
 flushScheduled();
 assert.strictEqual(fallbackClicks, 0);
 assert.strictEqual(liveButton.state(), true);
 
-// Re-render path: renderSongSelect may replace the clicked node. The current
-// live AUTO button state is authoritative and must prevent a stale fallback.
-const oldButton = createAutoButton(false);
-liveButton = oldButton;
-fallbackClicks = 0;
+// The game state may change before the dynamic LOCAL button repaints. The stable
+// control is authoritative; synchronize the LOCAL visual without toggling again.
+reset(false);
+dispatch('pointerdown');
+dispatch('pointerup');
+stableButton.setState(true);
+flushScheduled();
+assert.strictEqual(fallbackClicks, 0);
+assert.strictEqual(liveButton.state(), true);
+assert.strictEqual(liveButton.stateLabel.textContent, 'ON');
+
+// Keyboard/accessibility activation has no pointerdown, so click starts its own
+// verification gesture and still recovers if the target handler is absent.
+reset(false);
+dispatch('click');
+flushScheduled();
+assert.strictEqual(fallbackClicks, 1);
+assert.strictEqual(liveButton.state(), true);
+
+// Re-render path: a replacement button showing the changed state prevents a
+// stale fallback from undoing the production toggle.
+reset(false);
+const oldButton = liveButton;
 dispatch('pointerdown', oldButton);
-dispatch('click', oldButton);
+dispatch('pointerup', oldButton);
+stableButton.setState(true);
 liveButton = createAutoButton(true);
 flushScheduled();
 assert.strictEqual(fallbackClicks, 0);
