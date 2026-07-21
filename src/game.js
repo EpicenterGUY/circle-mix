@@ -154,6 +154,7 @@
   const TAU = Math.PI * 2;
   const songs = window.CircleMixSongRegistry || { all:()=>[], localAll:()=>[], refreshLocal:async()=>[], get:()=>null, hasDifficulty:()=>false };
   const chartTools = window.CircleMixChartTools || { validateChart:()=>({ok:true,errors:[]}), calculateStars:()=>1 };
+  const chartDifficulty = window.CircleMixChartDifficulty || { VERSION:"local-v2", calculate:chart=>({stars:chartTools.calculateStars(chart),raw:0,version:"local-v2"}) };
   const initialParams = new URLSearchParams(window.location.search);
   const versionInfo = window.CircleMixVersion || {version:"0.0.0", buildDate:""};
   const changelogEntries = Array.isArray(window.CircleMixChangelog) ? [...window.CircleMixChangelog] : [];
@@ -596,8 +597,11 @@
     return 0;
   }
   function signedSweepRad(type, extra, rawDelta){
-    if(extra.signedSweepAngle !== undefined && Number.isFinite(Number(extra.signedSweepAngle))) return Number(extra.signedSweepAngle) * Math.PI / 180;
-    if(extra.sweepAngle !== undefined && Number.isFinite(Number(extra.sweepAngle))) return Number(extra.sweepAngle) * Math.PI / 180;
+    const asRadians=value=>Math.abs(Number(value))<=TAU*2.1 ? Number(value) : Number(value)*Math.PI/180;
+    if(extra.signedSweepAngle !== undefined && Number.isFinite(Number(extra.signedSweepAngle))) return asRadians(extra.signedSweepAngle);
+    if(extra.sweepAngle !== undefined && Number.isFinite(Number(extra.sweepAngle))) return asRadians(extra.sweepAngle);
+    if(extra.slideAmount !== undefined && Number.isFinite(Number(extra.slideAmount))) return asRadians(extra.slideAmount);
+    if(extra.amount !== undefined && Number.isFinite(Number(extra.amount))) return asRadians(extra.amount);
     if(extra.turns !== undefined && Number.isFinite(Number(extra.turns)) && Number(extra.turns)!==0){
       const dir=directionSign(extra.direction) || (type.endsWith("CW")&&!type.endsWith("CCW")?1:(type.endsWith("CCW")?-1:Math.sign(rawDelta)||1));
       return dir * Math.abs(Number(extra.turns)) * TAU;
@@ -625,7 +629,7 @@
 
       n.turns = extra.turns || 0;
       let raw = n.endAngle - n.angle;
-      const explicitSweep = type.startsWith("trace") ? signedSweepRad(type, extra, raw) : null;
+      const explicitSweep = signedSweepRad(type, extra, raw);
 
       if(explicitSweep !== null){
         n.slideAmount = explicitSweep;
@@ -703,6 +707,7 @@
   }
   function isBetterPowerRecord(next, prev){
     if(!Number.isFinite(next.bestPower)) return false;
+    if(next.difficultyAlgorithmVersion && prev?.difficultyAlgorithmVersion !== next.difficultyAlgorithmVersion) return true;
     if(!prev || !Number.isFinite(prev.bestPower)) return true;
     if(next.bestPower !== prev.bestPower) return next.bestPower > prev.bestPower;
     if(next.bestPowerAccuracy !== prev.bestPowerAccuracy) return next.bestPowerAccuracy > prev.bestPowerAccuracy;
@@ -740,7 +745,7 @@
     const previous=migrateBestRecord(records[key] || null);
     const nowIso=new Date().toISOString();
     const scoreEntry={bestScore:result.finalScore, bestAccuracy:result.accuracyRatio, bestRank:result.rank, maxCombo:result.maxCombo, missCount:result.missCount, playedAt:nowIso};
-    const powerEntry={bestPower:result.power, bestPowerAccuracy:result.accuracyRatio, bestPowerScore:result.finalScore, bestPowerMissCount:result.missCount, bestPowerAchievedAt:nowIso};
+    const powerEntry={bestPower:result.power, bestPowerAccuracy:result.accuracyRatio, bestPowerScore:result.finalScore, bestPowerMissCount:result.missCount, bestPowerAchievedAt:nowIso,...(isLocalSong(selectedSong)?{difficultyAlgorithmVersion:chartDifficulty.VERSION}:{})};
     const newRecord=isBetterRecord(scoreEntry, previous);
     const newPowerRecord=result.power !== null && isBetterPowerRecord(powerEntry, previous);
     if(newRecord || newPowerRecord){
@@ -763,63 +768,6 @@
     return "D";
   }
 
-  function inputGroup(type){
-    const family=noteFamily(type);
-    if(family === "hold" || family === "slide") return "hold";
-    if(family === "trace") return "move";
-    if(family === "swing") return "flick";
-    if(family === "scratch") return "right-click flick";
-    return "tap";
-  }
-
-  function difficultyTypeSet(notes, centerTime, range=2){
-    const set=new Set();
-    for(const n of notes){
-      if(Math.abs(n.hitTime-centerTime)<=range) set.add(noteFamily(n.type));
-    }
-    return set.size;
-  }
-
-  function calculateChartDifficulty(notes){
-    if(!notes.length) return {stars:1, raw:0};
-    const baseValue={cut:1.00,trace:0.55,hold:1.15,slide:1.35,swing:1.45,scratch:1.50};
-    const ordered=notes.slice().sort((a,b)=>a.hitTime-b.hitTime);
-    let raw=0;
-    let previous=null;
-
-    for(const note of ordered){
-      const family=noteFamily(note.type);
-      let weight=baseValue[family] || 1;
-
-      if(previous){
-        const gap=Math.max(0.04,note.hitTime-previous.hitTime);
-        weight += clamp((0.55-gap)/0.55,0,1)*0.95;
-        weight += (distAng(note.angle, previous.angle)/Math.PI)*0.55;
-        if(inputGroup(note.type)!==inputGroup(previous.type)) weight += 0.34;
-      }
-
-      if(family === "slide" || family === "trace" || family === "scratch"){
-        const length=Math.abs(note.slideAmount ?? norm((note.endAngle??note.angle)-note.angle));
-        const duration=Math.max(note.duration||BEAT*.5, BEAT*.25);
-        weight += clamp(length/TAU,0,1.5)*0.62 + clamp((length/duration)/8,0,1)*0.52;
-      }
-
-      if(family === "hold" || family === "slide"){
-        const end=(note.hitTime||0)+(note.duration||0);
-        const overlap=ordered.filter(other => other!==note && other.hitTime>note.hitTime+.03 && other.hitTime<end-.03).length;
-        weight += Math.min(1.45, overlap*0.24);
-      }
-
-      weight += Math.max(0,difficultyTypeSet(ordered,note.hitTime,2)-1)*0.16;
-      raw += weight;
-      previous=note;
-    }
-
-    const duration=Math.max(1, ordered[ordered.length-1].hitTime-ordered[0].hitTime);
-    const density=ordered.length/duration;
-    const normalized=1 + (raw/duration)*0.50 + Math.sqrt(density)*0.10;
-    return {stars:Math.round(clamp(normalized,1,10)*10)/10, raw};
-  }
 
   function getBuiltinChartSource(songId, difficultyId){
     if(songId==="anima" && difficultyId==="normal") return {kind:"generator", notes:generateNormalChart(), gap:1.75, trimBeat:CHART_END_BEAT};
@@ -857,11 +805,11 @@
   }
 
   function getDifficulty(mode=mapMode){
-    if(isLocalSong(selectedSong)){ const c=selectedSong.charts?.[mode]; return c ? {stars:chartTools.calculateStars(c), raw:0} : null; }
+    if(isLocalSong(selectedSong)){ const c=selectedSong.charts?.[mode]; return c ? chartDifficulty.calculate(c) : null; }
     const meta=selectedSong?.difficulties?.[mode];
     if(meta && Number.isFinite(Number(meta.stars))) return {stars:Number(meta.stars), raw:null, bundleStars:true};
     if(!songs.hasDifficulty(selectedSong, mode)) return null;
-    if(!difficultyCache[mode]) difficultyCache[mode]=calculateChartDifficulty(chartForDifficulty(mode));
+    if(!difficultyCache[mode]) { const generated=chartForDifficulty(mode); difficultyCache[mode]=chartDifficulty.calculate({bpm:selectedSong?.bpm,notes:generated.map(n=>({...n,beat:n.beat ?? n.hitTime / BEAT}))}); }
     return difficultyCache[mode];
   }
 
@@ -890,19 +838,10 @@
     const label=getActiveDifficultyLabel(songData,difficultyId);
     if(isBundledSong(songData)){
       const metaStars=Number(meta?.stars);
-      return {id:difficultyId, label, stars:Number.isFinite(metaStars) ? metaStars : calculateChartDifficulty(chartForDifficulty(difficultyId, songData))?.stars};
+      return {id:difficultyId, label, stars:Number.isFinite(metaStars) ? metaStars : chartDifficulty.calculate({bpm:songData?.bpm,notes:chartForDifficulty(difficultyId, songData).map(n=>({...n,beat:n.beat ?? n.hitTime / BEAT}))})?.stars};
     }
-    const chart=songData.charts?.[difficultyId];
-    const metaStars=Number(meta?.stars);
-    let stars=metaStars;
-    if(!Number.isFinite(stars) && chart){
-      try{
-        stars=chartTools.calculateStars(chart);
-      }catch(error){
-        console.error("[Difficulty Calculation Failed]", error);
-        stars=undefined;
-      }
-    }
+    const chart=songData.charts?.[difficultyId]; let stars;
+    if(chart){ try{ stars=chartDifficulty.calculate(chart).stars; }catch(error){ console.error("[Difficulty Calculation Failed]", error); } }
     return {id:difficultyId, label, stars};
   }
 
@@ -1900,7 +1839,7 @@
     return out.sort((a,b)=>(a.beat??0)-(b.beat??0));
   }
 
-  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; const runtime=make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT*CHART_STRETCH, amount:n.amount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); if(n.id!==undefined) runtime.id=String(n.id); return runtime; }
+  function localNoteToGame(n){ const durBeat=Number(n.durationBeat ?? (n.duration ? n.duration/BEAT : 0))||0; const runtime=make(n.type, Number(n.beat)||0, Number(n.lane ?? n.directionIndex ?? 0)||0, { angleDeg:noteAngleDeg(n), endAngleDeg:noteEndAngleDeg(n), endLane:n.endLane, direction:n.direction, duration:durBeat*BEAT*CHART_STRETCH, amount:n.amount, slideAmount:n.slideAmount, turns:n.turns, sweepAngle:n.sweepAngle, signedSweepAngle:n.signedSweepAngle }); if(n.id!==undefined) runtime.id=String(n.id); return runtime; }
 
   function generateChart(){
     if(useCustomChart){
