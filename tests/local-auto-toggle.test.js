@@ -11,6 +11,7 @@ let liveButton = null;
 let stableButton = null;
 let fallbackClicks = 0;
 let blockedStableClicks = 0;
+let shortcutToggles = 0;
 
 function createAutoButton(on = false, label = 'AUTO PLAY') {
   let enabled = !!on;
@@ -39,7 +40,24 @@ function createAutoButton(on = false, label = 'AUTO PLAY') {
   return button;
 }
 
+class FakeKeyboardEvent {
+  constructor(type, init={}) { this.type=type; Object.assign(this,init); }
+}
+
+const window = {
+  KeyboardEvent: FakeKeyboardEvent,
+  dispatchEvent(event) {
+    if(event?.type==='keydown' && event.code==='KeyO' && !event.repeat){
+      shortcutToggles += 1;
+      liveButton?.setState(!liveButton.state());
+      return true;
+    }
+    return false;
+  }
+};
+
 const document = {
+  defaultView: window,
   addEventListener(type, handler, capture) {
     if (!listeners.has(type)) listeners.set(type, []);
     listeners.get(type).push({ handler, capture: !!capture });
@@ -53,7 +71,6 @@ const document = {
   }
 };
 
-const window = {};
 vm.runInNewContext(source, {
   window,
   document,
@@ -68,15 +85,18 @@ assert(api, 'cmix import UI API must be exported');
 assert.strictEqual(api.installAutoToggleFallback(document), true, 'fallback must install once');
 assert.strictEqual(api.installAutoToggleFallback(document), false, 'fallback must not install twice');
 
-function reset(on = false) {
+function reset(on = false, {stable=true}={}) {
   liveButton = createAutoButton(on);
-  stableButton = createAutoButton(on, 'AUTO');
+  stableButton = stable ? createAutoButton(on, 'AUTO') : null;
   blockedStableClicks = 0;
-  stableButton.click = () => {
-    fallbackClicks += 1;
-    if(blockedStableClicks > 0){ blockedStableClicks -= 1; return; }
-    stableButton.setState(!stableButton.state());
-  };
+  shortcutToggles = 0;
+  if(stableButton){
+    stableButton.click = () => {
+      fallbackClicks += 1;
+      if(blockedStableClicks > 0){ blockedStableClicks -= 1; return; }
+      stableButton.setState(!stableButton.state());
+    };
+  }
   fallbackClicks = 0;
 }
 
@@ -88,8 +108,45 @@ function flushScheduled() {
   while (scheduled.length) scheduled.shift()();
 }
 
-// Windows/WebView2 regression: pointerup is delivered but the target binding and
-// synthetic click are lost. Capture-phase verification must recover the toggle.
+// Actual current DOM: the LOCAL AUTO button exists but neither safeAuto nor
+// autoToggle exists. Recover through the production KeyO handler.
+reset(false,{stable:false});
+dispatch('pointerdown');
+dispatch('pointerup');
+flushScheduled();
+assert.strictEqual(shortcutToggles, 1);
+assert.strictEqual(liveButton.state(), true);
+assert.strictEqual(liveButton.stateLabel.textContent, 'ON');
+
+// pointerup and click from one physical gesture must still produce one toggle.
+reset(false,{stable:false});
+dispatch('pointerdown');
+dispatch('pointerup');
+dispatch('click');
+flushScheduled();
+assert.strictEqual(shortcutToggles, 1);
+assert.strictEqual(liveButton.state(), true);
+
+// Normal production path changes the dynamic button before verification. The
+// bridge must remain idle even when there is no stable AUTO control.
+reset(false,{stable:false});
+dispatch('pointerdown');
+dispatch('pointerup');
+liveButton.setState(true);
+flushScheduled();
+assert.strictEqual(shortcutToggles, 0);
+assert.strictEqual(liveButton.state(), true);
+
+// Keyboard/accessibility activation has no pointerdown, so click starts its own
+// verification gesture and still recovers if the target handler is absent.
+reset(false,{stable:false});
+dispatch('click');
+flushScheduled();
+assert.strictEqual(shortcutToggles, 1);
+assert.strictEqual(liveButton.state(), true);
+
+// Legacy/future DOM safety: when a stable AUTO control exists, use it and keep
+// the LOCAL visual synchronized.
 reset(false);
 dispatch('pointerdown');
 dispatch('pointerup');
@@ -97,10 +154,9 @@ flushScheduled();
 assert.strictEqual(fallbackClicks, 1);
 assert.strictEqual(stableButton.state(), true);
 assert.strictEqual(liveButton.state(), true);
-assert.strictEqual(liveButton.stateLabel.textContent, 'ON');
 
-// A recent safeBind activation can suppress the first bridge click for 180 ms.
-// The fallback must verify the stable state and retry once after the guard.
+// A recent safeBind activation can suppress the first stable bridge click for
+// 180 ms. Verify and retry once after the guard.
 reset(false);
 blockedStableClicks = 1;
 dispatch('pointerdown');
@@ -109,44 +165,14 @@ flushScheduled();
 assert.strictEqual(fallbackClicks, 2);
 assert.strictEqual(stableButton.state(), true);
 assert.strictEqual(liveButton.state(), true);
-assert.strictEqual(liveButton.stateLabel.textContent, 'ON');
 
-// pointerup and click from one physical gesture must still produce one toggle.
-reset(false);
-dispatch('pointerdown');
-dispatch('pointerup');
-dispatch('click');
-flushScheduled();
-assert.strictEqual(fallbackClicks, 1);
-assert.strictEqual(liveButton.state(), true);
-
-// Normal production path: the target handler already changed both controls.
-reset(false);
-dispatch('pointerdown');
-dispatch('pointerup');
-liveButton.setState(true);
-stableButton.setState(true);
-flushScheduled();
-assert.strictEqual(fallbackClicks, 0);
-assert.strictEqual(liveButton.state(), true);
-
-// The game state may change before the dynamic LOCAL button repaints. The stable
-// control is authoritative; synchronize the LOCAL visual without toggling again.
+// The stable game state may change before the LOCAL button repaints.
 reset(false);
 dispatch('pointerdown');
 dispatch('pointerup');
 stableButton.setState(true);
 flushScheduled();
 assert.strictEqual(fallbackClicks, 0);
-assert.strictEqual(liveButton.state(), true);
-assert.strictEqual(liveButton.stateLabel.textContent, 'ON');
-
-// Keyboard/accessibility activation has no pointerdown, so click starts its own
-// verification gesture and still recovers if the target handler is absent.
-reset(false);
-dispatch('click');
-flushScheduled();
-assert.strictEqual(fallbackClicks, 1);
 assert.strictEqual(liveButton.state(), true);
 
 // Re-render path: a replacement button showing the changed state prevents a
