@@ -1,0 +1,97 @@
+name: Windows updater release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer already committed in src-tauri/tauri.conf.json
+        required: true
+        type: string
+      notes:
+        description: Release notes shown inside CIRCLE MIX
+        required: false
+        default: Windows desktop update
+        type: string
+      draft:
+        description: Create a draft release first
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Validate release secrets
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            throw 'TAURI_SIGNING_PRIVATE_KEY GitHub Actions secret is missing.'
+          }
+      - name: Validate committed version
+        shell: pwsh
+        run: |
+          $config = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          if ($config.version -ne '${{ inputs.version }}') {
+            throw "Workflow version ${{ inputs.version }} does not match committed version $($config.version)."
+          }
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.10.1" --locked
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify desktop distribution
+        run: |
+          npm run desktop:prepare
+          npm run desktop:audit
+          npm test
+      - name: Build signed NSIS updater
+        run: cargo tauri build --config src-tauri/tauri.release.conf.json
+      - name: Assemble release assets
+        id: assets
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'NSIS setup executable was not generated.' }
+          $sigPath = "$($setup.FullName).sig"
+          if (-not (Test-Path $sigPath)) { throw 'Signed updater .sig file was not generated.' }
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          $assetName = 'circle-mix-${{ inputs.version }}-windows-x64-setup.exe'
+          $assetPath = Join-Path release-assets $assetName
+          Copy-Item $setup.FullName $assetPath
+          Copy-Item $sigPath "$assetPath.sig"
+          $signature = (Get-Content $sigPath -Raw).Trim()
+          $tag = 'v${{ inputs.version }}'
+          $downloadUrl = "https://github.com/EpicenterGUY/circle-mix/releases/download/$tag/$assetName"
+          $latest = [ordered]@{
+            version = '${{ inputs.version }}'
+            notes = '${{ inputs.notes }}'
+            pub_date = (Get-Date).ToUniversalTime().ToString('o')
+            platforms = [ordered]@{
+              'windows-x86_64' = [ordered]@{
+                signature = $signature
+                url = $downloadUrl
+              }
+            }
+          }
+          $latest | ConvertTo-Json -Depth 5 | Set-Content release-assets/latest.json -Encoding utf8NoBOM
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "asset=$assetPath" >> $env:GITHUB_OUTPUT
+      - name: Create GitHub release
+        shell: pwsh
+        run: |
+          $args = @('release','create','${{ steps.assets.outputs.tag }}','${{ steps.assets.outputs.asset }}','${{ steps.assets.outputs.asset }}.sig','release-assets/latest.json','--title','CIRCLE MIX ${{ inputs.version }}','--notes','${{ inputs.notes }}')
+          if ('${{ inputs.draft }}' -eq 'true') { $args += '--draft' }
+          & gh @args
