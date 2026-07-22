@@ -2,7 +2,7 @@ name: Windows desktop verification
 on:
   workflow_dispatch:
   pull_request:
-    paths: ['src-tauri/**', 'scripts/prepare-desktop.js', 'scripts/audit-desktop-dist.js', 'src/**', 'index.html', 'package*.json', 'tests/desktop-installer.test.js', 'docs/windows-installer-v1.md']
+    paths: ['src-tauri/**', 'scripts/prepare-desktop.js', 'scripts/audit-desktop-dist.js', 'src/**', 'index.html', 'package*.json', 'tests/desktop-installer.test.js', 'tests/desktop-updater.test.js', 'docs/windows-installer-v1.md', 'docs/windows-updater-release.md', '.github/workflows/windows-updater-release.yml']
 jobs:
   build:
     runs-on: windows-latest
@@ -17,7 +17,12 @@ jobs:
       - run: npm run desktop:prepare
       - run: npm run desktop:audit
       - run: npm test
-      - run: npm run desktop:build
+      - name: Build Windows desktop bundle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/target/release | Out-Null
+          npm run desktop:build 2>&1 | Tee-Object -FilePath src-tauri/target/release/windows-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify executable and NSIS installer
         shell: pwsh
         run: |
@@ -134,5 +139,6 @@ jobs:
           path: |
             src-tauri/target/release/circle-mix.exe
             src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/windows-build.log
             src-tauri/target/release/README.txt
             src-tauri/target/release/installer-smoke.txt

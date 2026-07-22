@@ -18,12 +18,14 @@ assert.equal(tauri.bundle?.windows?.nsis?.installMode,'currentUser','the test in
 assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop build must bundle the configured installer');
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
-assert.equal(tauri.version,'0.9.33','Windows installer must publish the visual clarity version');
-assert.match(prepare,/DESKTOP_VERSION='0\.9\.33'/,'desktop distribution must expose the visual clarity version');
+assert.equal(pkg.version,tauri.version,'npm and desktop versions must match for updater releases');
+assert.equal(tauri.version,'0.9.34','Windows installer must publish the updater bootstrap version');
+assert.match(prepare,/DESKTOP_VERSION='0\.9\.34'/,'desktop distribution must expose the updater bootstrap version');
 assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must normalize Windows CRLF line endings');
-assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must apply the dedicated visual pass');
-assert.match(prepare,/PULSE & SWING VISUAL PASS/,'desktop changelog must announce the visual pass');
-assert.match(visualPass,/pulse:\"#ff8a3d\"/,'PULSE must use an orange color distinct from SWING CCW');
+assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must retain the dedicated visual pass');
+assert.match(prepare,/WINDOWS UPDATER BOOTSTRAP/,'desktop changelog must announce the updater bootstrap');
+assert.match(prepare,/desktop-updater\.js/,'desktop build must inject the updater UI');
+assert.match(visualPass,/pulse:"#ff8a3d"/,'PULSE must use an orange color distinct from SWING CCW');
 assert.match(visualPass,/PULSE_VISUAL_SINGLE_RING/,'PULSE must use the single-ring approach visual');
 assert.match(visualPass,/PULSE_HIT_SINGLE_RING/,'PULSE judgement must use a short single-ring burst');
 assert.match(visualPass,/SWING_VISUAL_DIRECTIONAL_ARC/,'SWING must use a local directional arc');
@@ -33,6 +35,7 @@ assert.match(prepare,/TRACE_PROFILES\.tutorial\.endpointGrace\+\.05/,'desktop tu
 assert.match(prepare,/remove the SCRATCH tutorial step/,'desktop build must retire new SCRATCH tutorial authoring');
 assert.match(prepare,/function checkScratch/,'desktop build must retain legacy SCRATCH playback compatibility');
 assert.match(prepare,/DESKTOP · READY/,'desktop offline data must report ready instead of using the web service worker flow');
+assert.match(audit,/desktop updater bridge audit failed/,'desktop audit must verify updater command packaging');
 assert.match(audit,/PULSE color was not separated from SWING CCW/,'desktop audit must verify PULSE color separation');
 assert.match(audit,/PULSE single-ring visual pass is missing/,'desktop audit must verify PULSE simplification');
 assert.match(audit,/SWING directional visual pass is missing/,'desktop audit must verify SWING simplification');

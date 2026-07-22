@@ -1,0 +1,42 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+
+const root=path.resolve(__dirname,'..');
+const tauri=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.conf.json'),'utf8'));
+const cargo=fs.readFileSync(path.join(root,'src-tauri/Cargo.toml'),'utf8');
+const rust=fs.readFileSync(path.join(root,'src-tauri/src/lib.rs'),'utf8');
+const capability=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/capabilities/default.json'),'utf8'));
+const updater=fs.readFileSync(path.join(root,'src/desktop-updater.js'),'utf8');
+const releaseConfig=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.release.conf.json'),'utf8'));
+const releaseWorkflow=fs.readFileSync(path.join(root,'.github/workflows/windows-updater-release.yml'),'utf8');
+
+assert.equal(tauri.version,'0.9.34');
+assert.equal(tauri.app?.withGlobalTauri,true,'desktop updater UI needs the global Tauri core bridge');
+assert.equal(tauri.bundle?.createUpdaterArtifacts,false,'normal PR installers must not require the private signing key');
+assert.equal(releaseConfig.bundle?.createUpdaterArtifacts,true,'release builds must create signed updater artifacts');
+assert.deepEqual(tauri.plugins?.updater?.endpoints,['https://github.com/EpicenterGUY/circle-mix/releases/latest/download/latest.json']);
+assert.equal(tauri.plugins?.updater?.windows?.installMode,'passive');
+const publicKeyText=Buffer.from(tauri.plugins?.updater?.pubkey||'','base64').toString('utf8');
+assert.match(publicKeyText,/^untrusted comment: minisign public key:/);
+const publicPayload=Buffer.from(publicKeyText.trim().split(/\r?\n/)[1]||'','base64');
+assert.equal(publicPayload.length,42,'minisign public key payload must be Ed + key id + Ed25519 key');
+assert.equal(publicPayload.subarray(0,2).toString('ascii'),'Ed');
+assert.match(cargo,/tauri-plugin-updater = "2"/);
+assert.match(rust,/check_desktop_update/);
+assert.match(rust,/install_desktop_update/);
+assert.match(rust,/download_and_install/);
+assert.match(rust,/app\.restart\(\)/);
+assert.ok(capability.permissions.includes('core:default'));
+assert.match(updater,/window\.__TAURI__\?\.core\?\.invoke/);
+assert.match(updater,/UPDATE CHECK/);
+assert.match(updater,/게임과 로컬 데이터에는 영향이 없습니다/);
+assert.doesNotMatch(updater,/TAURI_SIGNING_PRIVATE_KEY/);
+assert.match(releaseWorkflow,/TAURI_SIGNING_PRIVATE_KEY: \$\{\{ secrets\.TAURI_SIGNING_PRIVATE_KEY \}\}/);
+assert.match(releaseWorkflow,/TAURI_SIGNING_PRIVATE_KEY_PASSWORD: \$\{\{ secrets\.TAURI_SIGNING_PRIVATE_KEY_PASSWORD \}\}/);
+assert.match(releaseWorkflow,/latest\.json/);
+assert.match(releaseWorkflow,/windows-x86_64/);
+assert.doesNotMatch(releaseWorkflow,/untrusted comment: minisign secret key/,'private signing key must never be committed');
+
+console.log('desktop updater configuration tests passed');
