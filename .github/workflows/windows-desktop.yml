@@ -2,7 +2,7 @@ name: Windows desktop verification
 on:
   workflow_dispatch:
   pull_request:
-    paths: ['src-tauri/**', 'scripts/prepare-desktop.js', 'scripts/audit-desktop-dist.js', 'src/**', 'index.html', 'package*.json']
+    paths: ['src-tauri/**', 'scripts/prepare-desktop.js', 'scripts/audit-desktop-dist.js', 'src/**', 'index.html', 'package*.json', 'tests/desktop-installer.test.js', 'docs/windows-installer-v1.md']
 jobs:
   build:
     runs-on: windows-latest
@@ -18,12 +18,64 @@ jobs:
       - run: npm run desktop:audit
       - run: npm test
       - run: npm run desktop:build
-      - run: Test-Path src-tauri/target/release/circle-mix.exe | Should -BeTrue
+      - name: Verify executable and NSIS installer
+        shell: pwsh
+        run: |
+          $rawExe = Join-Path $PWD 'src-tauri/target/release/circle-mix.exe'
+          if (-not (Test-Path $rawExe)) { throw "Desktop executable is missing: $rawExe" }
+          $installer = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' -File | Select-Object -First 1
+          if (-not $installer) { throw 'NSIS setup executable was not generated' }
+          Write-Host "Raw executable: $rawExe"
+          Write-Host "Installer: $($installer.FullName)"
+      - name: Smoke test current-user install and uninstall
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' -File | Select-Object -First 1
+          $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($installProcess.ExitCode -ne 0) { throw "Installer exited with code $($installProcess.ExitCode)" }
+
+          $uninstallRoots = @(
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKCU:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          )
+          $entry = Get-ItemProperty $uninstallRoots -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq 'CIRCLE MIX' } |
+            Select-Object -First 1
+          if (-not $entry) { throw 'CIRCLE MIX current-user uninstall entry was not created' }
+          if (-not $entry.InstallLocation) { throw 'Installer did not record InstallLocation' }
+
+          $installLocation = [Environment]::ExpandEnvironmentVariables([string]$entry.InstallLocation).TrimEnd('\')
+          $installedExe = Join-Path $installLocation 'circle-mix.exe'
+          if (-not (Test-Path $installedExe)) { throw "Installed executable is missing: $installedExe" }
+          if (-not $entry.UninstallString) { throw 'Installer did not record UninstallString' }
+
+          $uninstallCommand = [Environment]::ExpandEnvironmentVariables([string]$entry.UninstallString)
+          if ($uninstallCommand.StartsWith('"')) {
+            $uninstaller = $uninstallCommand.Split('"')[1]
+          } else {
+            $uninstaller = ($uninstallCommand -split '\s+')[0]
+          }
+          if (-not (Test-Path $uninstaller)) { throw "Uninstaller is missing: $uninstaller" }
+
+          $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
+          if ($uninstallProcess.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstallProcess.ExitCode)" }
+          for ($attempt = 0; $attempt -lt 20 -and (Test-Path $installedExe); $attempt++) { Start-Sleep -Milliseconds 500 }
+          if (Test-Path $installedExe) { throw "Uninstall left the executable behind: $installedExe" }
       - name: Write artifact notice
-        run: '"Unsigned development verification executable; not an installer." | Out-File src-tauri/target/release/README.txt'
+        shell: pwsh
+        run: |
+          @'
+          Unsigned CIRCLE MIX Windows test build.
+          The setup executable is an NSIS current-user installer and does not require administrator privileges.
+          Windows SmartScreen may warn because this test installer is not code signed.
+          The raw executable is included only for debugging.
+          '@ | Out-File src-tauri/target/release/README.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: circle-mix-windows-test-x64
+          name: circle-mix-windows-installer-x64
+          if-no-files-found: error
+          retention-days: 14
           path: |
             src-tauri/target/release/circle-mix.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/README.txt
