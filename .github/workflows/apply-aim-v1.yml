@@ -20,13 +20,24 @@ jobs:
         shell: bash
         run: |
           base64 -d aim-v1.patch.gz.b64 | gzip -d > /tmp/aim-v1.patch
-          git apply --check -p1 /tmp/aim-v1.patch
-          git apply -p1 /tmp/aim-v1.patch
+          set +e
+          git apply --check --verbose -p1 /tmp/aim-v1.patch > aim-patch.log 2>&1
+          status=$?
+          set -e
+          cat aim-patch.log
+          if [ "$status" -ne 0 ]; then exit "$status"; fi
+          git apply --verbose -p1 /tmp/aim-v1.patch >> aim-patch.log 2>&1
           rm aim-v1.patch.gz.b64
           rm .github/workflows/apply-aim-v1.yml
           rm .github/workflows/aim-source-snapshot.yml
+          rm aim-patch.log
           git add -A
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git commit -m 'feat: rebuild PC aim input v1'
           git push origin HEAD:feat/aim-input-v1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: aim-patch-diagnostics
+          path: aim-patch.log
