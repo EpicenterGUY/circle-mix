@@ -2,7 +2,7 @@ diff --git a/tests/smoke.test.js b/tests/smoke.test.js
 index dcd366b..3f56a92 100644
 --- a/tests/smoke.test.js
 +++ b/tests/smoke.test.js
-@@ -136,14 +136,23 @@ test("ANiMA NORMAL/TECH charts generate valid runtime notes", () => {
+@@ -136,13 +136,19 @@ test("ANiMA NORMAL/TECH charts generate valid runtime notes", () => {
  });
  test("tutorial TRACE regression invariants", () => {
  const steps = api.tutorialSteps;
