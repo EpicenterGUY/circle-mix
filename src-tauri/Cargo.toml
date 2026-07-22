@@ -1,7 +1,7 @@
 [package]
 name = "circle-mix"
-version = "0.9.28"
-description = "CIRCLE MIX Windows desktop foundation"
+version = "0.9.30"
+description = "CIRCLE MIX Windows desktop application"
 authors = ["CIRCLE MIX"]
 edition = "2021"
 
