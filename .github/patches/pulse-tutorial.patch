@@ -1,0 +1,62 @@
+diff --git a/src/game.js b/src/game.js
+index e5992b8..dcae382 100644
+--- a/src/game.js
++++ b/src/game.js
+@@ -3,8 +3,8 @@
+   function keyLabel(code){ return ({KeyZ:"Z",KeyX:"X",Space:"SPACE",MouseLeft:"LMB",MouseRight:"RMB"})[code] || code.replace(/^Key/,""); }
+   function isMobileInput(){ return isMobileViewport && isMobileViewport(); }
+   function tutorialInputFor(kind){
+-    if(isMobileInput()) return ({aim:"터치해서 에임 이동",cut:"화면 탭",hold:"화면을 길게 누르기",slide:"누른 채 목표를 따라가기",trace:"누르지 말고 목표를 따라가기",traceSwing:"TRACE 후 표시 방향으로 짧게 밀기",swing:"표시 방향으로 짧고 빠르게 밀기",scratch:"두 손가락을 누른 채 짧게 긁기",mix:"탭 · 홀드 · 추적 · 스와이프"})[kind] || "화면 터치";
+-    return ({aim:"마우스 이동 / A·D로 에임 조작",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 왼쪽`,hold:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 오른쪽을 길게 누르기`,slide:`${keyLabel("KeyZ")} 또는 ${keyLabel("KeyX")}를 누른 채 따라가기`,trace:"시작점에 맞춘 뒤 표시 방향으로 필요한 만큼 회전하기",traceSwing:"TRACE 완료 후 같은 방향으로 에임을 짧게 튕기기",swing:"표시 방향으로 에임을 짧고 빠르게 움직이기",scratch:"마우스 오른쪽을 누른 채 짧게 긁기",mix:"Z / X / 마우스 입력 + 에임 조작"})[kind] || "입력";
++    if(isMobileInput()) return ({aim:"터치해서 에임 이동",cut:"화면 탭",pulse:"PULSE 버튼을 박자에 맞춰 탭하기",hold:"화면을 길게 누르기",slide:"누른 채 목표를 따라가기",trace:"누르지 말고 목표를 따라가기",traceSwing:"TRACE 후 표시 방향으로 짧게 밀기",swing:"표시 방향으로 짧고 빠르게 밀기",scratch:"두 손가락을 누른 채 짧게 긁기",mix:"탭 · PULSE · 홀드 · 추적 · 스와이프"})[kind] || "화면 터치";
++    return ({aim:"마우스 이동 / A·D로 에임 조작",cut:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 왼쪽`,pulse:"왼쪽 또는 오른쪽 Shift를 짧게 누르기",hold:`${keyLabel("KeyZ")} / ${keyLabel("KeyX")} / 마우스 오른쪽을 길게 누르기`,slide:`${keyLabel("KeyZ")} 또는 ${keyLabel("KeyX")}를 누른 채 따라가기`,trace:"시작점에 맞춘 뒤 표시 방향으로 필요한 만큼 회전하기",traceSwing:"TRACE 완료 후 같은 방향으로 에임을 짧게 튕기기",swing:"표시 방향으로 에임을 짧고 빠르게 움직이기",scratch:"마우스 오른쪽을 누른 채 짧게 긁기",mix:"Z / X / Shift / 마우스 입력 + 에임 조작"})[kind] || "입력";
+   }
+   const tutorialSteps=[
+     {name:"에임 · 위치 익히기",kind:"aim",phase:"explore",desc:"노란 목표 안으로 에임을 옮겨 판정 위치를 익혀보세요.",targets:[0,2,5],notes:[]},
+@@ -12,6 +12,8 @@
+     {name:"CUT · 가이드",kind:"cut",phase:"guided",desc:"실제 판정 범위를 보며 느린 CUT 두 개를 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:6,lane:2}]},
+     {name:"CUT · 흐린 가이드",kind:"cut",phase:"faded",desc:"흐려진 가이드를 참고해 일반 노트 모양에 맞춰 입력하세요.",notes:[{type:"cut",beat:4,lane:5},{type:"cut",beat:5.5,lane:7}]},
+     {name:"CUT · 실전 표시",kind:"cut",phase:"standard",desc:"상세 가이드 없이 일반 CUT 두 개를 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5.5,lane:2}]},
++    {name:"PULSE · 기본 입력",kind:"pulse",phase:"guided",desc:"중앙 링이 판정선에 닿을 때 Shift 또는 PULSE 버튼을 짧게 누르세요. 다음 입력 전에는 손을 완전히 떼야 합니다.",notes:[{type:"pulse",beat:4},{type:"pulse",beat:6},{type:"pulse",beat:8}]},
++    {name:"CUT + PULSE · 동시 입력",kind:"pulseCombo",phase:"guided",desc:"에임을 CUT 위치에 맞춘 채 CUT과 PULSE를 같은 박자에 함께 입력하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"pulse",beat:4},{type:"cut",beat:7,lane:4},{type:"pulse",beat:7}]},
+     {name:"HOLD · 가이드",kind:"hold",phase:"guided",desc:"바깥 호는 위치, 채워지는 중심은 버튼 유지 상태를 뜻합니다.",notes:[{type:"fx",beat:4,lane:1,durationBeat:3},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
+     {name:"HOLD · 실전 표시",kind:"hold",phase:"standard",desc:"일반 표시 상태에서 HOLD 두 개를 끝까지 유지하세요.",notes:[{type:"fx",beat:4,lane:1,durationBeat:2.5},{type:"fx",beat:8,lane:3,durationBeat:2.5}]},
+     {name:"SLIDE · 가이드",kind:"slide",phase:"guided",desc:"버튼을 누른 상태와 현재 목표 위치를 따로 확인하며 따라가세요.",notes:[{type:"slideCW",beat:4,lane:6,endLane:2,durationBeat:4},{type:"slideCCW",beat:10,lane:2,endLane:6,durationBeat:4}]},
+@@ -24,7 +26,7 @@
+     {name:"SWING · 가이드",kind:"swing",phase:"guided",desc:"접선 화살표가 가리키는 방향으로 에임을 짧고 빠르게 움직이세요.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
+     {name:"SCRATCH · 가이드",kind:"scratch",phase:"guided",desc:"레거시 SCRATCH는 마우스 오른쪽을 누른 채 표시 방향으로 짧게 긁으세요.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
+     {name:"360° TRACE → SWING",kind:"traceSwing",phase:"TRACE_ACTIVE",desc:"시작점에서 한 바퀴 회전해 끝점에 도달한 뒤 SWING 하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360}]},
+-    {name:"종합 연습",kind:"mix",phase:"standard",desc:"상세 가이드 없이 배운 노트를 순서대로 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
++    {name:"종합 연습",kind:"mix",phase:"standard",desc:"상세 가이드 없이 배운 노트를 순서대로 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"pulse",beat:17},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
+   ];
+   function setTutorialHud(runtime=null){
+     const st=runtime?.step || tutorialSteps[tutorialStepIndex];
+@@ -39,10 +41,10 @@
+     if(st.kind==="traceSwing" && (tutorialState.traceSwingPhase==="SWING_ARMING" || tutorialState.traceSwingPhase==="SWING_ACTIVE" || pendingKind==="swing")) tutorialDesc.textContent="이제 같은 방향으로 에임을 새로 짧게 튕기세요.";
+     else if(st.kind==="traceSwing") tutorialDesc.textContent="시작점에서 한 바퀴 회전해 끝점에 도달한 뒤 SWING 하세요.";
+     else tutorialDesc.textContent=st.desc;
+-    const hintKind=(st.kind==="traceSwing"?pendingKind:(st.kind==="mix"?pendingKind:st.kind));
++    const hintKind=(st.kind==="traceSwing"?pendingKind:((st.kind==="mix"||st.kind==="pulseCombo")?pendingKind:st.kind));
+   }
+   function tutorialNoteFinalDeadline(n){
+-    if(n.type==="cut") return n.hitTime+.22;
++    if(n.type==="cut" || n.type==="pulse") return n.hitTime+.22;
+     if(n.type.startsWith("swing") || n.type.startsWith("scratch")) return n.hitTime+.26;
+     return n.hitTime+(n.duration||0);
+   }
+diff --git a/tests/pulse-game-input.test.js b/tests/pulse-game-input.test.js
+index fcf14f9..4a48f37 100644
+--- a/tests/pulse-game-input.test.js
++++ b/tests/pulse-game-input.test.js
+@@ -11,5 +11,11 @@ assert.match(source,/window\.addEventListener\("blur",\(\)=>\{ keys\.ShiftLeft=f
+ assert.match(source,/function nextAimNote\(t\)[\s\S]*?n\.type==="pulse"[\s\S]*?const n=nextAimNote\(t\);/,'AUTO aim selection must skip global PULSE notes');
+ assert.doesNotMatch(source,/scratchHeld\s*=\s*mouseDownRight\s*\|\|\s*keys\.Shift/,'Shift must never arm SCRATCH from the render loop');
+ assert.doesNotMatch(source,/setScratchHeld\([^\n]*keys\.Shift/,'Shift must never re-arm SCRATCH from release handlers');
++assert.match(source,/pulse:"PULSE 버튼을 박자에 맞춰 탭하기"/,'mobile tutorial must explain the dedicated PULSE button');
++assert.match(source,/pulse:"왼쪽 또는 오른쪽 Shift를 짧게 누르기"/,'desktop tutorial must explain the shared Shift input');
++assert.match(source,/\{name:"PULSE · 기본 입력",kind:"pulse"[\s\S]*?notes:\[\{type:"pulse",beat:4\},\{type:"pulse",beat:6\},\{type:"pulse",beat:8\}\]\}/,'tutorial must include angle-free PULSE release-gate practice');
++assert.match(source,/\{name:"CUT \+ PULSE · 동시 입력",kind:"pulseCombo"[\s\S]*?\{type:"cut",beat:4,lane:0\},\{type:"pulse",beat:4\}[\s\S]*?\{type:"cut",beat:7,lane:4\},\{type:"pulse",beat:7\}/,'tutorial must include simultaneous aimed and global input practice');
++assert.match(source,/\(st\.kind==="mix"\|\|st\.kind==="pulseCombo"\)\?pendingKind:st\.kind/,'combined PULSE tutorial must show the next note family input hint');
++assert.match(source,/if\(n\.type==="cut" \|\| n\.type==="pulse"\) return n\.hitTime\+\.22;/,'tutorial PULSE must keep the same late grace period as CUT');
+ 
+ console.log('PULSE production input separation tests passed');
