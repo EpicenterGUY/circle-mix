@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [feat/windows-updater-v1]
     paths:
-      - 'aim-v1.patch.gz.b64'
+      - 'aim-v1.patch.gz.b64.*'
       - '.github/workflows/apply-aim-v1.yml'
 permissions:
   contents: write
@@ -19,15 +19,10 @@ jobs:
       - name: Apply validated patch
         shell: bash
         run: |
-          base64 -d aim-v1.patch.gz.b64 | gzip -d > /tmp/aim-v1.patch
-          set +e
-          git apply --check --verbose -p1 /tmp/aim-v1.patch > aim-patch.log 2>&1
-          status=$?
-          set -e
-          cat aim-patch.log
-          if [ "$status" -ne 0 ]; then exit "$status"; fi
-          git apply --verbose -p1 /tmp/aim-v1.patch >> aim-patch.log 2>&1
-          rm aim-v1.patch.gz.b64
+          cat aim-v1.patch.gz.b64.0 aim-v1.patch.gz.b64.1 aim-v1.patch.gz.b64.2 aim-v1.patch.gz.b64.3 | base64 -d | gzip -d > /tmp/aim-v1.patch
+          git apply --check --verbose -p1 /tmp/aim-v1.patch 2>&1 | tee aim-patch.log
+          git apply --verbose -p1 /tmp/aim-v1.patch 2>&1 | tee -a aim-patch.log
+          rm -f aim-v1.patch.gz.b64 aim-v1.patch.gz.b64.*
           rm .github/workflows/apply-aim-v1.yml
           rm .github/workflows/aim-source-snapshot.yml
           rm aim-patch.log
