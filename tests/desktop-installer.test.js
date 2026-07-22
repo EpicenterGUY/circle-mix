@@ -19,6 +19,7 @@ assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop bu
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
 assert.equal(tauri.version,'0.9.32','Windows installer must publish the tutorial TRACE hotfix version');
 assert.match(prepare,/DESKTOP_VERSION='0\.9\.32'/,'desktop distribution must expose the tutorial hotfix version');
+assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must normalize Windows CRLF line endings');
 assert.match(prepare,/desktop-release\.js/,'desktop build must inject release metadata before game startup');
 assert.match(prepare,/PULSE TUTORIAL HOTFIX/,'desktop changelog must announce the tutorial fix');
 assert.match(prepare,/TRACE_PROFILES\.tutorial\.endpointGrace\+\.05/,'desktop tutorial TRACE must keep endpoint grace before finalization');
