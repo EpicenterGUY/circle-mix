@@ -2,9 +2,10 @@
 'use strict';
 const fs=require('fs'), path=require('path');
 const root=path.resolve(__dirname,'..'), out=path.join(root,'desktop-dist');
-const DESKTOP_VERSION='0.9.31';
+const DESKTOP_VERSION='0.9.32';
 const DESKTOP_BUILD_DATE='2026-07-23';
 const files=['style.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/cmix-import-ui.js','src/pwa.js'];
+function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
 fs.rmSync(out,{recursive:true,force:true});
 for(const file of files){const from=path.join(root,file), to=path.join(out,file); fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(from,to);}
 let index=fs.readFileSync(path.join(root,'index.html'),'utf8')
@@ -23,12 +24,41 @@ if(animaStart<0 || animaEnd<0) throw new Error('Unable to isolate bundled ANiMA 
 game=game.slice(0,animaStart)+game.slice(animaEnd);
 game=game.replace(/    if\(songId==="anima"[\s\S]*?    if\(songId==="ghost-rule"/, '    if(songId==="ghost-rule"');
 game=game.replace(/    if\(songId==="ghost-rule"[\s\S]*?    throw new Error/, '    throw new Error');
+game=replaceOrThrow(game,
+'    const controls=document.querySelector(".mobileGameplayControls");',
+'    const controls=document.querySelector(".mobileGameplayControls");\n    const legacyScratchButton=document.getElementById("mobileScratchBtn"); if(legacyScratchButton){legacyScratchButton.hidden=true;legacyScratchButton.disabled=true;legacyScratchButton.setAttribute?.("aria-hidden","true");}',
+'hide the legacy mobile SCRATCH control');
+game=replaceOrThrow(game,
+'    if(scratchEditor&&!document.getElementById("addPulseBtn")){ const button=document.createElement("button"); button.className="editBtn editFull"; button.id="addPulseBtn"; button.type="button"; button.textContent="PULSE (SHIFT)"; scratchEditor.parentElement?.insertBefore(button,scratchEditor); }',
+'    if(scratchEditor&&!document.getElementById("addPulseBtn")){ const button=document.createElement("button"); button.className="editBtn editFull"; button.id="addPulseBtn"; button.type="button"; button.textContent="PULSE (SHIFT)"; scratchEditor.parentElement?.insertBefore(button,scratchEditor); }\n    for(const id of ["addScratchCWBtn","addScratchCCWBtn"]){const el=document.getElementById(id);if(el){el.hidden=true;el.disabled=true;el.setAttribute?.("aria-hidden","true");}}',
+'retire SCRATCH editor controls');
+game=replaceOrThrow(game,
+'    if(hint) hint.textContent="현재 음악 위치에 노트 찍기. PULSE는 각도 없이 Shift로 치는 전역 탭이며, SCRATCH는 레거시 우클릭 방향 액션입니다.";',
+'    if(hint) hint.textContent="현재 음악 위치에 노트 찍기. PULSE는 각도 없이 Shift로 치는 전역 탭입니다.";',
+'remove SCRATCH from the editor hint');
+game=replaceOrThrow(game,
+'    const keyGrid=document.querySelector("#keymapOverlay .keyGrid");',
+'    const keyGrid=document.querySelector("#keymapOverlay .keyGrid");\n    if(keyGrid){const keyCells=[...keyGrid.children];const scratchIndex=keyCells.findIndex(cell=>String(cell.textContent||"").trim().toUpperCase()==="SCRATCH");if(scratchIndex>=0)for(const cell of keyCells.slice(scratchIndex,scratchIndex+3)){if(typeof cell.remove==="function")cell.remove();else cell.hidden=true;}}',
+'remove SCRATCH from the keymap');
+game=replaceOrThrow(game,',scratch:"두 손가락을 누른 채 짧게 긁기"','', 'remove the mobile SCRATCH tutorial hint');
+game=replaceOrThrow(game,',scratch:"마우스 오른쪽을 누른 채 짧게 긁기"','', 'remove the desktop SCRATCH tutorial hint');
+game=replaceOrThrow(game,
+'    {name:"SCRATCH · 가이드",kind:"scratch",phase:"guided",desc:"레거시 SCRATCH는 마우스 오른쪽을 누른 채 표시 방향으로 짧게 긁으세요.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},\n',
+'',
+'remove the SCRATCH tutorial step');
+game=replaceOrThrow(game,'{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55}','{type:"pulse",beat:18}','replace SCRATCH in the final tutorial mix');
+game=replaceOrThrow(game,
+'  function tutorialNoteFinalDeadline(n){\n    if(n.type==="cut" || n.type==="pulse") return n.hitTime+.22;\n    if(n.type.startsWith("swing") || n.type.startsWith("scratch")) return n.hitTime+.26;\n    return n.hitTime+(n.duration||0);\n  }',
+'  function tutorialNoteFinalDeadline(n){\n    if(n.type==="cut" || n.type==="pulse") return n.hitTime+.22;\n    if(n.type.startsWith("swing") || n.type.startsWith("scratch")) return n.hitTime+.26;\n    if(n.type.startsWith("trace")) return n.hitTime+(n.duration||0)+TRACE_PROFILES.tutorial.endpointGrace+.05;\n    return n.hitTime+(n.duration||0);\n  }',
+'preserve the TRACE endpoint grace before tutorial finalization');
+if(!game.includes('function checkScratch')) throw new Error('Legacy SCRATCH playback compatibility was removed unexpectedly.');
+if(game.includes('name:"SCRATCH · 가이드"')||game.includes('{type:"scratchCCW",beat:18')) throw new Error('Desktop tutorial still exposes SCRATCH.');
 fs.writeFileSync(desktopGame,game);
 const desktopSongs=path.join(out,'src/songs.js');
 let songs=fs.readFileSync(desktopSongs,'utf8');
 songs=songs.replaceAll('CircleMixGhostRuleBundle','ExcludedBundle').replaceAll('CircleMixRoutingBundle','ExcludedBundle').replaceAll('./assets/audio/ghost-rule.mp3','').replaceAll('./assets/jackets/ghost-rule.jpg','');
 fs.writeFileSync(desktopSongs,songs);
-const desktopRelease=`(function(){\n  "use strict";\n  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"PULSE & WINDOWS INSTALLER",summary:"PULSE 노트와 Windows 설치형 테스트판을 추가하고 데스크톱 오프라인 상태 표시를 수정했습니다.",changes:[\n    {category:"PULSE",text:"에임 위치와 무관하게 좌·우 Shift로 치는 전역 탭 노트를 추가했습니다."},\n    {category:"INPUT",text:"양쪽 Shift를 모두 놓아야 다음 PULSE가 입력되는 공용 릴리즈 게이트를 적용했습니다."},\n    {category:"TUTORIAL",text:"단독 PULSE와 CUT + PULSE 동시 입력을 튜토리얼에서 연습할 수 있습니다."},\n    {category:"DESKTOP",text:"관리자 권한 없이 설치 가능한 Windows NSIS 테스트 설치판을 제공합니다."},\n    {category:"OFFLINE",text:"Windows 설치판은 앱 파일이 이미 로컬에 있으므로 OFFLINE DATA를 READY로 표시합니다."}\n  ]};\n  window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});\n  const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];\n  window.CircleMixChangelog=[release,...previous.filter(entry=>entry?.version!==release.version)];\n})();\n`;
+const desktopRelease=`(function(){\n  "use strict";\n  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"PULSE TUTORIAL HOTFIX",summary:"Windows 설치판의 TRACE 튜토리얼 판정과 PULSE 전환 화면을 수정했습니다.",changes:[\n    {category:"TRACE",text:"튜토리얼 종료 정리가 끝점 판정 grace보다 먼저 실행되어 정상 회전도 실패하던 문제를 수정했습니다."},\n    {category:"PULSE",text:"SCRATCH 튜토리얼과 종합 연습의 신규 SCRATCH 사용을 제거하고 PULSE로 교체했습니다."},\n    {category:"UI",text:"Windows 설치판의 에디터와 키맵에서 SCRATCH 생성 안내를 숨겼습니다."},\n    {category:"COMPATIBILITY",text:"기존 .cmix의 SCRATCH 판정 코드는 레거시 재생 호환을 위해 유지합니다."},\n    {category:"DESKTOP",text:"관리자 권한 없이 설치 가능한 Windows NSIS 테스트 설치판과 로컬 OFFLINE READY 상태를 유지합니다."}\n  ]};\n  window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});\n  const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];\n  window.CircleMixChangelog=[release,...previous.filter(entry=>entry?.version!==release.version)];\n})();\n`;
 fs.writeFileSync(path.join(out,'src/desktop-release.js'),desktopRelease);
 const desktopPwa=`(function(){\n  "use strict";\n  const $=id=>document.getElementById(id);\n  const setText=(id,text)=>{const el=$(id);if(el)el.textContent=text;};\n  function syncDesktopOfflineUi(){\n    setText("pwaNetworkState","DESKTOP · READY");\n    setText("offlineDataStatus","READY");\n    setText("offlineDataProgress","100%");\n    const offlineBtn=$("offlineDataBtn");\n    if(offlineBtn){offlineBtn.disabled=true;offlineBtn.setAttribute("aria-disabled","true");offlineBtn.title="Windows 설치판의 앱 데이터는 이미 로컬에 설치되어 있습니다.";}\n    const installBtn=$("installAppBtn");if(installBtn)installBtn.hidden=true;\n    const updateRow=$("pwaUpdateRow");if(updateRow)updateRow.hidden=true;\n  }\n  window.CircleMixPWA=Object.freeze({setGameplayState(){},canApplyUpdate(){return true;},isOfflineDownloadActive(){return false;},isDesktopOfflineReady(){return true;}});\n  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",syncDesktopOfflineUi,{once:true});else syncDesktopOfflineUi();\n})();\n`;
 fs.writeFileSync(path.join(out,'src/pwa.js'),desktopPwa);
