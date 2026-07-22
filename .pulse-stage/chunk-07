@@ -1,0 +1,110 @@
+ .mobileLayoutOverlay,.mobileInputTestOverlay{position:fixed;inset:0;z-index:500;background:rgba(1,5,15,.94);display:flex;align-items:center;justify-content:center;padding:12px;color:#eafcff;pointer-events:auto}.mobileLayoutOverlay[hidden],.mobileInputTestOverlay[hidden]{display:none}.mobileLayoutShell,.mobileInputTestShell{width:min(1100px,100%);height:min(720px,100%);display:grid;grid-template-rows:auto 1fr auto auto;background:linear-gradient(180deg,rgba(7,18,40,.98),rgba(3,8,18,.96));border:1px solid rgba(92,255,251,.32);border-radius:20px;padding:12px;gap:8px}.mobileLayoutHeader,.mobileInputTestShell header{display:flex;justify-content:space-between;align-items:center}.mobileLayoutHeader h2,.mobileInputTestShell h2{margin:0}.mobileLayoutHeader span,.mobileInputTestShell span{font-size:11px;font-weight:900;color:#5cfffb}.mobileLayoutHeader button,.mobileInputTestShell button,.mobileLayoutTools button{border:1px solid rgba(92,255,251,.34);background:rgba(8,24,50,.84);color:#eafcff;border-radius:12px;font-weight:900;padding:9px 11px}.mobileLayoutPreview{position:relative;overflow:hidden;border-radius:16px;border:1px solid rgba(255,255,255,.16);background:radial-gradient(circle at center,rgba(92,255,251,.12),transparent 30%),linear-gradient(135deg,#061428,#09101e);touch-action:none}.mobileSafeArea{position:absolute;border:1px dashed rgba(92,255,251,.55);background:rgba(92,255,251,.04)}.mobileHudGhost{position:absolute;left:12%;right:12%;top:8px;height:38px;border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.45);font-weight:900}.mobilePauseGhost{position:absolute;right:10px;top:10px;width:74px;height:36px;border:1px solid rgba(255,110,110,.55);display:flex;align-items:center;justify-content:center;color:#ffb0b0;font-weight:900}.mobileJudgeGhost{position:absolute;border:2px solid rgba(255,255,255,.35);border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 18px rgba(255,255,255,.04)}.mobileLayoutButton{position:absolute;border-radius:999px;border:2px solid rgba(255,255,255,.45);color:#fff;font-weight:1000;transform:translate(-50%,-50%);touch-action:none}.mobileLayoutButton.action{background:rgba(92,255,251,.35)}.mobileLayoutButton.scratch{background:rgba(208,71,255,.35)}.mobileLayoutCoord{position:absolute;left:10px;bottom:10px;color:#fff;font-weight:900;background:rgba(0,0,0,.42);padding:6px 8px;border-radius:8px}.mobileLayoutWarning{min-height:20px;color:#ffe15a;font-weight:1000;text-align:center}.mobileLayoutExport{height:48px;background:#020815;color:#bff;border:1px solid rgba(92,255,251,.25);border-radius:8px}.mobileLayoutTools{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}.mobileInputTestShell{grid-template-rows:auto 1fr auto auto}.mobileInputTestShell canvas{width:100%;height:100%;border-radius:14px;background:#050b18;border:1px solid rgba(255,255,255,.16);touch-action:none}.mobileInputTestShell pre{margin:0;white-space:pre-wrap;color:#cfffff;font-size:12px}.mobileInputTestShell ol{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:0;padding-left:24px}.mobileInputTestShell li.pass{color:#79ff7d;font-weight:900}@media (max-width:780px){.mobileInputTestShell ol{grid-template-columns:1fr}.mobileLayoutShell,.mobileInputTestShell{height:100%}}
+diff --git a/tests/browser-regression.test.js b/tests/browser-regression.test.js
+index cb042df..27b2309 100644
+--- a/tests/browser-regression.test.js
++++ b/tests/browser-regression.test.js
+@@ -650,6 +650,26 @@ async function runDeterministicAimAndCutRegression(browser){
+     assert.equal(cut.judgedCount, 1, `ACTION uses onCut production path ${JSON.stringify(cut)}`);
+     assert.equal(cut.combo, 1, 'successful CUT increments combo');
+     assert.equal(cut.chartDoneStates.find(n=>n.id==='test-cut-0').done, true, 'successful CUT completes its chart note');
++    const pulse = await page.evaluate(() => {
++      const api=window.CircleMixTestApi; api.startPulseTestChart(); api.advanceTestClock(.8);
++      const first=api.testInput.pulseKeyDown('ShiftLeft',false);
++      const heldOther=api.testInput.pulseKeyDown('ShiftRight',false);
++      const afterFirst=api.state();
++      const releaseLeft=api.testInput.pulseKeyUp('ShiftLeft');
++      const releaseRight=api.testInput.pulseKeyUp('ShiftRight');
++      api.startPulseTestChart(); api.setAuto(true); api.advanceTestClock(.82);
++      const auto=api.state(); api.setAuto(false);
++      return {first,heldOther,afterFirst,releaseLeft,releaseRight,auto};
++    });
++    assert.equal(pulse.first.accepted,true,`first Shift accepts PULSE ${JSON.stringify(pulse)}`);
++    assert.equal(pulse.heldOther.reason,'RELEASE_REQUIRED',`other Shift cannot bypass shared release gate ${JSON.stringify(pulse)}`);
++    assert.equal(pulse.afterFirst.judgedCount,1,`PULSE uses normal judgement path ${JSON.stringify(pulse.afterFirst)}`);
++    assert.equal(pulse.afterFirst.chartDoneStates.find(n=>n.id==='test-pulse-0').done,true,'manual PULSE completes the global note');
++    assert.equal(pulse.afterFirst.scratchHeld,false,'Shift PULSE does not activate legacy SCRATCH');
++    assert.equal(pulse.releaseLeft.released,false,'one held Shift keeps the gate latched');
++    assert.equal(pulse.releaseRight.released,true,'all Shift keys released rearms PULSE');
++    assert.equal(pulse.auto.chartDoneStates.find(n=>n.id==='test-pulse-0').done,true,'AUTO completes PULSE at hit time');
++    assert.equal(pulse.auto.perfectCount,1,'AUTO PULSE is PERFECT');
+     assert.deepEqual(errors, [], `deterministic gameplay errors ${JSON.stringify(errors)}`);
+   } finally { unregisterDiagnosticContext(context, page); await context.close(); }
+ }
+@@ -901,6 +921,19 @@ async function runDeterministicAimAndCutRegression(browser){
+     const actionUp = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+     assert.equal(actionUp.mobileActionPointerId, null);
+     assert.equal(actionUp.actionHeld, false);
++    const controlBoxes = await Promise.all(['#mobilePulseBtn','#mobileActionBtn','#mobileScratchBtn'].map(selector=>mobilePage.locator(selector).boundingBox()));
++    assert.ok(controlBoxes.every(Boolean),`all mobile controls are reachable ${JSON.stringify(controlBoxes)}`);
++    const overlaps=(a,b)=>a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y;
++    assert.equal(overlaps(controlBoxes[0],controlBoxes[1]),false,`PULSE does not overlap ACTION ${JSON.stringify(controlBoxes)}`);
++    assert.equal(overlaps(controlBoxes[0],controlBoxes[2]),false,`PULSE does not overlap SCRATCH ${JSON.stringify(controlBoxes)}`);
++    await mobilePage.locator('#mobilePulseBtn').dispatchEvent('pointerdown', {pointerId:40, pointerType:'touch', isPrimary:true, bubbles:true});
++    await mobilePage.locator('#mobilePulseBtn').dispatchEvent('pointerdown', {pointerId:43, pointerType:'touch', isPrimary:false, bubbles:true});
++    const pulseDown = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
++    assert.equal(pulseDown.mobilePulsePointerId,40,'holding mobile PULSE does not accept another pointer');
++    assert.equal(pulseDown.scratchHeld,false,'mobile PULSE does not hold legacy SCRATCH');
++    await mobilePage.locator('#mobilePulseBtn').dispatchEvent('pointerup', {pointerId:40, pointerType:'touch', isPrimary:true, bubbles:true});
++    const pulseUp = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
++    assert.equal(pulseUp.mobilePulsePointerId,null,'mobile PULSE releases cleanly');
+     await mobilePage.locator('#mobileScratchBtn').dispatchEvent('pointerdown', {pointerId:42, pointerType:'touch', isPrimary:true, bubbles:true});
+     const scratchDown = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+     assert.equal(scratchDown.mobileScratchPointerId, 42);
+diff --git a/tests/chart-difficulty.test.js b/tests/chart-difficulty.test.js
+index 2ebdb3e..393b748 100644
+--- a/tests/chart-difficulty.test.js
++++ b/tests/chart-difficulty.test.js
+@@ -6,3 +6,14 @@ test('rotation fields and overlap are safely distinguished',()=>{const slow=C([{
+ test('continuous circular chains outrank slower and alternating movement',()=>{const legendary=S(circularFixture({})),extra=S(circularFixture({delta:20,reverseEvery:4,fast:false})),zigzag=S(circularFixture({reverseEvery:1}));assert.ok(legendary>=6.5&&legendary<=7.5,`legendary ${legendary}`);assert.ok(extra<=legendary-1.5,`${extra} vs ${legendary}`);assert.ok(zigzag<=legendendary-1.5,`${zigzag} vs ${legendary}`);});
+ test('parent BPM options affect charts without an embedded bpm',()=>{const chart=circularFixture({});delete chart.bpm;const slow=S(chart,{bpm:120}),fast=S(chart,{bpm:185});assert.ok(fast>=slow+.4,`${slow} -> ${fast}`);});
+ test('amount and slideAmount preserve full rotations when endpoints match',()=>{const base={type:'slideCW',beat:0,angle:0,endAngle:0,durationBeat:1,direction:'CW'};const amount=S(C([{...base,amount:Math.PI*2}]));const slide=S(C([{...base,slideAmount:Math.PI*2}]));assert.ok(amount>S(C([base])));assert.ok(Math.abs(amount-slide)<=.2);});
++
++
++test("PULSE adds rhythm burden without fake cursor travel",()=>{
++  const aimedOnly={bpm:120,notes:[{type:"cut",beat:0,angle:0},{type:"cut",beat:1,angle:180}]};
++  const withPulse={bpm:120,notes:[{type:"cut",beat:0,angle:0},{type:"pulse",beat:.5},{type:"cut",beat:1,angle:180}]};
++  const simultaneous={bpm:120,notes:[{type:"cut",beat:0,angle:0},{type:"pulse",beat:0},{type:"cut",beat:1,angle:180}]};
++  const base=D.calculate(aimedOnly), separated=D.calculate(withPulse), chord=D.calculate(simultaneous);
++  assert.equal(D.family({type:"pulse"}),"pulse");
++  assert.equal(separated.components.aim,base.components.aim,"PULSE must not add fake cursor travel");
++  assert.ok(chord.components.pulseOverlap>0,"simultaneous PULSE should add hand-separation burden");
++});
+diff --git a/tests/cmix-validator.test.js b/tests/cmix-validator.test.js
+index eb41239..5f08020 100644
+--- a/tests/cmix-validator.test.js
++++ b/tests/cmix-validator.test.js
+@@ -127,3 +127,20 @@ test("validator remains pure and browser reusable", () => {
+   assert.deepEqual(validator.validatePath("charts/reverb.json"), {ok:true});
+   assert.equal(validator.validatePath("charts\\reverb.json").ok, false);
+ });
++
++
++test("PULSE is angle-free and may share a timestamp with an aimed note", () => {
++  const data=chart("pulse-test");
++  data.notes=[{id:"p1",type:"pulse",beat:4},{id:"c1",type:"cut",beat:4,angle:90}];
++  const result=validator.validateChart(data);
++  assert.equal(result.ok,true,JSON.stringify(result.errors));
++});
++
++test("PULSE rejects geometry and duplicate timestamps", () => {
++  const data=chart("pulse-test");
++  data.notes=[{id:"p1",type:"pulse",beat:4,angle:0},{id:"p2",type:"pulse",beat:4}];
++  const result=validator.validateChart(data);
++  assert.equal(result.ok,false);
++  assert.ok(result.errors.some(error=>error.code==="UNEXPECTED_PULSE_FIELD"));
++  assert.ok(result.errors.some(error=>error.code==="DUPLICATE_PULSE_TIME"));
++});
+diff --git a/tests/pulse-input.test.js b/tests/pulse-input.test.js
+index 7c21562..799742d 100644
+--- a/tests/pulse-input.test.js
++++ b/tests/pulse-input.test.js
+@@ -29,7 +29,8 @@ assert.equal(gate.keydown({code:'ShiftRight'}).reason,'RELEASE_REQUIRED','the ot
+ assert.equal(events.length,1);
+ assert.equal(gate.keyup({code:'ShiftLeft'}).released,false,'right Shift is still held');
+ assert.equal(gate.keydown({code:'ShiftLeft'}).reason,'RELEASE_REQUIRED');
+-assert.equal(gate.keyup({code:'ShiftRight'}).released,true);
++assert.equal(gate.keyup({code:'ShiftRight'}).released,false,'left Shift was pressed again and is still held');
++assert.equal(gate.keyup({code:'ShiftLeft'}).released,true,'all Shift keys must be released before rearming');
+ assert.equal(gate.keydown({code:'ShiftRight',timeStamp:20}).accepted,true);
+ assert.equal(events.length,2);
+ gate.reset();
