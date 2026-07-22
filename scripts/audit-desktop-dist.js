@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-const fs=require('fs'),path=require('path');
+const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.resolve(__dirname,'..'),out=path.join(root,'desktop-dist');
 if(!fs.existsSync(path.join(out,'index.html')))throw new Error('desktop-dist/index.html is missing');
 const all=[];(function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);e.isDirectory()?walk(p):all.push(p)}})(out);
@@ -10,8 +10,15 @@ const text=all.filter(p=>/\.(html|js|css)$/i.test(p)).map(p=>fs.readFileSync(p,'
 for(const needle of ['includeBundledSongs:false','service-worker.js','assets/audio/','assets/jackets/','CircleMixGhostRuleBundle','CircleMixRoutingBundle','data:audio/'])if(needle==='includeBundledSongs:false'?!text.includes(needle):text.includes(needle))throw new Error('desktop distribution contains forbidden bundled/PWA content');
 const desktopPwa=fs.readFileSync(path.join(out,'src/pwa.js'),'utf8');
 if(!desktopPwa.includes('DESKTOP · READY')||!desktopPwa.includes('offlineDataStatus')||!desktopPwa.includes('isDesktopOfflineReady'))throw new Error('desktop offline-ready shim is missing');
+const elements=new Map(['pwaNetworkState','offlineDataStatus','offlineDataProgress','offlineDataBtn','installAppBtn','pwaUpdateRow'].map(id=>[id,{id,textContent:'',hidden:false,disabled:false,title:'',attributes:{},setAttribute(name,value){this.attributes[name]=value;}}]));
+const desktopWindow={};
+vm.runInNewContext(desktopPwa,{window:desktopWindow,document:{readyState:'complete',getElementById:id=>elements.get(id)||null,addEventListener(){}}},{filename:'desktop-dist/src/pwa.js'});
+if(elements.get('pwaNetworkState').textContent!=='DESKTOP · READY'||elements.get('offlineDataStatus').textContent!=='READY'||elements.get('offlineDataProgress').textContent!=='100%'||elements.get('offlineDataBtn').disabled!==true||elements.get('installAppBtn').hidden!==true||elements.get('pwaUpdateRow').hidden!==true||desktopWindow.CircleMixPWA?.isDesktopOfflineReady?.()!==true)throw new Error('desktop offline-ready shim did not produce the expected UI state');
 const desktopRelease=fs.readFileSync(path.join(out,'src/desktop-release.js'),'utf8');
 if(!desktopRelease.includes('version:"0.9.31"')||!desktopRelease.includes('PULSE & WINDOWS INSTALLER')||!desktopRelease.includes('CircleMixChangelog'))throw new Error('desktop release metadata override is missing');
+const releaseWindow={CircleMixVersion:{version:'0.9.30'},CircleMixChangelog:[{version:'0.9.30',title:'OLD'}]};
+vm.runInNewContext(desktopRelease,{window:releaseWindow,Object},{filename:'desktop-dist/src/desktop-release.js'});
+if(releaseWindow.CircleMixVersion?.version!=='0.9.31'||releaseWindow.CircleMixChangelog?.[0]?.version!=='0.9.31'||releaseWindow.CircleMixChangelog?.[0]?.title!=='PULSE & WINDOWS INSTALLER')throw new Error('desktop release metadata override did not expose the PULSE release');
 const desktopIndex=fs.readFileSync(path.join(out,'index.html'),'utf8');
 if(!desktopIndex.includes('./src/desktop-release.js'))throw new Error('desktop release metadata is not loaded by index.html');
 console.log(`Desktop distribution audit passed: ${all.length} files, ${all.reduce((n,p)=>n+fs.statSync(p).size,0)} bytes.`);
