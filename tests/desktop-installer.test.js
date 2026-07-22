@@ -9,6 +9,7 @@ const tauri=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.conf.json
 const cargo=fs.readFileSync(path.join(root,'src-tauri/Cargo.toml'),'utf8');
 const workflow=fs.readFileSync(path.join(root,'.github/workflows/windows-desktop.yml'),'utf8');
 const prepare=fs.readFileSync(path.join(root,'scripts/prepare-desktop.js'),'utf8');
+const visualPass=fs.readFileSync(path.join(root,'scripts/desktop-visual-pass.js'),'utf8');
 const audit=fs.readFileSync(path.join(root,'scripts/audit-desktop-dist.js'),'utf8');
 
 assert.equal(tauri.bundle?.active,true,'desktop bundling must stay enabled');
@@ -17,15 +18,24 @@ assert.equal(tauri.bundle?.windows?.nsis?.installMode,'currentUser','the test in
 assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop build must bundle the configured installer');
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
-assert.equal(tauri.version,'0.9.32','Windows installer must publish the tutorial TRACE hotfix version');
-assert.match(prepare,/DESKTOP_VERSION='0\.9\.32'/,'desktop distribution must expose the tutorial hotfix version');
+assert.equal(tauri.version,'0.9.33','Windows installer must publish the visual clarity version');
+assert.match(prepare,/DESKTOP_VERSION='0\.9\.33'/,'desktop distribution must expose the visual clarity version');
 assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must normalize Windows CRLF line endings');
-assert.match(prepare,/desktop-release\.js/,'desktop build must inject release metadata before game startup');
-assert.match(prepare,/PULSE TUTORIAL HOTFIX/,'desktop changelog must announce the tutorial fix');
+assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must apply the dedicated visual pass');
+assert.match(prepare,/PULSE & SWING VISUAL PASS/,'desktop changelog must announce the visual pass');
+assert.match(visualPass,/pulse:\"#ff8a3d\"/,'PULSE must use an orange color distinct from SWING CCW');
+assert.match(visualPass,/PULSE_VISUAL_SINGLE_RING/,'PULSE must use the single-ring approach visual');
+assert.match(visualPass,/PULSE_HIT_SINGLE_RING/,'PULSE judgement must use a short single-ring burst');
+assert.match(visualPass,/SWING_VISUAL_DIRECTIONAL_ARC/,'SWING must use a local directional arc');
+assert.match(visualPass,/SWING_HIT_LOCAL_ONLY/,'SWING judgement must stay local');
+assert.match(visualPass,/isSwing\?6:14/,'SWING particle count must stay reduced');
 assert.match(prepare,/TRACE_PROFILES\.tutorial\.endpointGrace\+\.05/,'desktop tutorial TRACE must keep endpoint grace before finalization');
 assert.match(prepare,/remove the SCRATCH tutorial step/,'desktop build must retire new SCRATCH tutorial authoring');
 assert.match(prepare,/function checkScratch/,'desktop build must retain legacy SCRATCH playback compatibility');
 assert.match(prepare,/DESKTOP · READY/,'desktop offline data must report ready instead of using the web service worker flow');
+assert.match(audit,/PULSE color was not separated from SWING CCW/,'desktop audit must verify PULSE color separation');
+assert.match(audit,/PULSE single-ring visual pass is missing/,'desktop audit must verify PULSE simplification');
+assert.match(audit,/SWING directional visual pass is missing/,'desktop audit must verify SWING simplification');
 assert.match(audit,/tutorial TRACE finalization still ignores endpoint grace/,'desktop audit must verify TRACE endpoint grace');
 assert.match(audit,/desktop tutorial still exposes SCRATCH/,'desktop audit must reject SCRATCH tutorial exposure');
 assert.match(audit,/legacy SCRATCH playback compatibility is missing/,'desktop audit must retain legacy SCRATCH playback');
