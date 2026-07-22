@@ -2,9 +2,9 @@
 'use strict';
 const fs=require('fs'), path=require('path');
 const root=path.resolve(__dirname,'..'), out=path.join(root,'desktop-dist');
-const DESKTOP_VERSION='0.9.33';
+const DESKTOP_VERSION='0.9.34';
 const DESKTOP_BUILD_DATE='2026-07-23';
-const files=['style.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/cmix-import-ui.js','src/pwa.js'];
+const files=['style.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
 fs.rmSync(out,{recursive:true,force:true});
 for(const file of files){const from=path.join(root,file), to=path.join(out,file); fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(from,to);}
@@ -13,8 +13,8 @@ let index=fs.readFileSync(path.join(root,'index.html'),'utf8')
  .replace(/\s*<audio id="song"[\s\S]*?<\/audio>\s*/,'\n<audio id="song" preload="auto"></audio>\n')
  .replace(/\s*<script src="\.\/src\/charts\/(ghost-rule|routing)\.js[^>]*><\/script>/g,'')
  .replace(/<script src="\.\/src\/build-config\.js[^>]*><\/script>/,'<script src="./src/build-config.js"></script>')
- .replace(/(<script src="\.\/src\/changelog\.js[^>]*><\/script>)/,'$1\n<script src="./src/desktop-release.js"></script>');
-if(!index.includes('./src/desktop-release.js')) throw new Error('Unable to inject desktop release metadata.');
+ .replace(/(<script src="\.\/src\/changelog\.js[^>]*><\/script>)/,'$1\n<script src="./src/desktop-release.js"></script>\n<script src="./src/desktop-updater.js"></script>');
+if(!index.includes('./src/desktop-release.js')||!index.includes('./src/desktop-updater.js')) throw new Error('Unable to inject desktop release and updater metadata.');
 fs.writeFileSync(path.join(out,'index.html'),index);
 const desktopGame=path.join(out,'src/game.js');
 let game=fs.readFileSync(desktopGame,'utf8').replace(/\r\n/g,'\n');
@@ -59,9 +59,9 @@ const desktopSongs=path.join(out,'src/songs.js');
 let songs=fs.readFileSync(desktopSongs,'utf8');
 songs=songs.replaceAll('CircleMixGhostRuleBundle','ExcludedBundle').replaceAll('CircleMixRoutingBundle','ExcludedBundle').replaceAll('./assets/audio/ghost-rule.mp3','').replaceAll('./assets/jackets/ghost-rule.jpg','');
 fs.writeFileSync(desktopSongs,songs);
-const desktopRelease=`(function(){\n  "use strict";\n  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"PULSE & SWING VISUAL PASS",summary:"TRACE 튜토리얼 핫픽스를 유지하면서 PULSE와 SWING의 색상·형태·판정 이펙트를 명확히 분리했습니다.",changes:[\n    {category:"PULSE",text:"PULSE를 오렌지 단일 중심 링으로 바꾸고 내부 링·회전 화살표·대량 파티클을 제거했습니다."},\n    {category:"SWING",text:"SWING은 초록/자홍 방향 원호와 화살표 하나만 사용하며 전원형 판정 이펙트를 제거했습니다."},\n    {category:"CLARITY",text:"PULSE와 SWING이 동시에 나와도 중심 링과 바깥 방향 원호로 즉시 구분됩니다."},\n    {category:"TRACE",text:"튜토리얼 TRACE 끝점 grace 수정과 SCRATCH 신규 UI 제거를 유지합니다."},\n    {category:"COMPATIBILITY",text:"기존 .cmix의 SCRATCH 재생 호환과 게임 판정 로직은 변경하지 않았습니다."}\n  ]};\n  window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});\n  const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];\n  window.CircleMixChangelog=[release,...previous.filter(entry=>entry?.version!==release.version)];\n})();\n`;
+const desktopRelease=`(function(){\n  "use strict";\n  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"WINDOWS UPDATER BOOTSTRAP",summary:"이번 버전을 한 번 수동 설치하면 이후 Windows 릴리스부터 앱 안에서 업데이트를 확인하고 설치할 수 있습니다.",changes:[\n    {category:"UPDATER",text:"앱 실행 후 GitHub Releases의 서명된 최신 버전을 자동으로 확인합니다."},\n    {category:"CONTROL",text:"업데이트가 있어도 강제로 설치하지 않고 사용자가 다운로드 및 설치를 선택합니다."},\n    {category:"SECURITY",text:"Tauri 공개키로 업데이트 패키지 서명을 검증하며 비밀키는 저장소에 포함하지 않습니다."},\n    {category:"OFFLINE",text:"업데이트 서버나 인터넷에 연결할 수 없어도 게임과 로컬 데이터는 정상 작동합니다."},\n    {category:"VISUAL",text:"PULSE와 SWING의 분리된 0.9.33 시각 효과를 유지합니다."}\n  ]};\n  window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});\n  const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];\n  window.CircleMixChangelog=[release,...previous.filter(entry=>entry?.version!==release.version)];\n})();\n`;
 fs.writeFileSync(path.join(out,'src/desktop-release.js'),desktopRelease);
 const desktopPwa=`(function(){\n  "use strict";\n  const $=id=>document.getElementById(id);\n  const setText=(id,text)=>{const el=$(id);if(el)el.textContent=text;};\n  function syncDesktopOfflineUi(){\n    setText("pwaNetworkState","DESKTOP · READY");\n    setText("offlineDataStatus","READY");\n    setText("offlineDataProgress","100%");\n    const offlineBtn=$("offlineDataBtn");\n    if(offlineBtn){offlineBtn.disabled=true;offlineBtn.setAttribute("aria-disabled","true");offlineBtn.title="Windows 설치판의 앱 데이터는 이미 로컬에 설치되어 있습니다.";}\n    const installBtn=$("installAppBtn");if(installBtn)installBtn.hidden=true;\n    const updateRow=$("pwaUpdateRow");if(updateRow)updateRow.hidden=true;\n  }\n  window.CircleMixPWA=Object.freeze({setGameplayState(){},canApplyUpdate(){return true;},isOfflineDownloadActive(){return false;},isDesktopOfflineReady(){return true;}});\n  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",syncDesktopOfflineUi,{once:true});else syncDesktopOfflineUi();\n})();\n`;
 fs.writeFileSync(path.join(out,'src/pwa.js'),desktopPwa);
-fs.writeFileSync(path.join(out,'src/build-config.js'),`window.CircleMixBuildConfig=Object.freeze({target:'desktop',includeBundledSongs:false,enableServiceWorker:false,enablePwaInstallUi:false});\n`);
+fs.writeFileSync(path.join(out,'src/build-config.js'),`window.CircleMixBuildConfig=Object.freeze({target:'desktop',includeBundledSongs:false,enableServiceWorker:false,enablePwaInstallUi:false,enableSignedUpdater:true});\n`);
 console.log(`Prepared desktop-dist v${DESKTOP_VERSION} with ${files.length+3} allowlisted files.`);
