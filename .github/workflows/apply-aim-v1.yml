@@ -1,7 +1,7 @@
 name: Apply aim input v1
 on:
-  push:
-    branches: [feat/aim-input-v1]
+  pull_request:
+    branches: [feat/windows-updater-v1]
     paths:
       - 'aim-v1.patch.gz.b64'
       - '.github/workflows/apply-aim-v1.yml'
@@ -9,7 +9,7 @@ permissions:
   contents: write
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.head.ref == 'feat/aim-input-v1' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
