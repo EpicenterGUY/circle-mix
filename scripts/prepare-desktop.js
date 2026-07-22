@@ -17,7 +17,7 @@ let index=fs.readFileSync(path.join(root,'index.html'),'utf8')
 if(!index.includes('./src/desktop-release.js')) throw new Error('Unable to inject desktop release metadata.');
 fs.writeFileSync(path.join(out,'index.html'),index);
 const desktopGame=path.join(out,'src/game.js');
-let game=fs.readFileSync(desktopGame,'utf8');
+let game=fs.readFileSync(desktopGame,'utf8').replace(/\r\n/g,'\n');
 const animaStart=game.indexOf('  // ANiMA osu! reference rechart');
 const animaEnd=game.indexOf('  function fillPlayableGaps', animaStart);
 if(animaStart<0 || animaEnd<0) throw new Error('Unable to isolate bundled ANiMA chart data.');
