@@ -1,0 +1,31 @@
+diff --git a/tests/smoke.test.js b/tests/smoke.test.js
+index dcd366b..3f56a92 100644
+--- a/tests/smoke.test.js
++++ b/tests/smoke.test.js
+@@ -136,14 +136,23 @@ test("ANiMA NORMAL/TECH charts generate valid runtime notes", () => {
+ });
+ test("tutorial TRACE regression invariants", () => {
+ const steps = api.tutorialSteps;
+ assert.ok(Array.isArray(steps) && steps.length >= 17);
+-const s10 = steps[9], n10 = api.buildTutorialStepRuntime(9).chart[0];
+-assert.match(s10.name, /45°|45도|TRACE/i); assert.equal(n10.type, "traceCW");
+-assert.notEqual(n10.lane, n10.endLane); assert.ok(shortestDeg(n10.angle*180/Math.PI, n10.endAngle*180/Math.PI) >= 40 && shortestDeg(n10.angle*180/Math.PI, n10.endAngle*180/Math.PI) <= 50);
+-assert.equal(n10.tutorialStaticTrace, undefined); assert.notEqual(n10.tutorialModeType, "staticTrace"); assert.notEqual(n10.signedSweepAngle, 0);
+-const n11 = api.buildTutorialStepRuntime(10).chart[0]; assert.ok(shortestDeg(n11.angle*180/Math.PI, n11.endAngle*180/Math.PI) >= 85 && shortestDeg(n11.angle*180/Math.PI, n11.endAngle*180/Math.PI) <= 95);
+-const n12 = api.buildTutorialStepRuntime(11).chart[0]; assert.ok(shortestDeg(n12.angle*180/Math.PI, n12.endAngle*180/Math.PI) >= 175 && shortestDeg(n12.angle*180/Math.PI, n12.endAngle*180/Math.PI) <= 185);
+-const r17 = api.buildTutorialStepRuntime(16); assert.ok(r17.chart.length && r17.chart.every(n=>String(n.type).startsWith("trace"))); assert.ok(r17.step.phase === "traceSwing" || r17.step.kind === "traceSwing");
++const findStepIndex = matcher => steps.findIndex(matcher);
++const trace45Index = findStepIndex(step => step.kind === "trace" && /45°|45도/.test(step.name));
++const trace90Index = findStepIndex(step => step.kind === "trace" && /90°|90도/.test(step.name));
++const trace180Index = findStepIndex(step => step.kind === "trace" && /180°|180도/.test(step.name) && step.phase === "guided");
++const traceSwingIndex = findStepIndex(step => step.kind === "traceSwing");
++for(const [label,index] of [["45° TRACE",trace45Index],["90° TRACE",trace90Index],["180° TRACE",trace180Index],["TRACE → SWING",traceSwingIndex]]) assert.ok(index >= 0, `${label} tutorial step`);
++const s45 = steps[trace45Index], n45 = api.buildTutorialStepRuntime(trace45Index).chart[0];
++assert.match(s45.name, /45°|45도|TRACE/i); assert.equal(n45.type, "traceCW");
++assert.notEqual(n45.lane, n45.endLane); assert.ok(shortestDeg(n45.angle*180/Math.PI, n45.endAngle*180/Math.PI) >= 40 && shortestDeg(n45.angle*180/Math.PI, n45.endAngle*180/Math.PI) <= 50);
++assert.equal(n45.tutorialStaticTrace, undefined); assert.notEqual(n45.tutorialModeType, "staticTrace"); assert.notEqual(n45.signedSweepAngle, 0);
++const n90 = api.buildTutorialStepRuntime(trace90Index).chart[0]; assert.ok(shortestDeg(n90.angle*180/Math.PI, n90.endAngle*180/Math.PI) >= 85 && shortestDeg(n90.angle*180/Math.PI, n90.endAngle*180/Math.PI) <= 95);
++const n180 = api.buildTutorialStepRuntime(trace180Index).chart[0]; assert.ok(shortestDeg(n180.angle*180/Math.PI, n180.endAngle*180/Math.PI) >= 175 && shortestDeg(n180.angle*180/Math.PI, n180.endAngle*180/Math.PI) <= 185);
++const traceSwing = api.buildTutorialStepRuntime(traceSwingIndex); assert.ok(traceSwing.chart.length && traceSwing.chart.every(n=>String(n.type).startsWith("trace"))); assert.equal(traceSwing.step.kind, "traceSwing");
+ });
+ test("input mapping and pointer fallback policies stay static", () => {
