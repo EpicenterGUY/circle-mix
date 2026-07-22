@@ -32,6 +32,14 @@ PULSE is a position-independent rhythm note intended to replace new SCRATCH char
 - Touch down creates one input; holding the button does not repeat.
 - The button must remain reachable in folded landscape and unfolded square layouts.
 
+## Tutorial
+
+- PULSE onboarding appears after the CUT practical steps so players already understand the judgement circle.
+- The basic step uses three angle-free PULSE notes and explicitly teaches releasing Shift or the mobile button between inputs.
+- The combined step pairs CUT and PULSE at the same timestamps and changes its input hint to the next unfinished note family.
+- The final mixed practice includes PULSE alongside the existing aimed and gesture notes.
+- Tutorial PULSE receives the same short late-input grace period as CUT before the step is finalized.
+
 ## Visual language
 
 - A ring begins near the centre and expands toward the judgement circle.
