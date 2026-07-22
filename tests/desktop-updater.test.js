@@ -12,7 +12,7 @@ const updater=fs.readFileSync(path.join(root,'src/desktop-updater.js'),'utf8');
 const releaseConfig=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.release.conf.json'),'utf8'));
 const releaseWorkflow=fs.readFileSync(path.join(root,'.github/workflows/windows-updater-release.yml'),'utf8');
 
-assert.equal(tauri.version,'0.9.34');
+assert.equal(tauri.version,'0.9.35');
 assert.equal(tauri.app?.withGlobalTauri,true,'desktop updater UI needs the global Tauri core bridge');
 assert.equal(tauri.bundle?.createUpdaterArtifacts,false,'normal PR installers must not require the private signing key');
 assert.equal(releaseConfig.bundle?.createUpdaterArtifacts,true,'release builds must create signed updater artifacts');

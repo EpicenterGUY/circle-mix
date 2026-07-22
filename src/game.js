@@ -306,7 +306,10 @@
   let lockedVirtualAngle=-Math.PI/2, pointerLockRequested=false, pointerLockFallback=false, lastRelativeMovement={x:0,y:0};
   // Pointer samples, not RAF cadence, are the authoritative aim input stream.
   const AIM_SAMPLE_FRESH_MS=120;
-  const aimInput={rawAngle:-Math.PI/2, unwrappedAngle:-Math.PI/2, previousSampleAngle:null, sampleAngularVelocity:0, accumulatedCWTravel:0, accumulatedCCWTravel:0, pointerRadius:0, sampleCount:0, lastSampleTimestamp:0, centerDeadzoneActive:false, rebasePending:true, pendingSamples:0, lastSampleDelta:0};
+  const AIM_SAMPLE_MIN_DT=.0005;
+  const AIM_SAMPLE_MAX_DT=.050;
+  const AIM_VISUAL_SNAP_ERROR={FAST:Math.PI*.38,NORMAL:Math.PI*.46,SOFT:Math.PI*.56};
+  const aimInput={rawAngle:-Math.PI/2, unwrappedAngle:-Math.PI/2, previousSampleAngle:null, sampleAngularVelocity:0, accumulatedCWTravel:0, accumulatedCCWTravel:0, pointerRadius:0, sampleCount:0, lastSampleTimestamp:0, sampleInterval:0, centerDeadzoneActive:false, rebasePending:true, pendingSamples:0, lastSampleDelta:0};
   let rawInputAngle=-Math.PI/2, judgementAimAngle=-Math.PI/2, visualArmAngle=-Math.PI/2;
   let keyA=false, keyD=false, filterHeld=false, scratchHeld=false, mouseDownRight=false;
   let debugOverlayVisible=false;
@@ -2115,24 +2118,30 @@
   }
   function aligned(angle, extra=0){return distAng(judgementAimAngle,angle)<DIAL_ARC_HALF+Math.PI*extra;}
   function isAimMagnetNote(n){ return !!n && (n.type==="cut"||n.type==="fx"||n.type.startsWith("swing")||n.type.startsWith("scratch")); }
-  function aimStabilizerProfile(){
-    const mode=inputSettings.aimStabilizer;
-    if(mode==="MEDIUM") return {mode, slowTime:.040, slowVel:1.15, fastVel:4.8, magnetEnter:6*Math.PI/180, magnetExit:7*Math.PI/180, magnetStrength:.35, disengageVel:5.0};
-    if(mode==="LOW") return {mode, slowTime:.028, slowVel:.95, fastVel:4.2, magnetEnter:4*Math.PI/180, magnetExit:7*Math.PI/180, magnetStrength:.24, disengageVel:4.6};
-    return {mode, slowTime:0, slowVel:0, fastVel:0, magnetEnter:0, magnetExit:0, magnetStrength:0, disengageVel:4.4};
+  function aimStabilizerProfile(mode=inputSettings.aimStabilizer){
+    // Stabilizer modes are deliberately light.  Their deadzone only protects
+    // atan2 at the exact centre; it must not swallow large-angle mouse jumps.
+    if(mode==="MEDIUM") return {mode, slowTime:.030, slowVel:.85, fastVel:4.4, magnetEnter:5*Math.PI/180, magnetExit:8*Math.PI/180, magnetStrength:.27, disengageVel:4.8, centerEnterRatio:.055, centerExitRatio:.075, centerEnterPx:12, centerExitPx:16, jumpBypass:Math.PI*.40};
+    if(mode==="LOW") return {mode, slowTime:.018, slowVel:.75, fastVel:3.8, magnetEnter:3*Math.PI/180, magnetExit:7*Math.PI/180, magnetStrength:.16, disengageVel:4.4, centerEnterRatio:.040, centerExitRatio:.060, centerEnterPx:8, centerExitPx:12, jumpBypass:Math.PI*.34};
+    return {mode:"OFF", slowTime:0, slowVel:0, fastVel:0, magnetEnter:0, magnetExit:0, magnetStrength:0, disengageVel:0, centerEnterRatio:0, centerExitRatio:0, centerEnterPx:1, centerExitPx:2, jumpBypass:0};
+  }
+  function centerDeadzoneForProfile(profile){
+    return {enter:Math.max(profile.centerEnterPx||1,hitR*(profile.centerEnterRatio||0)),exit:Math.max(profile.centerExitPx||2,hitR*(profile.centerExitRatio||0))};
   }
   function updateAimMagnet(baseAngle, velocity){
     const profile=aimStabilizerProfile();
+    const speed=Math.abs(velocity);
     const t=now();
-    if(profile.mode==="OFF" || Math.abs(velocity)>profile.disengageVel){ magnetTarget=null; magnetAngleError=0; return baseAngle; }
+    if(profile.mode==="OFF" || speed>=profile.disengageVel){ magnetTarget=null; magnetAngleError=0; return baseAngle; }
     if(magnetTarget && (magnetTarget.done||magnetTarget.missed||magnetTarget!==focusNote||t>magnetTarget.hitTime+HIT_WINDOW)){ magnetTarget=null; }
     const n=magnetTarget || focusNote;
     if(!isAimMagnetNote(n) || t<n.spawnTime || Math.abs(t-n.hitTime)>HIT_WINDOW+.10){ magnetTarget=null; magnetAngleError=0; return baseAngle; }
     const err=norm(n.angle-baseAngle);
     magnetAngleError=Math.abs(err);
     if(magnetTarget){
-      const movingAway=Math.sign(velocity)===-Math.sign(err) && Math.abs(velocity)>1.15;
-      if(magnetAngleError>profile.magnetExit || movingAway){ magnetTarget=null; return baseAngle; }
+      // velocity * error < 0 means the pointer is moving away, regardless of CW/CCW.
+      const movingAway=velocity*err<0 && speed>1.15;
+      if(magnetAngleError>profile.magnetExit || movingAway){ magnetTarget=null; magnetAngleError=0; return baseAngle; }
     }else if(magnetAngleError<=profile.magnetEnter){
       magnetTarget=n;
     }else return baseAngle;
@@ -2591,56 +2600,77 @@
   }
 
   function resetAimInput(angle=-Math.PI/2){
-    Object.assign(aimInput,{rawAngle:angle,unwrappedAngle:angle,previousSampleAngle:null,sampleAngularVelocity:0,accumulatedCWTravel:0,accumulatedCCWTravel:0,pointerRadius:0,sampleCount:0,lastSampleTimestamp:0,centerDeadzoneActive:false,rebasePending:true,pendingSamples:0,lastSampleDelta:0});
-    rawInputAngle=judgementAimAngle=visualArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=angle; rawAngularVelocity=0; centerDeadzoneActive=false;
+    Object.assign(aimInput,{rawAngle:angle,unwrappedAngle:angle,previousSampleAngle:null,sampleAngularVelocity:0,accumulatedCWTravel:0,accumulatedCCWTravel:0,pointerRadius:0,sampleCount:0,lastSampleTimestamp:0,sampleInterval:0,centerDeadzoneActive:false,rebasePending:true,pendingSamples:0,lastSampleDelta:0});
+    rawInputAngle=judgementAimAngle=visualArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=angle; rawAngularVelocity=0; centerDeadzoneActive=false; magnetTarget=null; magnetAngleError=0;
   }
+  function visualSnapThreshold(){ return AIM_VISUAL_SNAP_ERROR[inputSettings.aimVisualResponse] || AIM_VISUAL_SNAP_ERROR.FAST; }
+  function shouldSnapVisualAim(visualTarget){ return Math.abs(norm(visualTarget-visualArmAngle))>=visualSnapThreshold(); }
   function updateVisualArmAngle(visualTarget,dt){
-    if(inputSettings.aimVisual==="DIRECT" || lastPointerSource==="touch"){ visualArmAngle=visualTarget; return; }
-    const response={FAST:{base:.024,min:.006},NORMAL:{base:.046,min:.012},SOFT:{base:.080,min:.020}}[inputSettings.aimVisualResponse] || {base:.024,min:.006};
+    if(inputSettings.aimVisual==="DIRECT" || lastPointerSource==="touch" || shouldSnapVisualAim(visualTarget)){ visualArmAngle=visualTarget; return; }
+    const response={FAST:{base:.016,min:.0035},NORMAL:{base:.032,min:.007},SOFT:{base:.055,min:.012}}[inputSettings.aimVisualResponse] || {base:.016,min:.0035};
     const error=Math.abs(norm(visualTarget-visualArmAngle));
     const velocity=Math.abs(aimInput.sampleAngularVelocity)||0;
-    // Both speed and visible error continuously shorten the response time. This
-    // deliberately has no velocity snap threshold, so it cannot flap between
-    // interpolation and snapping on adjacent samples.
-    const urgency=Math.max(1-Math.exp(-velocity/3.2),1-Math.exp(-error/(Math.PI/5)));
+    const urgency=Math.max(1-Math.exp(-velocity/3.6),1-Math.exp(-error/(Math.PI/6)));
     const tau=response.base+(response.min-response.base)*urgency;
     visualArmAngle=norm(visualArmAngle+norm(visualTarget-visualArmAngle)*(1-Math.exp(-dt/Math.max(tau,.001))));
+  }
+  function normalizedAimTimestamp(timestamp){
+    let value=Number(timestamp);
+    if(!Number.isFinite(value)) value=performance.now();
+    if(aimInput.lastSampleTimestamp>0 && value<=aimInput.lastSampleTimestamp) value=aimInput.lastSampleTimestamp+AIM_SAMPLE_MIN_DT*1000;
+    return value;
+  }
+  function applyPointerAimJudgement(angle,delta,sampleDt,profile,source){
+    if(profile.mode==="OFF" || source==="touch"){
+      stabilizedTargetAngle=angle; judgementAimAngle=armAngle=angle; magnetTarget=null; magnetAngleError=0;
+    }else{
+      const speed=Math.abs(aimInput.sampleAngularVelocity);
+      const bypass=Math.abs(delta)>=profile.jumpBypass || speed>=profile.fastVel;
+      const desired=bypass ? angle : updateAimMagnet(angle,aimInput.sampleAngularVelocity);
+      if(bypass || !Number.isFinite(stabilizedTargetAngle)){
+        stabilizedTargetAngle=desired;
+      }else{
+        const slowFactor=clamp((profile.fastVel-speed)/Math.max(profile.fastVel-profile.slowVel,.001),0,1);
+        const tau=Math.max(.001,profile.slowTime*(.30+.70*slowFactor));
+        stabilizedTargetAngle=norm(stabilizedTargetAngle+norm(desired-stabilizedTargetAngle)*(1-Math.exp(-sampleDt/tau)));
+      }
+      judgementAimAngle=armAngle=stabilizedTargetAngle;
+    }
+    if(inputSettings.aimVisual==="DIRECT" || source==="touch" || shouldSnapVisualAim(judgementAimAngle)) visualArmAngle=judgementAimAngle;
   }
   function processAimSample(x,y,timestamp,source="pointer"){
     mouseX=x; mouseY=y; lastPointerSource=source;
     const dx=x-cx, dy=y-cy, radius=Math.hypot(dx,dy);
-    const profile=source!=="touch"?aimStabilizerProfile():{mode:"OFF"};
-    const enter=profile.mode==="OFF" ? 1 : Math.max(24,hitR*.18);
-    const exit=profile.mode==="OFF" ? 2 : Math.max(24,hitR*.23);
+    const profile=aimStabilizerProfile(source==="touch"?"OFF":inputSettings.aimStabilizer);
+    const deadzone=centerDeadzoneForProfile(profile);
     aimInput.pointerRadius=cursorRadius=radius;
-    if(aimInput.centerDeadzoneActive ? radius<exit : radius<enter){
+    if(aimInput.centerDeadzoneActive ? radius<deadzone.exit : radius<deadzone.enter){
       aimInput.centerDeadzoneActive=centerDeadzoneActive=true; aimInput.rebasePending=true;
-      aimInput.sampleAngularVelocity=aimInput.lastSampleDelta=rawAngularVelocity=0; magnetTarget=null; magnetAngleError=0;
-      visualArmAngle=judgementAimAngle;
+      aimInput.sampleAngularVelocity=aimInput.lastSampleDelta=rawAngularVelocity=0; aimInput.sampleInterval=0; magnetTarget=null; magnetAngleError=0;
       return;
     }
     const angle=Math.atan2(dy,dx);
+    const sampleTimestamp=normalizedAimTimestamp(timestamp);
     rawInputAngle=rawTargetAngle=angle;
-    // Direct modes must be usable by an input action before the next RAF.
-    if(profile.mode==="OFF" || source==="touch"){ judgementAimAngle=armAngle=angle; if(source==="touch" || inputSettings.aimVisual==="DIRECT") visualArmAngle=angle; }
+    // OFF/touch judgement is authoritative in the same pointer event, before RAF.
+    if(profile.mode==="OFF" || source==="touch"){ judgementAimAngle=armAngle=stabilizedTargetAngle=angle; if(inputSettings.aimVisual==="DIRECT" || source==="touch" || shouldSnapVisualAim(angle)) visualArmAngle=angle; }
     if(aimInput.rebasePending || aimInput.previousSampleAngle===null){
       aimInput.previousSampleAngle=angle; aimInput.rawAngle=aimInput.unwrappedAngle=angle; aimInput.rebasePending=false;
-      aimInput.sampleAngularVelocity=aimInput.lastSampleDelta=0; aimInput.lastSampleTimestamp=timestamp; aimInput.centerDeadzoneActive=centerDeadzoneActive=false;
-      visualArmAngle=judgementAimAngle; lastValidTargetAngle=angle; return;
+      aimInput.sampleAngularVelocity=aimInput.lastSampleDelta=0; aimInput.lastSampleTimestamp=sampleTimestamp; aimInput.sampleInterval=0; aimInput.centerDeadzoneActive=centerDeadzoneActive=false;
+      stabilizedTargetAngle=judgementAimAngle=armAngle=angle; visualArmAngle=angle; lastValidTargetAngle=angle; return;
     }
     const delta=norm(angle-aimInput.previousSampleAngle);
-    const dt=Math.max((timestamp-aimInput.lastSampleTimestamp)/1000,.001);
+    const sampleDt=clamp((sampleTimestamp-aimInput.lastSampleTimestamp)/1000,AIM_SAMPLE_MIN_DT,AIM_SAMPLE_MAX_DT);
     aimInput.rawAngle=angle; aimInput.previousSampleAngle=angle; aimInput.unwrappedAngle+=delta;
-    aimInput.lastSampleDelta=delta; aimInput.sampleAngularVelocity=delta/dt; rawAngularVelocity=aimInput.sampleAngularVelocity;
-    // A near-half-turn sample is a discontinuity, not motion to trail behind.
-    if(Math.abs(delta)>=Math.PI*.9) visualArmAngle=angle;
+    aimInput.lastSampleDelta=delta; aimInput.sampleInterval=sampleDt; aimInput.sampleAngularVelocity=delta/sampleDt; rawAngularVelocity=aimInput.sampleAngularVelocity;
     if(delta>0) aimInput.accumulatedCWTravel+=delta; else aimInput.accumulatedCCWTravel+=-delta;
-    aimInput.sampleCount++; aimInput.pendingSamples++; aimInput.lastSampleTimestamp=timestamp;
+    aimInput.sampleCount++; aimInput.pendingSamples++; aimInput.lastSampleTimestamp=sampleTimestamp;
     aimInput.centerDeadzoneActive=centerDeadzoneActive=false; centerDeadzoneActive=false; lastValidTargetAngle=angle;
+    applyPointerAimJudgement(angle,delta,sampleDt,profile,source);
   }
   function freshAimSample(){
     const fresh=aimInput.lastSampleTimestamp>0 && performance.now()-aimInput.lastSampleTimestamp<=AIM_SAMPLE_FRESH_MS;
-    if(!fresh){ aimInput.sampleAngularVelocity=0; aimInput.lastSampleDelta=0; rawAngularVelocity=0; }
+    if(!fresh){ aimInput.sampleAngularVelocity=0; aimInput.lastSampleDelta=0; aimInput.sampleInterval=0; rawAngularVelocity=0; }
     return fresh;
   }
   function updateArm(dt){
@@ -2650,30 +2680,20 @@
       if(keyA||keyD){
         const delta=(keyD-keyA)*9.5*dt;
         targetAngle+=delta; rawInputAngle=rawTargetAngle=norm(targetAngle);
-        aimInput.unwrappedAngle+=delta; aimInput.lastSampleDelta=delta; aimInput.sampleAngularVelocity=delta/Math.max(dt,.001);
+        aimInput.unwrappedAngle+=delta; aimInput.lastSampleDelta=delta; aimInput.sampleInterval=dt; aimInput.sampleAngularVelocity=delta/Math.max(dt,.001);
         if(delta>0) aimInput.accumulatedCWTravel+=delta; else aimInput.accumulatedCCWTravel-=delta;
         aimInput.sampleCount++; aimInput.lastSampleTimestamp=performance.now(); magnetTarget=null;
       }
       const diff=norm(targetAngle-armAngle); armAngle=norm(armAngle+diff*clamp(1-Math.pow(.0001,dt),0,1));
       judgementAimAngle=rawInputAngle=rawTargetAngle=armAngle; visualArmAngle=armAngle; rawArmVel=armVel=aimInput.sampleAngularVelocity||norm(armAngle-prevArmAngle)/Math.max(dt,.001); return;
     }
-    const sampleFresh=freshAimSample();
+    freshAimSample();
     const profile=lastPointerSource!=="touch"?aimStabilizerProfile():{mode:"OFF"};
     targetAngle=rawInputAngle;
-    let desired=rawInputAngle;
-    if(lastPointerSource!=="touch" && profile.mode!=="OFF"){
-      desired=updateAimMagnet(desired,sampleFresh?aimInput.sampleAngularVelocity:0);
-      if(sampleFresh && Math.abs(aimInput.sampleAngularVelocity)<profile.fastVel && aimInput.pendingSamples){
-        const slowFactor=clamp((profile.fastVel-Math.abs(aimInput.sampleAngularVelocity))/Math.max(profile.fastVel-profile.slowVel,.001),0,1);
-        const alpha=1-Math.exp(-dt/Math.max(profile.slowTime*slowFactor,.001));
-        stabilizedTargetAngle=norm(stabilizedTargetAngle+norm(desired-stabilizedTargetAngle)*alpha);
-      } else stabilizedTargetAngle=desired;
-    } else { magnetTarget=null; stabilizedTargetAngle=desired; }
-    // OFF is deliberately direct outside its tiny crossing safety zone.
-    judgementAimAngle=profile.mode==="OFF" ? rawInputAngle : stabilizedTargetAngle;
+    if(profile.mode==="OFF" || lastPointerSource==="touch") stabilizedTargetAngle=rawInputAngle;
+    judgementAimAngle=profile.mode==="OFF" || lastPointerSource==="touch" ? rawInputAngle : stabilizedTargetAngle;
     armAngle=judgementAimAngle;
-    const visualTarget=profile.mode==="OFF" ? rawInputAngle : stabilizedTargetAngle;
-    updateVisualArmAngle(visualTarget,dt);
+    updateVisualArmAngle(judgementAimAngle,dt);
     rawArmVel=rawAngularVelocity=aimInput.sampleAngularVelocity;
     armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001); aimInput.pendingSamples=0;
   }
@@ -5027,21 +5047,27 @@ settingsOrigin=${settingsOrigin}`);
   }
   document.addEventListener("pointerlockchange",()=>{ if(pointerLockActive()){ pointerLockRequested=false; rebaseLockedAim(); return; } if(pointerLockRequested){ pointerLockFallback=true; pointerLockRequested=false; } if(running&&!paused){ releaseMobilePointers(); showPause("AIM LOCK RELEASED"); } rebaseLockedAim(); });
   document.addEventListener("pointerlockerror",()=>{ pointerLockFallback=true; pointerLockRequested=false; setPauseMessage("AIM LOCK UNAVAILABLE · ABSOLUTE MODE"); });
+  function clientPointToAimPoint(clientX,clientY){
+    const rect=canvas.getBoundingClientRect();
+    const scaleX=rect.width>0?W/rect.width:1, scaleY=rect.height>0?H/rect.height:1;
+    return {x:(clientX-rect.left)*scaleX,y:(clientY-rect.top)*scaleY};
+  }
   function updateGameplayPointerFromEvent(e,source){
     if(isAimPointerBlockedTarget(e.target))return;
     if(pointerLockActive() && (e.pointerType==="mouse" || source==="pointer")){ processLockedAimMovement(e); lastPointerMs=performance.now(); pointerActive=true; return; }
     const fallbackPoint=e.touches?.[0] || e.changedTouches?.[0] || e;
-    const samples=typeof e.getCoalescedEvents==="function" ? e.getCoalescedEvents() : [fallbackPoint];
-    for(const point of samples.length?samples:[fallbackPoint]){
+    const coalesced=typeof e.getCoalescedEvents==="function" ? e.getCoalescedEvents() : [];
+    const samples=(coalesced.length?coalesced:[fallbackPoint]).slice().sort((a,b)=>(Number(a.timeStamp)||0)-(Number(b.timeStamp)||0));
+    for(const point of samples){
       if(!Number.isFinite(point.clientX)||!Number.isFinite(point.clientY))continue;
-      // The gameplay canvas uses viewport CSS pixels, so client coordinates are its native coordinate system.
-      processAimSample(point.clientX,point.clientY,Number.isFinite(point.timeStamp)?point.timeStamp:performance.now(),source);
+      const mapped=clientPointToAimPoint(point.clientX,point.clientY);
+      processAimSample(mapped.x,mapped.y,Number.isFinite(point.timeStamp)?point.timeStamp:performance.now(),source);
     }
     lastPointerMs=performance.now(); pointerActive=true;
     if(tutorialMode&&performance.now()>=tutorialState.inputEnabledAt){ tutorialState.pointerMoved=true; tutorialState.lastSource=source; }
   }
   if(window.PointerEvent){
-    window.addEventListener("pointermove",e=>{ if(!(isCoarsePointerMobile()&&e.pointerType==="touch")) updateGameplayPointerFromEvent(e,e.pointerType==="touch"?"touch":"pointer"); },{passive:true});
+    window.addEventListener("pointermove",e=>{ if(!(isCoarsePointerMobile()&&e.pointerType==="touch")){ const source=e.pointerType==="touch"?"touch":(e.pointerType==="pen"?"pen":"pointer"); updateGameplayPointerFromEvent(e,source); } },{passive:true});
   }else{
     window.addEventListener("mousemove",e=>updateGameplayPointerFromEvent(e,"pointer"),{passive:true});
     window.addEventListener("touchmove",e=>{ if(!isCoarsePointerMobile()) updateGameplayPointerFromEvent(e,"touch"); },{passive:true});
@@ -5802,7 +5828,7 @@ running=${running}`);
       markFirstPendingTutorialNoteMissed:()=>{ const n=chart.find(note=>!note.done&&!note.missed); if(n){ miss(n,"TEST_FORCED_MISS"); return true; } return false; },
       clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
       state:()=>({running:!!running, paused:!!paused, tutorialMode:!!tutorialMode, tutorialStepIndex:Number(tutorialStepIndex), tutorialTargetProgress:Number(tutorialSteps[tutorialStepIndex]?._hit||0), tutorialPointerMoved:!!tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince==null?null:Number(tutorialState.exploreInsideSince), tutorialInputEnabledAt:Number(tutorialState.inputEnabledAt), tutorialSuccessCount:Number(tutorialState.successCount), tutorialValidUserInputCount:Number(tutorialState.validUserInputCount), tutorialLastSource:tutorialState.lastSource||null, tutorialCurrentJudgement:tutorialState.currentJudgement||null, tutorialTransitioning:!!tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState||null, pendingTutorialSkipCount:Number(tutorialState.pendingSkipQueue.length), tutorialStepToken:Number(tutorialStepToken), tutorialAttemptId:Number(tutorialAttemptId), tutorialTimerCount:Number(tutorialState.timers.length), tutorialFinalMixRetryScheduled:!!tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:Number(tutorialState.mixRetryCount), tutorialChartFinalizationCount:Number(tutorialState.chartFinalizationCount), tutorialLastChartFinalization:tutorialState.lastChartFinalization||null, tutorialChartSettled:!!tutorialChartSettled(), tutorialCompleteCount:Number(tutorialState.completeCount), tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:Number(tutorialState.rafIds.length+(raf?1:0)), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount:Number(judgedCount), perfectCount:Number(perfectCount), greatCount:Number(greatCount), missCount:Number(missCount), score:Number(score), combo:Number(combo), maxCombo:Number(maxCombo), visibleNoteCount:Number(getVisibleNotes(now()).length), visibleNotes:getVisibleNotes(now()).map(n=>({id:n.id||noteDebugId(n),type:n.type})), focusNote:focusNote?{id:focusNote.id||noteDebugId(focusNote),type:focusNote.type}:null, chartDoneStates:chart.map(n=>({id:n.id||noteDebugId(n),type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,coverage:Number(n.coverageRatio||0),quality:Number(n.traceQuality||0),started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime,angle:Number(n.angle),endAngle:n.endAngle==null?null:Number(n.endAngle),duration:Number(n.duration||0)})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:Number(chart.length), chartEndTime:Number(chartLastHitEnd), gameTime:Number(now()), browserNow:Number(performance.now()), frameCount:Number(testFrameCount), renderCount:Number(testRenderCount), W:Number(W), H:Number(H), lastPointerSource:lastPointerSource||null, pointerActive:!!pointerActive, mouseX:Number(mouseX), mouseY:Number(mouseY), armAngle:Number(armAngle), rawArmVel:Number(rawArmVel), rawAngularVelocity:Number(rawAngularVelocity), sampleAngularVelocity:Number(aimInput.sampleAngularVelocity), cx:Number(cx), cy:Number(cy), hitR:Number(hitR), selectedSongId:selectedSongId||null, selectedDifficultyId:selectedDifficultyId||null, mobileAimPointerId:mobileAimPointerId==null?null:Number(mobileAimPointerId), mobileActionPointerId:mobileActionPointerId==null?null:Number(mobileActionPointerId), mobilePulsePointerId:mobilePulsePointerId==null?null:Number(mobilePulsePointerId), mobileScratchPointerId:mobileScratchPointerId==null?null:Number(mobileScratchPointerId), actionHeld:!!keys.MouseLeft, scratchHeld:!!scratchHeld, mouseDownRight:!!mouseDownRight, pointerLockMode:inputSettings.pcAimMode, effectivePcAimMode:effectivePcAimMode(), pointerLockRequested:!!pointerLockRequested, pointerLockActive:!!pointerLockActive(), lockedVirtualAngle:Number(lockedVirtualAngle), lockedSensitivity:Number(inputSettings.lockedAimSensitivity), lastRelativeMovement:{x:Number(lastRelativeMovement.x),y:Number(lastRelativeMovement.y)}, rawInputAngle:Number(rawInputAngle), judgementAimAngle:Number(judgementAimAngle), visualArmAngle:Number(visualArmAngle), rawJudgementDifference:Number(norm(rawInputAngle-judgementAimAngle)), judgementVisualDifference:Number(norm(judgementAimAngle-visualArmAngle)), resultVisible:!!resultOverlay?.classList.contains('show')}),
-      aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget}),
+      aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, sampleInterval:aimInput.sampleInterval, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget, stabilizerProfile:aimStabilizerProfile(), centerDeadzone:centerDeadzoneForProfile(aimStabilizerProfile())}),
       visualArmProfile:()=>visualArmProfile(),
       traceVisualProfile:()=>traceVisualProfile(),
       judgementMarkerVisible:()=>judgementMarkerVisible(),

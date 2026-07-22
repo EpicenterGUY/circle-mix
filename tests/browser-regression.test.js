@@ -623,6 +623,30 @@ async function runDeterministicAimAndCutRegression(browser){
     assert.ok(Math.abs(shortestAngleDifference(aimVisual.quarterTurn.visualArmAngle,Math.PI/2))<.08, `FAST response avoids excessive 90° trail ${JSON.stringify(aimVisual.quarterTurn)}`);
     assert.ok(Math.abs(shortestAngleDifference(aimVisual.halfTurn.visualArmAngle,-Math.PI/2))<.02 && Math.abs(shortestAngleDifference(aimVisual.halfTurn.judgementAimAngle,-Math.PI/2))<.02, `SMOOTH catches up on half turn ${JSON.stringify(aimVisual.halfTurn)}`);
     assert.ok(Math.abs(shortestAngleDifference(aimVisual.direct.visualArmAngle,-Math.PI/2))<.02 && Math.abs(shortestAngleDifference(aimVisual.direct.judgementAimAngle,-Math.PI/2))<.02, `DIRECT visual remains immediate ${JSON.stringify(aimVisual.direct)}`);
+    const aimEventPipeline = await page.evaluate(() => {
+      const api=window.CircleMixTestApi, st=api.state();
+      api.startDeterministicChart();
+      api.setPcAimMode('ABSOLUTE'); api.setAimVisual('SMOOTH'); api.setVisualResponse('FAST'); api.setAimStabilizer('LOW');
+      const baseline=api.injectImmediateAimSample(0,st.hitR,1000);
+      const slow=api.injectImmediateAimSample(.08,st.hitR,1100);
+      const large=api.injectImmediateAimSample(Math.PI*.75,st.hitR,1110);
+      const backwards=api.injectImmediateAimSample(Math.PI*.78,st.hitR,1000);
+      const lowProfile=api.aimInputState();
+      const fastCW=api.magnetProbe('LOW',5.1), fastCCW=api.magnetProbe('LOW',-5.1);
+      api.setAimStabilizer('MEDIUM'); const mediumProfile=api.aimInputState();
+      api.setAimStabilizer('OFF'); api.setAimVisual('SMOOTH'); api.setVisualResponse('FAST');
+      api.injectImmediateAimSample(0,st.hitR,2000);
+      const visualJump=api.injectImmediateAimSample(Math.PI*.72,st.hitR,2010);
+      return {hitR:st.hitR,baseline,slow,large,backwards,lowProfile,mediumProfile,fastCW,fastCCW,visualJump};
+    });
+    assert.ok(Math.abs(shortestAngleDifference(aimEventPipeline.slow.rawInputAngle,.08))<.01, `LOW keeps raw target exact ${JSON.stringify(aimEventPipeline)}`);
+    assert.ok(Math.abs(shortestAngleDifference(aimEventPipeline.slow.judgementAimAngle,aimEventPipeline.baseline.judgementAimAngle))>.001, `LOW updates judgement inside the pointer event ${JSON.stringify(aimEventPipeline)}`);
+    assert.ok(Math.abs(shortestAngleDifference(aimEventPipeline.large.judgementAimAngle,Math.PI*.75))<.02, `LOW bypasses smoothing for a large jump ${JSON.stringify(aimEventPipeline.large)}`);
+    assert.ok(Number.isFinite(aimEventPipeline.backwards.sampleAngularVelocity) && aimEventPipeline.backwards.sampleInterval>=.0005 && aimEventPipeline.backwards.sampleInterval<=.05, `non-monotonic timestamps stay finite and bounded ${JSON.stringify(aimEventPipeline.backwards)}`);
+    assert.ok(aimEventPipeline.lowProfile.centerDeadzone.enter<aimEventPipeline.hitR*.08 && aimEventPipeline.mediumProfile.centerDeadzone.enter<aimEventPipeline.hitR*.09, `stabilizer center guard stays small ${JSON.stringify(aimEventPipeline)}`);
+    assert.equal(aimEventPipeline.fastCW.disengaged,true,`LOW fast CW releases magnet ${JSON.stringify(aimEventPipeline.fastCW)}`);
+    assert.equal(aimEventPipeline.fastCCW.disengaged,true,`LOW fast CCW releases magnet ${JSON.stringify(aimEventPipeline.fastCCW)}`);
+    assert.ok(Math.abs(shortestAngleDifference(aimEventPipeline.visualJump.visualArmAngle,Math.PI*.72))<.02 && Math.abs(shortestAngleDifference(aimEventPipeline.visualJump.judgementAimAngle,Math.PI*.72))<.02, `SMOOTH visual catches up immediately on large jumps ${JSON.stringify(aimEventPipeline.visualJump)}`);
     const locked = await page.evaluate(() => {
       const setup=()=>{
         const api=window.CircleMixTestApi; api.startDeterministicChart(); api.setPcAimMode('LOCKED');

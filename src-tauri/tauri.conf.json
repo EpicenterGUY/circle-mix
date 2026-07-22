@@ -1,6 +1,6 @@
 {
   "productName": "CIRCLE MIX",
-  "version": "0.9.34",
+  "version": "0.9.35",
   "identifier": "com.epicenterguy.circlemix",
   "build": {
     "frontendDist": "../desktop-dist",
