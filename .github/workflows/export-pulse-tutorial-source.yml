@@ -1,24 +1,38 @@
-name: Export PULSE tutorial source
+name: Apply PULSE tutorial patch
 
 on:
   pull_request:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  export:
+  apply:
+    if: github.head_ref == 'feat/pulse-tutorial-v1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pulse-tutorial-source
-          path: |
-            src/game.js
-            tests/pulse-game-input.test.js
-          if-no-files-found: error
-          retention-days: 1
+          ref: feat/pulse-tutorial-v1
+          fetch-depth: 0
+      - name: Apply and verify tutorial changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check .github/patches/pulse-tutorial.patch
+          git apply .github/patches/pulse-tutorial.patch
+          git diff --check
+          node --check src/game.js
+          node tests/pulse-game-input.test.js
+      - name: Commit final tutorial implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/patches/pulse-tutorial.patch
+          rm .github/workflows/export-pulse-tutorial-source.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/game.js tests/pulse-game-input.test.js .github/patches/pulse-tutorial.patch .github/workflows/export-pulse-tutorial-source.yml
+          git commit -m "feat: add PULSE tutorial steps"
+          git push origin HEAD:feat/pulse-tutorial-v1
