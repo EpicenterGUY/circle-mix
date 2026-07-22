@@ -1,1 +1,6 @@
-{"identifier":"default","description":"No native APIs are required by the browser-based local library.","windows":["main"],"permissions":[]}
+{
+  "identifier": "default",
+  "description": "Allows the browser-based desktop shell to invoke the signed updater bridge.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
