@@ -1,0 +1,31 @@
+name: Apply PULSE input hotfix
+
+on:
+  push:
+    branches: [feat/pulse-note-v1]
+    paths:
+      - .pulse-hotfix-ready
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/pulse-note-v1
+          fetch-depth: 0
+      - name: Apply verified hotfix
+        run: |
+          git apply --check .pulse-hotfix.patch
+          git apply .pulse-hotfix.patch
+          rm -f .pulse-hotfix.patch .pulse-hotfix-ready .github/workflows/apply-pulse-hotfix.yml
+      - name: Commit hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: keep Shift exclusive to PULSE"
+          git push origin HEAD:feat/pulse-note-v1
