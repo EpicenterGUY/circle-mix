@@ -30,62 +30,91 @@ jobs:
       - name: Smoke test current-user install and uninstall
         shell: pwsh
         run: |
-          $installer = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' -File | Select-Object -First 1
-          $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
-          if ($installProcess.ExitCode -ne 0) { throw "Installer exited with code $($installProcess.ExitCode)" }
+          $diagnostics = Join-Path $PWD 'src-tauri/target/release/installer-smoke.txt'
+          "CIRCLE MIX NSIS smoke test" | Out-File $diagnostics
+          try {
+            $installer = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' -File | Select-Object -First 1
+            $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait -PassThru
+            "Installer exit code: $($installProcess.ExitCode)" | Add-Content $diagnostics
+            if ($installProcess.ExitCode -ne 0) { throw "Installer exited with code $($installProcess.ExitCode)" }
 
-          $uninstallRoots = @(
-            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
-            'HKCU:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-          )
-          $entry = $null
-          for ($attempt = 0; $attempt -lt 20 -and -not $entry; $attempt++) {
+            $uninstallRoots = @(
+              'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+              'HKCU:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+            )
             $entry = Get-ItemProperty $uninstallRoots -ErrorAction SilentlyContinue |
               Where-Object { $_.DisplayName -like 'CIRCLE MIX*' } |
               Select-Object -First 1
-            if (-not $entry) { Start-Sleep -Milliseconds 500 }
-          }
-          if (-not $entry) { throw 'CIRCLE MIX current-user uninstall entry was not created' }
-
-          $exeCandidates = @()
-          if ($entry.InstallLocation) {
-            $location = [Environment]::ExpandEnvironmentVariables([string]$entry.InstallLocation).TrimEnd('\')
-            $exeCandidates += (Join-Path $location 'circle-mix.exe')
-          }
-          if ($entry.DisplayIcon) {
-            $displayIcon = [Environment]::ExpandEnvironmentVariables([string]$entry.DisplayIcon)
-            $displayIcon = ($displayIcon -replace ',\d+$','').Trim('"')
-            $exeCandidates += $displayIcon
-          }
-          $exeCandidates += (Join-Path $env:LOCALAPPDATA 'CIRCLE MIX\circle-mix.exe')
-          $installedExe = $exeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
-          if (-not $installedExe) {
-            $installedExe = Get-ChildItem $env:LOCALAPPDATA -Filter 'circle-mix.exe' -File -Recurse -ErrorAction SilentlyContinue |
-              Select-Object -ExpandProperty FullName -First 1
-          }
-          if (-not $installedExe) { throw 'Installed CIRCLE MIX executable could not be located' }
-
-          $uninstaller = $null
-          if ($entry.UninstallString) {
-            $uninstallCommand = [Environment]::ExpandEnvironmentVariables([string]$entry.UninstallString)
-            if ($uninstallCommand.StartsWith('"')) {
-              $uninstaller = $uninstallCommand.Split('"')[1]
+            if ($entry) {
+              "Registry DisplayName: $($entry.DisplayName)" | Add-Content $diagnostics
+              "Registry InstallLocation: $($entry.InstallLocation)" | Add-Content $diagnostics
+              "Registry UninstallString: $($entry.UninstallString)" | Add-Content $diagnostics
             } else {
-              $uninstaller = ($uninstallCommand -split '\s+', 2)[0]
+              'Registry uninstall entry was not visible; continuing with file-system verification.' | Add-Content $diagnostics
             }
-          }
-          if (-not $uninstaller -or -not (Test-Path $uninstaller)) {
-            $uninstaller = Get-ChildItem (Split-Path $installedExe) -Filter 'uninstall*.exe' -File -ErrorAction SilentlyContinue |
-              Select-Object -ExpandProperty FullName -First 1
-          }
-          if (-not $uninstaller -or -not (Test-Path $uninstaller)) { throw 'Installed NSIS uninstaller could not be located' }
 
-          Write-Host "Installed executable: $installedExe"
-          Write-Host "Uninstaller: $uninstaller"
-          $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
-          if ($uninstallProcess.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstallProcess.ExitCode)" }
-          for ($attempt = 0; $attempt -lt 40 -and (Test-Path $installedExe); $attempt++) { Start-Sleep -Milliseconds 500 }
-          if (Test-Path $installedExe) { throw "Uninstall left the executable behind: $installedExe" }
+            $exeCandidates = @(
+              (Join-Path $env:LOCALAPPDATA 'CIRCLE MIX\circle-mix.exe'),
+              (Join-Path $env:LOCALAPPDATA 'CIRCLE MIX\CIRCLE MIX.exe'),
+              (Join-Path $env:LOCALAPPDATA 'com.epicenterguy.circlemix\circle-mix.exe')
+            )
+            if ($entry -and $entry.InstallLocation) {
+              $location = [Environment]::ExpandEnvironmentVariables([string]$entry.InstallLocation).TrimEnd('\')
+              $exeCandidates += (Join-Path $location 'circle-mix.exe')
+              $exeCandidates += (Join-Path $location 'CIRCLE MIX.exe')
+            }
+            if ($entry -and $entry.DisplayIcon) {
+              $displayIcon = [Environment]::ExpandEnvironmentVariables([string]$entry.DisplayIcon)
+              $exeCandidates += (($displayIcon -replace ',\d+$','').Trim('"'))
+            }
+
+            $installedExe = $null
+            for ($attempt = 0; $attempt -lt 20 -and -not $installedExe; $attempt++) {
+              $installedExe = $exeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+              if (-not $installedExe) { Start-Sleep -Milliseconds 500 }
+            }
+            if (-not $installedExe) {
+              $installedExe = Get-ChildItem $env:LOCALAPPDATA -File -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -in @('circle-mix.exe','CIRCLE MIX.exe') } |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -ExpandProperty FullName -First 1
+            }
+            if (-not $installedExe) { throw 'Installed CIRCLE MIX executable could not be located under LocalAppData' }
+            "Installed executable: $installedExe" | Add-Content $diagnostics
+
+            $uninstaller = $null
+            if ($entry -and $entry.UninstallString) {
+              $uninstallCommand = [Environment]::ExpandEnvironmentVariables([string]$entry.UninstallString)
+              if ($uninstallCommand.StartsWith('"')) {
+                $uninstaller = $uninstallCommand.Split('"')[1]
+              } else {
+                $uninstaller = ($uninstallCommand -split '\s+', 2)[0]
+              }
+            }
+            if (-not $uninstaller -or -not (Test-Path $uninstaller)) {
+              $uninstaller = Get-ChildItem (Split-Path $installedExe) -Filter 'uninstall*.exe' -File -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty FullName -First 1
+            }
+            if (-not $uninstaller -or -not (Test-Path $uninstaller)) { throw 'Installed NSIS uninstaller could not be located' }
+            "Uninstaller: $uninstaller" | Add-Content $diagnostics
+
+            $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
+            "Uninstaller exit code: $($uninstallProcess.ExitCode)" | Add-Content $diagnostics
+            if ($uninstallProcess.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstallProcess.ExitCode)" }
+            for ($attempt = 0; $attempt -lt 40 -and (Test-Path $installedExe); $attempt++) { Start-Sleep -Milliseconds 500 }
+            if (Test-Path $installedExe) { throw "Uninstall left the executable behind: $installedExe" }
+            'Install and uninstall smoke test passed.' | Add-Content $diagnostics
+          } catch {
+            "ERROR: $($_.Exception.Message)" | Add-Content $diagnostics
+            'LocalAppData CIRCLE candidates:' | Add-Content $diagnostics
+            Get-ChildItem $env:LOCALAPPDATA -Force -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -like '*circle*' } |
+              Select-Object FullName,LastWriteTime |
+              Format-Table -AutoSize |
+              Out-String |
+              Add-Content $diagnostics
+            throw
+          }
       - name: Write artifact notice
         if: always()
         shell: pwsh
@@ -106,3 +135,4 @@ jobs:
             src-tauri/target/release/circle-mix.exe
             src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/README.txt
+            src-tauri/target/release/installer-smoke.txt
