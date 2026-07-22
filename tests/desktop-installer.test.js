@@ -17,7 +17,7 @@ assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop bu
 assert.match(cargo,new RegExp(`version = "${pkg.version.replaceAll('.','\\.')}"`),'Cargo and package versions must match');
 assert.match(workflow,/\*-setup\.exe/,'Windows CI must locate the NSIS setup executable');
 assert.match(workflow,/ArgumentList '\/S'/,'Windows CI must exercise silent NSIS install and uninstall');
-assert.match(workflow,/DisplayName -eq 'CIRCLE MIX'/,'Windows CI must verify the installed application entry');
+assert.match(workflow,/DisplayName -like 'CIRCLE MIX\*'/,'Windows CI must verify the installed application entry');
 assert.match(workflow,/UninstallString/,'Windows CI must verify and execute the uninstaller');
 assert.match(workflow,/circle-mix-windows-installer-x64/,'Windows CI must publish the installer artifact');
 
