@@ -1,7 +1,10 @@
 'use strict';
 const assert=require('node:assert/strict');
-const pulse=require('../src/pulse-input.js');
+const fs=require('node:fs');
+const path=require('node:path');
+const pulse=require('../src/input.js');
 
+assert.equal(fs.existsSync(path.join(__dirname,'../src/pulse-input.js')),false,'PULSE input must keep src/input.js as its single source');
 assert.equal(pulse.NOTE_TYPE,'pulse');
 assert.equal(pulse.isPulseNote({type:'pulse'}),true);
 assert.equal(pulse.isPulseNote({type:'cut'}),false);

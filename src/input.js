@@ -1,6 +1,5 @@
 // Input module boundary for CIRCLE MIX.
-// PULSE v1 is exposed here because index.html already loads this boundary before game.js.
-// Keep this implementation byte-for-byte aligned with src/pulse-input.js.
+// This is the canonical PULSE v1 input module loaded before game.js.
 /* PULSE v1 input and timing contract for CIRCLE MIX. */
 (function(root,factory){
   const api=factory();
