@@ -21,6 +21,7 @@ PULSE is a position-independent rhythm note intended to replace new SCRATCH char
 - Holding Shift cannot repeatedly trigger PULSE.
 - Both Shift keys share one release gate. Pressing the other Shift while one is held does not create another input.
 - Every accepted PULSE requires all Shift keys to be released before the next accepted input.
+- Shift is reserved for PULSE and never arms legacy SCRATCH; PC SCRATCH continues to use the right mouse button.
 - Window blur, pause, restart, and scene change reset held input safely.
 - AUTO activates PULSE at its hit time through the same judgement path.
 
