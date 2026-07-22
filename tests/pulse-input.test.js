@@ -29,7 +29,8 @@ assert.equal(gate.keydown({code:'ShiftRight'}).reason,'RELEASE_REQUIRED','the ot
 assert.equal(events.length,1);
 assert.equal(gate.keyup({code:'ShiftLeft'}).released,false,'right Shift is still held');
 assert.equal(gate.keydown({code:'ShiftLeft'}).reason,'RELEASE_REQUIRED');
-assert.equal(gate.keyup({code:'ShiftRight'}).released,true);
+assert.equal(gate.keyup({code:'ShiftRight'}).released,false,'left Shift was pressed again and is still held');
+assert.equal(gate.keyup({code:'ShiftLeft'}).released,true,'all Shift keys must be released before rearming');
 assert.equal(gate.keydown({code:'ShiftRight',timeStamp:20}).accepted,true);
 assert.equal(events.length,2);
 gate.reset();

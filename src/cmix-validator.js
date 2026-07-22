@@ -15,7 +15,7 @@
   const AUDIO_EXTENSIONS = new Set([".ogg", ".mp3", ".wav"]);
   const IMAGE_EXTENSIONS = new Set([".webp", ".png", ".jpg", ".jpeg"]);
   const FORBIDDEN_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".html", ".htm", ".exe", ".dll", ".wasm", ".bat", ".cmd", ".ps1", ".sh"]);
-  const NOTE_TYPES = new Set(["cut", "fx", "slideCW", "slideCCW", "trace", "traceCW", "traceCCW", "swingCW", "swingCCW", "scratchCW", "scratchCCW"]);
+  const NOTE_TYPES = new Set(["cut", "fx", "slideCW", "slideCCW", "trace", "traceCW", "traceCCW", "swingCW", "swingCCW", "scratchCW", "scratchCCW", "pulse"]);
   const DURATION_TYPES = new Set(["fx", "slideCW", "slideCCW", "trace", "traceCW", "traceCCW", "scratchCW", "scratchCCW"]);
   const END_ANGLE_TYPES = new Set(["slideCW", "slideCCW", "trace", "traceCW", "traceCCW"]);
   const TRACE_TYPES = new Set(["trace", "traceCW", "traceCCW"]);
@@ -164,6 +164,7 @@
       return {ok:errors.length === 0, errors, warnings};
     }
     const noteIds = new Set();
+    const pulseBeats = new Set();
     let previousBeat = -Infinity;
     let previousNote = null;
     chart.notes.forEach((note, index) => {
@@ -173,7 +174,16 @@
       if(!NOTE_TYPES.has(note.type)) errors.push(issue("UNSUPPORTED_NOTE_TYPE", `${path}/type`, `Unsupported note type: ${note.type}`));
       if(!isFiniteNumber(note.beat) || note.beat < 0) errors.push(issue("INVALID_NOTE_BEAT", `${path}/beat`, "beat must be a finite number >= 0."));
       else if(note.beat < previousBeat) errors.push(issue("UNSORTED_NOTES", `${path}/beat`, "Notes must be sorted by non-decreasing beat."));
-      if(!validAngle(note.angle)) errors.push(issue("INVALID_NOTE_ANGLE", `${path}/angle`, "angle must be a finite number >= 0 and < 360."));
+      if(note.type === "pulse"){
+        for(const field of ["angle", "endAngle", "durationBeat", "signedSweepAngle", "direction"]){
+          if(note[field] !== undefined) errors.push(issue("UNEXPECTED_PULSE_FIELD", `${path}/${field}`, `PULSE must not define ${field}.`));
+        }
+        if(isFiniteNumber(note.beat)){
+          const beatKey=Number(note.beat).toFixed(6);
+          if(pulseBeats.has(beatKey)) errors.push(issue("DUPLICATE_PULSE_TIME", `${path}/beat`, "At most one PULSE may exist at the same timestamp."));
+          pulseBeats.add(beatKey);
+        }
+      }else if(!validAngle(note.angle)) errors.push(issue("INVALID_NOTE_ANGLE", `${path}/angle`, "angle must be a finite number >= 0 and < 360."));
       if(note.id !== undefined){
         if(typeof note.id !== "string" || !NOTE_ID_PATTERN.test(note.id)) errors.push(issue("INVALID_NOTE_ID", `${path}/id`, "Note id contains unsupported characters or is too long."));
         else if(noteIds.has(note.id)) errors.push(issue("DUPLICATE_NOTE_ID", `${path}/id`, `Duplicate note id: ${note.id}`));
@@ -191,7 +201,7 @@
       }else if(note.signedSweepAngle !== undefined){
         errors.push(issue("UNEXPECTED_SWEEP", `${path}/signedSweepAngle`, "signedSweepAngle is only valid for TRACE notes."));
       }
-      if(previousNote && isFiniteNumber(note.beat) && isFiniteNumber(previousNote.beat) && Math.abs(note.beat - previousNote.beat) < 0.000001 && validAngle(note.angle) && validAngle(previousNote.angle) && shortestDegrees(note.angle, previousNote.angle) < 8){
+      if(previousNote && note.type!=="pulse" && previousNote.type!=="pulse" && isFiniteNumber(note.beat) && isFiniteNumber(previousNote.beat) && Math.abs(note.beat - previousNote.beat) < 0.000001 && validAngle(note.angle) && validAngle(previousNote.angle) && shortestDegrees(note.angle, previousNote.angle) < 8){
         warnings.push(issue("OVERLAPPING_NOTES", path, "Consecutive same-time notes are visually close."));
       }
       if(isFiniteNumber(note.beat)) previousBeat = Math.max(previousBeat, note.beat);
