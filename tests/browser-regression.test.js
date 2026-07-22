@@ -657,9 +657,13 @@ async function runDeterministicAimAndCutRegression(browser){
       const afterFirst=api.state();
       const releaseLeft=api.testInput.pulseKeyUp('ShiftLeft');
       const releaseRight=api.testInput.pulseKeyUp('ShiftRight');
-      api.startPulseTestChart(); api.setAuto(true); api.advanceTestClock(.82);
+      api.startPulseTestChart(); api.advanceTestClock(.8); api.testInput.pulseKeyDown('ShiftLeft',false);
+      window.dispatchEvent(new Event('blur'));
+      const afterBlur=api.testInput.pulseKeyDown('ShiftRight',false); api.testInput.pulseKeyUp('ShiftRight');
+      api.startPulseTestChart(); api.setAuto(true); api.advanceTestClock(.2);
+      const autoLead=api.state(); autoLead.autoTargetAngle=api.autoTargetAngle(); api.advanceTestClock(.62);
       const auto=api.state(); api.setAuto(false);
-      return {first,heldOther,afterFirst,releaseLeft,releaseRight,auto};
+      return {first,heldOther,afterFirst,releaseLeft,releaseRight,afterBlur,autoLead,auto};
     });
     assert.equal(pulse.first.accepted,true,`first Shift accepts PULSE ${JSON.stringify(pulse)}`);
     assert.equal(pulse.heldOther.reason,'RELEASE_REQUIRED',`other Shift cannot bypass shared release gate ${JSON.stringify(pulse)}`);
@@ -668,6 +672,10 @@ async function runDeterministicAimAndCutRegression(browser){
     assert.equal(pulse.afterFirst.scratchHeld,false,'Shift PULSE does not activate legacy SCRATCH');
     assert.equal(pulse.releaseLeft.released,false,'one held Shift keeps the gate latched');
     assert.equal(pulse.releaseRight.released,true,'all Shift keys released rearms PULSE');
+    assert.equal(pulse.afterBlur.accepted,true,'window blur resets the shared PULSE gate');
+    const autoAimNote=pulse.autoLead.chartDoneStates.find(n=>n.id==='test-cut-after-pulse');
+    const autoAimError=Math.abs(Math.atan2(Math.sin(pulse.autoLead.autoTargetAngle-autoAimNote.angle),Math.cos(pulse.autoLead.autoTargetAngle-autoAimNote.angle)));
+    assert.ok(autoAimError<1e-6,`pending PULSE must not block AUTO aim targeting ${JSON.stringify(pulse.autoLead)}`);
     assert.equal(pulse.auto.chartDoneStates.find(n=>n.id==='test-pulse-0').done,true,'AUTO completes PULSE at hit time');
     assert.equal(pulse.auto.perfectCount,1,'AUTO PULSE is PERFECT');
     assert.deepEqual(errors, [], `deterministic gameplay errors ${JSON.stringify(errors)}`);

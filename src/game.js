@@ -2493,6 +2493,17 @@
     return best;
   }
 
+  function nextAimNote(t){
+    let best=null,bd=999;
+    for(const n of chart){
+      if(n.done||n.missed||n.type==="pulse")continue;
+      if(activeHold(n,t))return n;
+      const d=n.hitTime-t;
+      if(d>-0.22&&d<bd){best=n;bd=d;}
+    }
+    return best;
+  }
+
   function noteDebugId(n){
     if(!n)return "-";
     const idx=chart.indexOf(n);
@@ -2561,8 +2572,8 @@
         }
       }
     }else{
-      const n=nextNote(t);
-      if(n&&n.type!=="pulse")targetAngle=n.angle;
+      const n=nextAimNote(t);
+      if(n)targetAngle=n.angle;
     }
 
     for(const n of chart){
@@ -5152,7 +5163,7 @@ settingsOrigin=${settingsOrigin}`);
       if(e.code==="Escape"){ e.preventDefault(); closeUpdateLog(); }
       return;
     }
-    if(e.code==="ShiftLeft"||e.code==="ShiftRight"){ e.preventDefault(); pulseGate?.keydown(e); }
+    if((e.code==="ShiftLeft"||e.code==="ShiftRight")&&running&&!paused){ e.preventDefault(); pulseGate?.keydown(e); }
     keys[e.code]=true;
     if(e.code==="KeyA")keyA=true;
     if(e.code==="KeyD")keyD=true;
@@ -5194,6 +5205,7 @@ settingsOrigin=${settingsOrigin}`);
     if(e.code==="KeyA")keyA=false;
     if(e.code==="KeyD")keyD=false;
   });
+  window.addEventListener("blur",()=>{ keys.ShiftLeft=false; keys.ShiftRight=false; pulseGate?.reset(); });
 
   song.addEventListener("ended", ()=>scheduleCompletion());
 
@@ -5749,6 +5761,7 @@ running=${running}`);
         scratch:(held)=>{ mouseDownRight=!!held; filterHeld=!!held; setScratchHeld(!!held); }
       },
       setAuto:(enabled)=>{ setAutoPlayEnabled(!!enabled,"browser-test"); return window.CircleMixTestApi.state(); },
+      autoTargetAngle:()=>Number(targetAngle),
       startTutorial:()=>startTutorial(),
       openSongSelect:()=>showSongSelect(),
       skipTutorialStep:()=>nextTutorialStep(),
