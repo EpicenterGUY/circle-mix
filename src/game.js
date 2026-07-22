@@ -4423,7 +4423,7 @@
 
     // Z/X/Space/우클릭을 기본 액션 홀드로 사용. Shift는 PULSE 전용이며 SCRATCH는 우클릭을 사용한다.
     filterHeld = isAutoActive() || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
-    scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
+    scratchHeld = mouseDownRight;
     syncScratchHoldState();
     scratchMoveAmount=Math.abs(aimInput.lastSampleDelta);
     scratchSpeed=Math.abs(aimInput.sampleAngularVelocity);
@@ -5045,7 +5045,7 @@ settingsOrigin=${settingsOrigin}`);
     canvas.addEventListener("pointerup",endAim,{passive:true}); canvas.addEventListener("pointercancel",endAim,{passive:true});
   }
   window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerSource="pointer"; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;setScratchHeld(true);}});
-  window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;setScratchHeld(!!(keys.ShiftLeft||keys.ShiftRight));}});
+  window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;setScratchHeld(false);}});
   window.addEventListener("touchstart",e=>{ if(isCoarsePointerMobile()) return; if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){ updateGameplayPointerFromEvent(e,"touch"); } if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;setScratchHeld(true);} else if(running)onCut();},{passive:true});
   window.addEventListener("touchend",e=>{ if(isCoarsePointerMobile()) return; if(!e.touches||e.touches.length<2){mouseDownRight=false;setScratchHeld(false);} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
   function bindMobileGameButton(btn,role){
