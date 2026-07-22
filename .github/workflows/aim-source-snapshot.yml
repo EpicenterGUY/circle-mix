@@ -1,0 +1,25 @@
+name: Aim source snapshot
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/aim-source-snapshot.yml'
+      - 'src/game.js'
+      - 'src/input.js'
+      - 'index.html'
+      - 'tests/**'
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: circle-mix-aim-source
+          retention-days: 1
+          path: |
+            src/game.js
+            src/input.js
+            index.html
+            tests/smoke.test.js
+            tests/browser-regression.test.js
+            package.json
