@@ -6,3 +6,14 @@ test('rotation fields and overlap are safely distinguished',()=>{const slow=C([{
 test('continuous circular chains outrank slower and alternating movement',()=>{const legendary=S(circularFixture({})),extra=S(circularFixture({delta:20,reverseEvery:4,fast:false})),zigzag=S(circularFixture({reverseEvery:1}));assert.ok(legendary>=6.5&&legendary<=7.5,`legendary ${legendary}`);assert.ok(extra<=legendary-1.5,`${extra} vs ${legendary}`);assert.ok(zigzag<=legendary-1.5,`${zigzag} vs ${legendary}`);});
 test('parent BPM options affect charts without an embedded bpm',()=>{const chart=circularFixture({});delete chart.bpm;const slow=S(chart,{bpm:120}),fast=S(chart,{bpm:185});assert.ok(fast>=slow+.4,`${slow} -> ${fast}`);});
 test('amount and slideAmount preserve full rotations when endpoints match',()=>{const base={type:'slideCW',beat:0,angle:0,endAngle:0,durationBeat:1,direction:'CW'};const amount=S(C([{...base,amount:Math.PI*2}]));const slide=S(C([{...base,slideAmount:Math.PI*2}]));assert.ok(amount>S(C([base])));assert.ok(Math.abs(amount-slide)<=.2);});
+
+
+test("PULSE adds rhythm burden without fake cursor travel",()=>{
+  const aimedOnly={bpm:120,notes:[{type:"cut",beat:0,angle:0},{type:"cut",beat:1,angle:180}]};
+  const withPulse={bpm:120,notes:[{type:"cut",beat:0,angle:0},{type:"pulse",beat:.5},{type:"cut",beat:1,angle:180}]};
+  const simultaneous={bpm:120,notes:[{type:"cut",beat:0,angle:0},{type:"pulse",beat:0},{type:"cut",beat:1,angle:180}]};
+  const base=D.calculate(aimedOnly), separated=D.calculate(withPulse), chord=D.calculate(simultaneous);
+  assert.equal(D.family({type:"pulse"}),"pulse");
+  assert.equal(separated.components.aim,base.components.aim,"PULSE must not add fake cursor travel");
+  assert.ok(chord.components.pulseOverlap>0,"simultaneous PULSE should add hand-separation burden");
+});

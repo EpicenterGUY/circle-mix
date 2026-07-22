@@ -127,3 +127,20 @@ test("validator remains pure and browser reusable", () => {
   assert.deepEqual(validator.validatePath("charts/reverb.json"), {ok:true});
   assert.equal(validator.validatePath("charts\\reverb.json").ok, false);
 });
+
+
+test("PULSE is angle-free and may share a timestamp with an aimed note", () => {
+  const data=chart("pulse-test");
+  data.notes=[{id:"p1",type:"pulse",beat:4},{id:"c1",type:"cut",beat:4,angle:90}];
+  const result=validator.validateChart(data);
+  assert.equal(result.ok,true,JSON.stringify(result.errors));
+});
+
+test("PULSE rejects geometry and duplicate timestamps", () => {
+  const data=chart("pulse-test");
+  data.notes=[{id:"p1",type:"pulse",beat:4,angle:0},{id:"p2",type:"pulse",beat:4}];
+  const result=validator.validateChart(data);
+  assert.equal(result.ok,false);
+  assert.ok(result.errors.some(error=>error.code==="UNEXPECTED_PULSE_FIELD"));
+  assert.ok(result.errors.some(error=>error.code==="DUPLICATE_PULSE_TIME"));
+});

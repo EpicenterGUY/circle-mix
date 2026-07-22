@@ -650,6 +650,34 @@ async function runDeterministicAimAndCutRegression(browser){
     assert.equal(cut.judgedCount, 1, `ACTION uses onCut production path ${JSON.stringify(cut)}`);
     assert.equal(cut.combo, 1, 'successful CUT increments combo');
     assert.equal(cut.chartDoneStates.find(n=>n.id==='test-cut-0').done, true, 'successful CUT completes its chart note');
+    const pulse = await page.evaluate(() => {
+      const api=window.CircleMixTestApi; api.startPulseTestChart(); api.advanceTestClock(.8);
+      const first=api.testInput.pulseKeyDown('ShiftLeft',false);
+      const heldOther=api.testInput.pulseKeyDown('ShiftRight',false);
+      const afterFirst=api.state();
+      const releaseLeft=api.testInput.pulseKeyUp('ShiftLeft');
+      const releaseRight=api.testInput.pulseKeyUp('ShiftRight');
+      api.startPulseTestChart(); api.advanceTestClock(.8); api.testInput.pulseKeyDown('ShiftLeft',false);
+      window.dispatchEvent(new Event('blur'));
+      const afterBlur=api.testInput.pulseKeyDown('ShiftRight',false); api.testInput.pulseKeyUp('ShiftRight');
+      api.startPulseTestChart(); api.setAuto(true); api.advanceTestClock(.2);
+      const autoLead=api.state(); autoLead.autoTargetAngle=api.autoTargetAngle(); api.advanceTestClock(.62);
+      const auto=api.state(); api.setAuto(false);
+      return {first,heldOther,afterFirst,releaseLeft,releaseRight,afterBlur,autoLead,auto};
+    });
+    assert.equal(pulse.first.accepted,true,`first Shift accepts PULSE ${JSON.stringify(pulse)}`);
+    assert.equal(pulse.heldOther.reason,'RELEASE_REQUIRED',`other Shift cannot bypass shared release gate ${JSON.stringify(pulse)}`);
+    assert.equal(pulse.afterFirst.judgedCount,1,`PULSE uses normal judgement path ${JSON.stringify(pulse.afterFirst)}`);
+    assert.equal(pulse.afterFirst.chartDoneStates.find(n=>n.id==='test-pulse-0').done,true,'manual PULSE completes the global note');
+    assert.equal(pulse.afterFirst.scratchHeld,false,'Shift PULSE does not activate legacy SCRATCH');
+    assert.equal(pulse.releaseLeft.released,false,'one held Shift keeps the gate latched');
+    assert.equal(pulse.releaseRight.released,true,'all Shift keys released rearms PULSE');
+    assert.equal(pulse.afterBlur.accepted,true,'window blur resets the shared PULSE gate');
+    const autoAimNote=pulse.autoLead.chartDoneStates.find(n=>n.id==='test-cut-after-pulse');
+    const autoAimError=Math.abs(Math.atan2(Math.sin(pulse.autoLead.autoTargetAngle-autoAimNote.angle),Math.cos(pulse.autoLead.autoTargetAngle-autoAimNote.angle)));
+    assert.ok(autoAimError<1e-6,`pending PULSE must not block AUTO aim targeting ${JSON.stringify(pulse.autoLead)}`);
+    assert.equal(pulse.auto.chartDoneStates.find(n=>n.id==='test-pulse-0').done,true,'AUTO completes PULSE at hit time');
+    assert.equal(pulse.auto.perfectCount,1,'AUTO PULSE is PERFECT');
     assert.deepEqual(errors, [], `deterministic gameplay errors ${JSON.stringify(errors)}`);
   } finally { unregisterDiagnosticContext(context, page); await context.close(); }
 }
@@ -901,6 +929,19 @@ async function runDeterministicAimAndCutRegression(browser){
     const actionUp = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
     assert.equal(actionUp.mobileActionPointerId, null);
     assert.equal(actionUp.actionHeld, false);
+    const controlBoxes = await Promise.all(['#mobilePulseBtn','#mobileActionBtn','#mobileScratchBtn'].map(selector=>mobilePage.locator(selector).boundingBox()));
+    assert.ok(controlBoxes.every(Boolean),`all mobile controls are reachable ${JSON.stringify(controlBoxes)}`);
+    const overlaps=(a,b)=>a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y;
+    assert.equal(overlaps(controlBoxes[0],controlBoxes[1]),false,`PULSE does not overlap ACTION ${JSON.stringify(controlBoxes)}`);
+    assert.equal(overlaps(controlBoxes[0],controlBoxes[2]),false,`PULSE does not overlap SCRATCH ${JSON.stringify(controlBoxes)}`);
+    await mobilePage.locator('#mobilePulseBtn').dispatchEvent('pointerdown', {pointerId:40, pointerType:'touch', isPrimary:true, bubbles:true});
+    await mobilePage.locator('#mobilePulseBtn').dispatchEvent('pointerdown', {pointerId:43, pointerType:'touch', isPrimary:false, bubbles:true});
+    const pulseDown = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(pulseDown.mobilePulsePointerId,40,'holding mobile PULSE does not accept another pointer');
+    assert.equal(pulseDown.scratchHeld,false,'mobile PULSE does not hold legacy SCRATCH');
+    await mobilePage.locator('#mobilePulseBtn').dispatchEvent('pointerup', {pointerId:40, pointerType:'touch', isPrimary:true, bubbles:true});
+    const pulseUp = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(pulseUp.mobilePulsePointerId,null,'mobile PULSE releases cleanly');
     await mobilePage.locator('#mobileScratchBtn').dispatchEvent('pointerdown', {pointerId:42, pointerType:'touch', isPrimary:true, bubbles:true});
     const scratchDown = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
     assert.equal(scratchDown.mobileScratchPointerId, 42);

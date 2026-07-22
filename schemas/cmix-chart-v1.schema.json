@@ -24,10 +24,10 @@
     "note": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "beat", "angle"],
+      "required": ["type", "beat"],
       "properties": {
         "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
-        "type": {"enum": ["cut", "fx", "slideCW", "slideCCW", "trace", "traceCW", "traceCCW", "swingCW", "swingCCW", "scratchCW", "scratchCCW"]},
+        "type": {"enum": ["cut", "fx", "slideCW", "slideCCW", "trace", "traceCW", "traceCCW", "swingCW", "swingCCW", "scratchCW", "scratchCCW", "pulse"]},
         "beat": {"type": "number", "minimum": 0},
         "angle": {"$ref": "#/$defs/angle"},
         "endAngle": {"$ref": "#/$defs/angle"},
@@ -36,6 +36,14 @@
         "direction": {"enum": ["CW", "CCW"]}
       },
       "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "pulse"}}, "required": ["type"]},
+          "then": {"not": {"anyOf": [
+            {"required": ["angle"]}, {"required": ["endAngle"]}, {"required": ["durationBeat"]},
+            {"required": ["signedSweepAngle"]}, {"required": ["direction"]}
+          ]}},
+          "else": {"required": ["angle"]}
+        },
         {
           "if": {"properties": {"type": {"enum": ["fx", "slideCW", "slideCCW", "trace", "traceCW", "traceCCW", "scratchCW", "scratchCCW"]}}, "required": ["type"]},
           "then": {"required": ["durationBeat"]}

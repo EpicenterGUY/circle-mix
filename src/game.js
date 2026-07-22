@@ -1,4 +1,15 @@
 (() => {
+  function ensurePulseUi(){
+    const controls=document.querySelector(".mobileGameplayControls");
+    if(controls&&!document.getElementById("mobilePulseBtn")){ const button=document.createElement("button"); button.className="mobilePulseBtn mobilePlayBtn"; button.id="mobilePulseBtn"; button.type="button"; button.setAttribute("aria-label","Tap pulse"); button.textContent="PULSE"; controls.prepend(button); }
+    const scratchEditor=document.getElementById("addScratchCWBtn");
+    if(scratchEditor&&!document.getElementById("addPulseBtn")){ const button=document.createElement("button"); button.className="editBtn editFull"; button.id="addPulseBtn"; button.type="button"; button.textContent="PULSE (SHIFT)"; scratchEditor.parentElement?.insertBefore(button,scratchEditor); }
+    const hint=document.querySelector("#editorPanel .editorHint");
+    if(hint) hint.textContent="현재 음악 위치에 노트 찍기. PULSE는 각도 없이 Shift로 치는 전역 탭이며, SCRATCH는 레거시 우클릭 방향 액션입니다.";
+    const keyGrid=document.querySelector("#keymapOverlay .keyGrid");
+    if(keyGrid&&!keyGrid.querySelector('[data-pulse-keymap="true"]')){ const cells=["PULSE",'<span class="kbd">L Shift</span> / <span class="kbd">R Shift</span> 탭',"에임과 무관한 전역 리듬 링. 다음 입력 전 양쪽 Shift를 모두 놓아야 함"]; for(const html of cells){ const cell=document.createElement("div"); cell.className="keyCell"; cell.dataset.pulseKeymap="true"; cell.innerHTML=html; keyGrid.append(cell); } }
+  }
+  ensurePulseUi();
   const song = document.getElementById("song");
   const embeddedAnimaSrc = (song && typeof song.getAttribute === "function") ? (song.getAttribute("src") || "") : (song?.src || "");
   const canvas = document.getElementById("game");
@@ -21,7 +32,7 @@
   const editorStartBtn=document.getElementById("editorStartBtn"), startFullBtn=document.getElementById("startFullBtn");
   const editorToggle=document.getElementById("editorToggle"), fullToggle=document.getElementById("fullToggle");
   const editorPanel=document.getElementById("editorPanel"), laneGrid=document.getElementById("laneGrid");
-  const addCutBtn=document.getElementById("addCutBtn"), addSwingCWBtn=document.getElementById("addSwingCWBtn"), addSwingCCWBtn=document.getElementById("addSwingCCWBtn"), addFxBtn=document.getElementById("addFxBtn"), addSlideCWBtn=document.getElementById("addSlideCWBtn"), addSlideCCWBtn=document.getElementById("addSlideCCWBtn"), addScratchCWBtn=document.getElementById("addScratchCWBtn"), addScratchCCWBtn=document.getElementById("addScratchCCWBtn");
+  const addCutBtn=document.getElementById("addCutBtn"), addSwingCWBtn=document.getElementById("addSwingCWBtn"), addSwingCCWBtn=document.getElementById("addSwingCCWBtn"), addFxBtn=document.getElementById("addFxBtn"), addSlideCWBtn=document.getElementById("addSlideCWBtn"), addSlideCCWBtn=document.getElementById("addSlideCCWBtn"), addPulseBtn=document.getElementById("addPulseBtn"), addScratchCWBtn=document.getElementById("addScratchCWBtn"), addScratchCCWBtn=document.getElementById("addScratchCCWBtn");
   const seekBackBtn=document.getElementById("seekBackBtn"), seekFwdBtn=document.getElementById("seekFwdBtn"), playPauseBtn=document.getElementById("playPauseBtn"), deleteLastBtn=document.getElementById("deleteLastBtn");
   const exportBtn=document.getElementById("exportBtn"), importBtn=document.getElementById("importBtn"), clearChartBtn=document.getElementById("clearChartBtn"), editorStatus=document.getElementById("editorStatus"), chartText=document.getElementById("chartText");
   const angleSnapSelect=document.getElementById("angleSnapSelect"), editorAngleInput=document.getElementById("editorAngleInput");
@@ -84,6 +95,7 @@
   const pauseSetMobileQuality = document.getElementById("pauseSetMobileQuality");
   const pauseSetHaptic = document.getElementById("pauseSetHaptic");
   const mobileActionBtn = document.getElementById("mobileActionBtn");
+  const mobilePulseBtn = document.getElementById("mobilePulseBtn");
   const mobileScratchBtn = document.getElementById("mobileScratchBtn");
   const pauseSetMobileLayout = document.getElementById("pauseSetMobileLayout");
   const pauseSetMobileInputTest = document.getElementById("pauseSetMobileInputTest");
@@ -154,6 +166,10 @@
   const TAU = Math.PI * 2;
   const songs = window.CircleMixSongRegistry || { all:()=>[], localAll:()=>[], refreshLocal:async()=>[], get:()=>null, hasDifficulty:()=>false };
   const chartTools = window.CircleMixChartTools || { validateChart:()=>({ok:true,errors:[]}), calculateStars:()=>1 };
+  const pulseInput = window.CircleMixPulseInput || {
+    createGate(options={}){ const held=new Set(); let latched=false; return {keydown(event={}){const code=String(event.code||"");if(code!=="ShiftLeft"&&code!=="ShiftRight")return {handled:false,accepted:false};held.add(code);if(event.repeat||latched)return {handled:true,accepted:false};latched=true;options.onPulse?.({code,source:"keyboard",timeStamp:Number(event.timeStamp)||0},event);return {handled:true,accepted:true};},keyup(event={}){const code=String(event.code||"");if(code!=="ShiftLeft"&&code!=="ShiftRight")return {handled:false,released:false};held.delete(code);if(!held.size)latched=false;return {handled:true,released:!latched};},reset(){held.clear();latched=false;},state(){return {latched,held:[...held]};}}; },
+    approachProgress(nowMs,hitMs,approachMs){return Math.min(1,Math.max(0,1-(hitMs-nowMs)/Math.max(1,approachMs)));}
+  };
   const chartDifficulty = window.CircleMixChartDifficulty || { VERSION:"local-v2", calculate:chart=>({stars:chartTools.calculateStars(chart),raw:0,version:"local-v2"}) };
   const initialParams = new URLSearchParams(window.location.search);
   const versionInfo = window.CircleMixVersion || {version:"0.0.0", buildDate:""};
@@ -204,7 +220,7 @@
   const TRACE_SWING_LINK_MIN = .15;
   const TRACE_SWING_LINK_MAX = .25;
   const BASE_NOTE_WIDTH = 8;
-  const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, trace:3.0, hold:11.5 };
+  const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, pulse:10, trace:3.0, hold:11.5 };
   const VISUAL_SETTINGS_KEY = "circleMixVisualSettings.v1";
   const INPUT_SETTINGS_KEY = "circleMixInputSettings.v1";
   const MOBILE_CONTROL_PRESETS = ["STANDARD","LEFT_HANDED","RIGHT_HANDED","CUSTOM"];
@@ -220,7 +236,7 @@
 
   const COLORS = {
     cut:"#5cfffb", swingCW:"#79ff7d", swingCCW:"#ff72d6", slide:"#ffe15a", fx:"#b77cff",
-    trace:"#4388ff", traceSoft:"#2466d9", scratch:"#ee3d9a", scratchCW:"#ee3d9a", scratchCCW:"#ff5aa8",
+    trace:"#4388ff", traceSoft:"#2466d9", pulse:"#ff4eb8", scratch:"#ee3d9a", scratchCW:"#ee3d9a", scratchCCW:"#ff5aa8",
     perfect:"#fff36a", great:"#80ffdb", miss:"#ff4567"
   };
 
@@ -345,7 +361,9 @@
   let lastTraceSwingRuntimeLogAt=0, lastTraceSwingRuntimeLogState="";
   let mobileAimPointerId = null;
   let mobileActionPointerId = null;
+  let mobilePulsePointerId = null;
   let mobileScratchPointerId = null;
+  let pulseGate = null;
   let currentRenderDpr = 1;
   const MOBILE_EFFECT_LIMITS={particles:120,feedback:32,waves:20,ringBursts:12,scratchBursts:10};
   const DESKTOP_EFFECT_LIMITS={particles:360,feedback:96,waves:64,ringBursts:40,scratchBursts:32};
@@ -610,7 +628,7 @@
   }
 
   function make(type, beat, lane, extra={}){
-    const angleDeg = extra.angleDeg !== undefined ? normalizeAngleDeg(extra.angleDeg) : legacyLaneToAngle(lane);
+    const angleDeg = type==="pulse" ? 0 : (extra.angleDeg !== undefined ? normalizeAngleDeg(extra.angleDeg) : legacyLaneToAngle(lane));
     const endAngleDeg = extra.endAngleDeg !== undefined ? normalizeAngleDeg(extra.endAngleDeg) : (extra.endLane!==undefined ? legacyLaneToAngle(extra.endLane) : undefined);
     const hitTime=beat*BEAT*CHART_STRETCH;
     const n={
@@ -668,12 +686,13 @@
     if(type.startsWith("slide")) return "slide";
     if(type.startsWith("swing")) return "swing";
     if(type.startsWith("scratch")) return "scratch";
+    if(type === "pulse") return "pulse";
     return "cut";
   }
 
 
   function noteWeight(note){
-    const weights={cut:1.0, trace:0.5, hold:1.2, slide:1.3, swing:1.4, scratch:1.4};
+    const weights={cut:1.0, trace:0.5, hold:1.2, slide:1.3, swing:1.4, scratch:1.4, pulse:1.15};
     return weights[noteFamily(note.type)] || 1.0;
   }
 
@@ -2033,7 +2052,7 @@
 
   function drawJudgeGuides(t){
     const limit=tutorialMode?1:2;
-    const candidates=chart.filter(n=>!n.done&&!n.missed&&t>=n.spawnTime-.05&&t<=n.hitTime+(n.duration||0)+.25).sort((a,b)=>a.hitTime-b.hitTime).slice(0,limit);
+    const candidates=chart.filter(n=>!n.done&&!n.missed&&n.type!=="pulse"&&t>=n.spawnTime-.05&&t<=n.hitTime+(n.duration||0)+.25).sort((a,b)=>a.hitTime-b.hitTime).slice(0,limit);
     candidates.forEach((n,i)=>drawJudgeGuideForNote(n,t,i));
   }
 
@@ -2088,6 +2107,7 @@
     if(n.type.startsWith("slide"))return COLORS.slide;
     if(n.type.startsWith("trace"))return COLORS.trace;
     if(n.type==="fx")return COLORS.fx;
+    if(n.type==="pulse")return COLORS.pulse;
     if(n.type==="scratchCW")return COLORS.scratchCW;
     if(n.type==="scratchCCW")return COLORS.scratchCCW;
     if(n.type.startsWith("scratch"))return COLORS.scratch;
@@ -2282,6 +2302,14 @@
     if(label==="PERFECT") perfectCount++; else greatCount++;
     combo++; maxCombo=Math.max(maxCombo,combo);
 
+    const isPulse=n.type==="pulse";
+    if(isPulse){
+      addFeedback(label,cx,cy-baseR*.12,color); mobileHaptic(label); addRingBurst(color,label==="PERFECT"?1.18:1.0,"PULSE");
+      for(let i=0;i<14;i++){ const a=i/14*TAU; addParticles(cx+Math.cos(a)*hitR,cy+Math.sin(a)*hitR,color,1,.52); }
+      if(tutorialMode) tutorialHandleJudgement(judgeEvent);
+      return;
+    }
+
     let a=n.angle;
     if(n.type.startsWith("slide") || n.type.startsWith("scratch")){
       a = n.endAngle ?? n.visualEndAngle ?? a;
@@ -2348,6 +2376,7 @@
   function miss(n,reason){
     if(n.done||n.missed)return;
     n.missed=true; n.failReason=reason || inferMissReason(n, now()); combo=0; judgedCount++; missCount++;
+    if(n.type==="pulse"){ addFeedback(tutorialMode ? tutorialFailureText(n.failReason) : "MISS",cx,cy-baseR*.12,COLORS.miss); mobileHaptic("MISS"); addRingBurst(COLORS.miss,.72,"MISS"); return; }
     let a=n.angle;
     if(n.type.startsWith("slide") || n.type.startsWith("scratch"))a=slideAngle(n,now());
     if(n.type?.startsWith("trace")) a=resolveTraceMotion(n).finalAngle;
@@ -2378,6 +2407,7 @@
   }
   function setScratchHeld(held){ scratchHeld=!!held; syncScratchHoldState(); }
   function forceReleaseScratch(){
+    pulseGate?.reset();
     setScratchHeld(false);
     scratchHoldWasActive=false;
     for(const note of chart){ delete note.scratchGestureEpoch; delete note.scratchGestureArmed; delete note.scratchDirectedTravel; delete note.scratchReverseTravel; }
@@ -2441,11 +2471,32 @@
     }
     if(n)judge(n,Math.abs(t-n.hitTime)<.065?"PERFECT":"GREAT",Math.abs(t-n.hitTime)<.065?COLORS.perfect:COLORS.great,{source,reason:"USER_JUDGEMENT"});
   }
+  function onPulse(source="keyboard"){
+    if(!running||paused)return false;
+    const t=now();
+    const n=chart.filter(note=>!note.done&&!note.missed&&note.type==="pulse"&&Math.abs(t-note.hitTime)<=HIT_WINDOW).sort((a,b)=>Math.abs(t-a.hitTime)-Math.abs(t-b.hitTime))[0];
+    if(!n)return false;
+    const perfect=Math.abs(t-n.hitTime)<.065;
+    judge(n,perfect?"PERFECT":"GREAT",perfect?COLORS.perfect:COLORS.great,{source,reason:"USER_JUDGEMENT"});
+    return true;
+  }
+  pulseGate=pulseInput.createGate({onPulse:detail=>{ tutorialState.activeInput=detail.source||"keyboard"; tutorialState.lastSource=detail.source||"keyboard"; onPulse(detail.source||"keyboard"); }});
 
   function nextNote(t){
     let best=null,bd=999;
     for(const n of chart){
       if(n.done||n.missed)continue;
+      if(activeHold(n,t))return n;
+      const d=n.hitTime-t;
+      if(d>-0.22&&d<bd){best=n;bd=d;}
+    }
+    return best;
+  }
+
+  function nextAimNote(t){
+    let best=null,bd=999;
+    for(const n of chart){
+      if(n.done||n.missed||n.type==="pulse")continue;
       if(activeHold(n,t))return n;
       const d=n.hitTime-t;
       if(d>-0.22&&d<bd){best=n;bd=d;}
@@ -2467,6 +2518,7 @@
     if(n.type.startsWith("trace"))return "TRACE";
     if(n.type.startsWith("swing"))return "SWING";
     if(n.type.startsWith("scratch"))return "SCRATCH";
+    if(n.type==="pulse")return "PULSE";
     return "NONE";
   }
 
@@ -2520,8 +2572,8 @@
         }
       }
     }else{
-      const n=nextNote(t);
-      if(n)targetAngle=(n.type.startsWith("scratch")||n.type.startsWith("swing"))?n.angle:n.angle;
+      const n=nextAimNote(t);
+      if(n)targetAngle=n.angle;
     }
 
     for(const n of chart){
@@ -2531,7 +2583,7 @@
         armAngle += dir*.08;
         armVel = dir*SCRATCH_FLICK_SPEED*1.5;
       }
-      if((n.type==="cut"||n.type.startsWith("swing"))&&Math.abs(t-n.hitTime)<.030){
+      if((n.type==="cut"||n.type==="pulse"||n.type.startsWith("swing"))&&Math.abs(t-n.hitTime)<.030){
         if(isAutoActive())logAutoProcessing(n);
         judge(n,"PERFECT",noteColor(n),{source:"auto",reason:"AUTO_JUDGEMENT"});
       }
@@ -2643,6 +2695,11 @@
   function updateNotes(t,dt){
     for(const n of chart){
       if(n.done||n.missed)continue;
+
+      if(n.type==="pulse"){
+        if(t>n.hitTime+.22)miss(n,"TOO LATE");
+        continue;
+      }
 
       if(n.type==="cut"){
         if(t>n.hitTime+.22)miss(n,"TOO LATE");
@@ -2863,7 +2920,7 @@
     let best=null;
     let bestScore=999;
     for(const n of chart){
-      if(n.done||n.missed)continue;
+      if(n.done||n.missed||n.type==="pulse")continue;
       const end=n.hitTime+(n.duration||0);
       if(n.type.startsWith("slide") && t>=n.hitTime && t<=end) return n;
       if(n.type==="fx" && t>=n.hitTime && t<=end) return n;
@@ -3484,8 +3541,16 @@
     }
   }
 
+  function drawPulse(n,t){
+    const p=pulseInput.approachProgress(t,n.hitTime,APPROACH);
+    const r=lerp(Math.max(20,baseR*.10),hitR,p);
+    const near=Math.abs(t-n.hitTime)<=HIT_WINDOW;
+    ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=.30+.58*p;ctx.strokeStyle=near?"#fff":COLORS.pulse;ctx.lineWidth=NOTE_WIDTHS.pulse+(near?3:0);ctx.shadowColor=COLORS.pulse;ctx.shadowBlur=(8+14*p)*visualScale("effect");ctx.beginPath();ctx.arc(0,0,r,0,TAU);ctx.stroke();ctx.globalAlpha=.18+.22*p;ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,0,Math.max(10,r-12),0,TAU);ctx.stroke();ctx.globalAlpha=.92;ctx.fillStyle=near?"#fff":COLORS.pulse;ctx.font=`1000 ${Math.round(11+4*p)}px system-ui`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("PULSE",0,0);ctx.restore();
+  }
+
   function drawNote(n,t){
     if(n.done||n.missed||t<n.spawnTime)return;
+    if(n.type==="pulse"){if(t<=n.hitTime+.36)drawPulse(n,t);return;}
     if(n.type.startsWith("slide")){if(t>n.hitTime+n.duration+.30)return; drawSlide(n,t); return;}
     if(n.duration>0&&t>n.hitTime+n.duration+.45)return;
     if(n.duration===0&&t>n.hitTime+.36)return;
@@ -3869,7 +3934,7 @@
     {name:"TRACE · 180° 흐린 가이드",kind:"trace",phase:"faded",desc:"밝은 진행 원호를 채워 끝점까지 회전하세요.",notes:[{type:"traceCW",beat:4,lane:6,endLane:2,durationBeat:2.8}]},
     {name:"TRACE · 실전 표시",kind:"trace",phase:"standard",desc:"일반 플레이와 같은 방식으로 필요한 회전량을 채우세요.",notes:[{type:"traceCCW",beat:4,lane:2,endLane:6,durationBeat:2.5}]},
     {name:"SWING · 가이드",kind:"swing",phase:"guided",desc:"접선 화살표가 가리키는 방향으로 에임을 짧고 빠르게 움직이세요.",notes:[{type:"swingCW",beat:4,lane:2},{type:"swingCCW",beat:6,lane:6}]},
-    {name:"SCRATCH · 가이드",kind:"scratch",phase:"guided",desc:"마우스 오른쪽을 누른 채 표시 방향으로 짧게 긁으세요.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
+    {name:"SCRATCH · 가이드",kind:"scratch",phase:"guided",desc:"레거시 SCRATCH는 마우스 오른쪽을 누른 채 표시 방향으로 짧게 긁으세요.",notes:[{type:"scratchCW",beat:4,lane:1,endLane:2,durationBeat:.55},{type:"scratchCCW",beat:6,lane:5,endLane:4,durationBeat:.55}]},
     {name:"360° TRACE → SWING",kind:"traceSwing",phase:"TRACE_ACTIVE",desc:"시작점에서 한 바퀴 회전해 끝점에 도달한 뒤 SWING 하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360}]},
     {name:"종합 연습",kind:"mix",phase:"standard",desc:"상세 가이드 없이 배운 노트를 순서대로 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
   ];
@@ -4367,9 +4432,9 @@
     // Do not also advance from the render loop; that duplicate path caused
     // intermittent stage skips when a late frame raced the next step.
 
-    // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
+    // Z/X/Space/우클릭을 기본 액션 홀드로 사용. Shift는 PULSE 전용이며 SCRATCH는 우클릭을 사용한다.
     filterHeld = isAutoActive() || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
-    scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
+    scratchHeld = mouseDownRight;
     syncScratchHoldState();
     scratchMoveAmount=Math.abs(aimInput.lastSampleDelta);
     scratchSpeed=Math.abs(aimInput.sampleAngularVelocity);
@@ -4390,14 +4455,15 @@
     // translucent shapes to overlap in the lesson screen.
     const visibleNotes=getVisibleNotes(t);
     if(!tutorialMode){
-      for(let i=0;i<visibleNotes.length;i++) drawLandingGhost(visibleNotes[i],t);
-      for(let i=0;i<visibleNotes.length;i++) drawApproachRail(visibleNotes[i],t);
+      for(let i=0;i<visibleNotes.length;i++) if(visibleNotes[i].type!=="pulse") drawLandingGhost(visibleNotes[i],t);
+      for(let i=0;i<visibleNotes.length;i++) if(visibleNotes[i].type!=="pulse") drawApproachRail(visibleNotes[i],t);
     }
     drawJudgeGuides(t);
     drawTutorialExploreTarget(t);
 
+    for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(n.type==="pulse")drawNote(n,t); }
     for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(n.type.startsWith("trace"))drawNote(n,t); }
-    for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(!n.type.startsWith("trace"))drawNote(n,t); }
+    for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(n.type!=="pulse"&&!n.type.startsWith("trace"))drawNote(n,t); }
     if(!tutorialMode)drawFocusHalo(focusNote,t);
     drawArm();
     drawEffects(dt);
@@ -4772,8 +4838,8 @@ settingsOrigin=${settingsOrigin}`);
   function rebuildCustomChart(){useCustomChart=customChartData.length>0;chart=generateChart();updateEditorStatus();}
   function snapBeat(b,grid=.25){return Math.round(b/grid)*grid;}
   function addEditorNote(type){
-    const b=snapBeat(beatNow(),.25), lane=Math.round(selectedEditorAngle/45)%8;
-    const d={type,beat:b,angle:roundAngleForJson(selectedEditorAngle)};
+    const b=snapBeat(beatNow(),.25);
+    const d=type==="pulse"?{type,beat:b}:{type,beat:b,angle:roundAngleForJson(selectedEditorAngle)};
     if(type==="fx") d.durationBeat=4;
     if(type==="slideCW"||type==="slideCCW"){
       d.durationBeat=4;
@@ -4871,10 +4937,10 @@ settingsOrigin=${settingsOrigin}`);
 
   let mobileLayoutDraft=null, mobileLayoutSavedSnapshot=null, mobileLayoutEditing=false;
   function mobileSafeRect(){ const gap=inputSettings.mobileControlGap||18; return {left:Math.max(gap,0), top:Math.max(gap+44,44), right:Math.max(gap,0), bottom:Math.max(gap,0), width:window.innerWidth, height:window.innerHeight}; }
-  function presetMobileLayout(preset=inputSettings.mobileControlPreset){ const gap=(inputSettings.mobileControlGap||18); const w=Math.max(1,window.innerWidth), h=Math.max(1,window.innerHeight); const ay=Math.max(0,Math.min(1,(h-gap-44)/h)); const low=Math.max(0,Math.min(1,(gap+44)/w)); const right=Math.max(0,Math.min(1,(w-gap-44)/w)); if(preset==="LEFT_HANDED") return {actionX:low, actionY:ay, scratchX:right, scratchY:ay}; if(preset==="RIGHT_HANDED") return {actionX:Math.max(.62,right-.06), actionY:Math.max(.62,ay-.06), scratchX:low, scratchY:ay}; return {actionX:right, actionY:ay, scratchX:low, scratchY:ay}; }
+  function presetMobileLayout(preset=inputSettings.mobileControlPreset){ const gap=(inputSettings.mobileControlGap||18); const w=Math.max(1,window.innerWidth), h=Math.max(1,window.innerHeight); const ay=Math.max(0,Math.min(1,(h-gap-44)/h)); const sy=Math.max(0,Math.min(1,(h-gap-146)/h)); const low=Math.max(0,Math.min(1,(gap+44)/w)); const right=Math.max(0,Math.min(1,(w-gap-44)/w)); if(preset==="LEFT_HANDED") return {actionX:low, actionY:ay, scratchX:right, scratchY:ay}; if(preset==="RIGHT_HANDED") return {actionX:Math.max(.62,right-.06), actionY:Math.max(.62,ay-.06), scratchX:low, scratchY:sy}; return {actionX:right, actionY:ay, scratchX:low, scratchY:sy}; }
   function getMobileLayout(){ const p=inputSettings.mobileControlPreset; const base=presetMobileLayout(p); return {actionX:p==="CUSTOM"&&inputSettings.mobileActionX!=null?inputSettings.mobileActionX:base.actionX, actionY:p==="CUSTOM"&&inputSettings.mobileActionY!=null?inputSettings.mobileActionY:base.actionY, scratchX:p==="CUSTOM"&&inputSettings.mobileScratchX!=null?inputSettings.mobileScratchX:base.scratchX, scratchY:p==="CUSTOM"&&inputSettings.mobileScratchY!=null?inputSettings.mobileScratchY:base.scratchY}; }
   function clampMobilePoint(x,y,size,avoidPause=true){ const gap=inputSettings.mobileControlGap||18, r=size/2, w=window.innerWidth, h=window.innerHeight; let px=Math.min(w-gap-r,Math.max(gap+r,x*w)); let py=Math.min(h-gap-r,Math.max(gap+44+r, y*h)); if(avoidPause && px+r>w-90 && py-r<58) py=58+r; return {x:px/w,y:py/h,px,py}; }
-  function applyMobileControlLayout(){ const l=getMobileLayout(); const a=clampMobilePoint(l.actionX,l.actionY,inputSettings.mobileActionSize); const sc=clampMobilePoint(l.scratchX,l.scratchY,inputSettings.mobileScratchSize); const root=document.documentElement.style; if(!root?.setProperty) return; root.setProperty('--mobile-action-size',`${inputSettings.mobileActionSize}px`); root.setProperty('--mobile-scratch-size',`${inputSettings.mobileScratchSize}px`); root.setProperty('--mobile-control-opacity',String(inputSettings.mobileButtonOpacity)); root.setProperty('--mobile-action-x',`${a.px}px`); root.setProperty('--mobile-action-y',`${a.py}px`); root.setProperty('--mobile-scratch-x',`${sc.px}px`); root.setProperty('--mobile-scratch-y',`${sc.py}px`); }
+  function applyMobileControlLayout(){ const l=getMobileLayout(); const a=clampMobilePoint(l.actionX,l.actionY,inputSettings.mobileActionSize); const sc=clampMobilePoint(l.scratchX,l.scratchY,inputSettings.mobileScratchSize); const pulseCandidates=[.08,.28,.5,.72,.92].map(x=>clampMobilePoint(x,.92,96)); const pulse=pulseCandidates.sort((p,q)=>Math.min(Math.hypot(q.px-a.px,q.py-a.py),Math.hypot(q.px-sc.px,q.py-sc.py))-Math.min(Math.hypot(p.px-a.px,p.py-a.py),Math.hypot(p.px-sc.px,p.py-sc.py)))[0]; const root=document.documentElement.style; if(!root?.setProperty) return; root.setProperty('--mobile-action-size',`${inputSettings.mobileActionSize}px`); root.setProperty('--mobile-scratch-size',`${inputSettings.mobileScratchSize}px`); root.setProperty('--mobile-control-opacity',String(inputSettings.mobileButtonOpacity)); root.setProperty('--mobile-action-x',`${a.px}px`); root.setProperty('--mobile-action-y',`${a.py}px`); root.setProperty('--mobile-pulse-x',`${pulse.px}px`); root.setProperty('--mobile-pulse-y',`${pulse.py}px`); root.setProperty('--mobile-scratch-x',`${sc.px}px`); root.setProperty('--mobile-scratch-y',`${sc.py}px`); }
   function exportMobileControls(){ const l=getMobileLayout(); return JSON.stringify({version:window.CircleMixVersion?.version||"0.0.0",storageVersion:INPUT_SETTINGS_KEY,preset:inputSettings.mobileControlPreset,mobileActionX:l.actionX,mobileActionY:l.actionY,mobileScratchX:l.scratchX,mobileScratchY:l.scratchY,mobileActionSize:inputSettings.mobileActionSize,mobileScratchSize:inputSettings.mobileScratchSize,mobileButtonOpacity:inputSettings.mobileButtonOpacity,mobileControlGap:inputSettings.mobileControlGap,screenRatio:window.innerWidth/window.innerHeight},null,2); }
   function resetMobileControls(){ Object.assign(inputSettings,MOBILE_CONTROL_DEFAULTS); saveInputSettings(); applyMobileControlLayout(); syncPauseSettingsUI(); }
   function openMobileLayoutEditor(){ releaseMobilePointers(); mobileLayoutEditing=true; mobileLayoutSavedSnapshot={...inputSettings}; mobileLayoutDraft={...getMobileLayout()}; mobileLayoutOverlay.hidden=false; renderMobileLayoutEditor(); }
@@ -4924,7 +4990,7 @@ settingsOrigin=${settingsOrigin}`);
   bindPress(pauseSetMobileLayout,openMobileLayoutEditor); bindPress(pauseSetMobileInputTest,openMobileInputTest); bindPress(pauseSetMobileExport,()=>{try{navigator.clipboard?.writeText(exportMobileControls());}catch(e){} alert(exportMobileControls());}); bindPress(pauseSetMobileReset,resetMobileControls); bindPress(document.getElementById("pauseSetUpdateLog"),()=>openUpdateLog({index:0, auto:false}));
   bindPress(document.getElementById("mobileLayoutSave"),()=>closeMobileLayoutEditor(true)); bindPress(document.getElementById("mobileLayoutCancel"),()=>closeMobileLayoutEditor(false)); bindPress(document.getElementById("mobileLayoutCancelTop"),()=>closeMobileLayoutEditor(false)); bindPress(document.getElementById("mobileLayoutReset"),()=>{Object.assign(inputSettings,MOBILE_CONTROL_DEFAULTS); mobileLayoutDraft=presetMobileLayout("STANDARD"); renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileLayoutSwap"),()=>{[mobileLayoutDraft.actionX,mobileLayoutDraft.scratchX]=[mobileLayoutDraft.scratchX,mobileLayoutDraft.actionX];[mobileLayoutDraft.actionY,mobileLayoutDraft.scratchY]=[mobileLayoutDraft.scratchY,mobileLayoutDraft.actionY]; renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileLayoutPreset"),()=>{const i=(MOBILE_CONTROL_PRESETS.indexOf(inputSettings.mobileControlPreset)+1)%3; inputSettings.mobileControlPreset=MOBILE_CONTROL_PRESETS[i]; mobileLayoutDraft=presetMobileLayout(inputSettings.mobileControlPreset); renderMobileLayoutEditor();});
   bindPress(document.getElementById("mobileActionSizeDown"),()=>{inputSettings.mobileActionSize=finiteRange(inputSettings.mobileActionSize-4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileActionSizeUp"),()=>{inputSettings.mobileActionSize=finiteRange(inputSettings.mobileActionSize+4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileScratchSizeDown"),()=>{inputSettings.mobileScratchSize=finiteRange(inputSettings.mobileScratchSize-4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileScratchSizeUp"),()=>{inputSettings.mobileScratchSize=finiteRange(inputSettings.mobileScratchSize+4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileOpacityDown"),()=>{inputSettings.mobileButtonOpacity=finiteRange(inputSettings.mobileButtonOpacity-.05,.35,1,.68);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileOpacityUp"),()=>{inputSettings.mobileButtonOpacity=finiteRange(inputSettings.mobileButtonOpacity+.05,.35,1,.68);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileInputTestClose"),closeMobileInputTest);
-  bindPress(addCutBtn,()=>addEditorNote("cut"));bindPress(addSwingCWBtn,()=>addEditorNote("swingCW"));bindPress(addSwingCCWBtn,()=>addEditorNote("swingCCW"));bindPress(addFxBtn,()=>addEditorNote("fx"));bindPress(addSlideCWBtn,()=>addEditorNote("slideCW"));bindPress(addSlideCCWBtn,()=>addEditorNote("slideCCW"));bindPress(addScratchCWBtn,()=>addEditorNote("scratchCW"));bindPress(addScratchCCWBtn,()=>addEditorNote("scratchCCW"));
+  bindPress(addCutBtn,()=>addEditorNote("cut"));bindPress(addSwingCWBtn,()=>addEditorNote("swingCW"));bindPress(addSwingCCWBtn,()=>addEditorNote("swingCCW"));bindPress(addFxBtn,()=>addEditorNote("fx"));bindPress(addSlideCWBtn,()=>addEditorNote("slideCW"));bindPress(addSlideCCWBtn,()=>addEditorNote("slideCCW"));bindPress(addPulseBtn,()=>addEditorNote("pulse"));bindPress(addScratchCWBtn,()=>addEditorNote("scratchCW"));bindPress(addScratchCCWBtn,()=>addEditorNote("scratchCCW"));
   bindPress(seekBackBtn,()=>{song.currentTime=Math.max(0,song.currentTime-1);updateEditorStatus();});
   bindPress(seekFwdBtn,()=>{song.currentTime=Math.min(song.duration||999,song.currentTime+1);updateEditorStatus();});
   bindPress(playPauseBtn,()=>{ensureAudioCtx();applyMusicVolume();if(song.paused)playSong("play").catch(()=>{});else pauseSong("pause");updateEditorStatus();});
@@ -4981,7 +5047,7 @@ settingsOrigin=${settingsOrigin}`);
   canvas.addEventListener("contextmenu",e=>e.preventDefault());
   function isAimPointerBlockedTarget(target){return !!(target && target.closest && target.closest("#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialComplete,.tuner,.editorPanel,.start,.mobileControls,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay,.selfTestOverlay"));}
   function isUiInputTarget(target){return !!(target && target.closest && target.closest("button,#safeMenu,#safeOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.mobileControls,.quickMenu,.editorPanel,.start,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay,.selfTestOverlay"));}
-  function releaseMobilePointers(){ mobileAimPointerId=null; mobileActionPointerId=null; mobileScratchPointerId=null; keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; mobileActionBtn?.classList.remove("mobileActionActive"); mobileScratchBtn?.classList.remove("mobileScratchActive"); }
+  function releaseMobilePointers(){ mobileAimPointerId=null; mobileActionPointerId=null; mobilePulsePointerId=null; mobileScratchPointerId=null; keys.MouseLeft=false; forceReleaseScratch(); filterHeld=false; mouseDownRight=false; mobileActionBtn?.classList.remove("mobileActionActive"); mobilePulseBtn?.classList.remove("mobilePulseActive"); mobileScratchBtn?.classList.remove("mobileScratchActive"); }
   function handleMobileAimPointer(e){ if(e.pointerId!==mobileAimPointerId) return; updateGameplayPointerFromEvent(e,"touch"); }
   if(window.PointerEvent){
     canvas.addEventListener("pointerdown",e=>{ if(!isCoarsePointerMobile()||e.pointerType!=="touch"||isUiInputTarget(e.target)||mobileAimPointerId!==null) return; mobileAimPointerId=e.pointerId; try{canvas.setPointerCapture(e.pointerId);}catch(err){} updateGameplayPointerFromEvent(e,"touch"); e.preventDefault(); },{passive:false});
@@ -4990,16 +5056,16 @@ settingsOrigin=${settingsOrigin}`);
     canvas.addEventListener("pointerup",endAim,{passive:true}); canvas.addEventListener("pointercancel",endAim,{passive:true});
   }
   window.addEventListener("mousedown",e=>{if(isUiInputTarget(e.target))return; lastPointerSource="pointer"; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="pointer"; tutorialState.lastSource="pointer"; if(e.button===0){keys.MouseLeft=true; if(running)onCut();} if(e.button===2){mouseDownRight=true;filterHeld=true;setScratchHeld(true);}});
-  window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;setScratchHeld(!!(keys.ShiftLeft||keys.ShiftRight));}});
+  window.addEventListener("mouseup",e=>{if(e.button===0)keys.MouseLeft=false; if(e.button===2){mouseDownRight=false;filterHeld=false;setScratchHeld(false);}});
   window.addEventListener("touchstart",e=>{ if(isCoarsePointerMobile()) return; if(isUiInputTarget(e.target))return; lastPointerMs=performance.now(); pointerActive=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(e.touches&&e.touches[0]){ updateGameplayPointerFromEvent(e,"touch"); } if(e.touches&&e.touches.length>=2){mouseDownRight=true;filterHeld=true;setScratchHeld(true);} else if(running)onCut();},{passive:true});
   window.addEventListener("touchend",e=>{ if(isCoarsePointerMobile()) return; if(!e.touches||e.touches.length<2){mouseDownRight=false;setScratchHeld(false);} if(!e.touches||e.touches.length===0)keys.MouseLeft=false;},{passive:true});
   function bindMobileGameButton(btn,role){
     if(!btn||!window.PointerEvent)return;
-    btn.addEventListener("pointerdown",e=>{ if(!isCoarsePointerMobile()||e.pointerType!=="touch")return; e.preventDefault(); e.stopPropagation(); try{btn.setPointerCapture(e.pointerId);}catch(err){} if(role==="action"&&mobileActionPointerId===null){ mobileActionPointerId=e.pointerId; keys.MouseLeft=true; btn.classList.add("mobileActionActive"); tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(running)onCut(); } if(role==="scratch"&&mobileScratchPointerId===null){ mobileScratchPointerId=e.pointerId; setScratchHeld(true); btn.classList.add("mobileScratchActive"); filterHeld=true; mouseDownRight=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; } },{passive:false});
-    const release=e=>{ if(role==="action"&&e.pointerId===mobileActionPointerId){ keys.MouseLeft=false; mobileActionPointerId=null; btn.classList.remove("mobileActionActive"); } if(role==="scratch"&&e.pointerId===mobileScratchPointerId){ setScratchHeld(false); filterHeld=false; mouseDownRight=false; mobileScratchPointerId=null; btn.classList.remove("mobileScratchActive"); } };
+    btn.addEventListener("pointerdown",e=>{ if(!isCoarsePointerMobile()||e.pointerType!=="touch")return; e.preventDefault(); e.stopPropagation(); try{btn.setPointerCapture(e.pointerId);}catch(err){} if(role==="action"&&mobileActionPointerId===null){ mobileActionPointerId=e.pointerId; keys.MouseLeft=true; btn.classList.add("mobileActionActive"); tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; if(running)onCut(); } if(role==="pulse"&&mobilePulsePointerId===null){ mobilePulsePointerId=e.pointerId; btn.classList.add("mobilePulseActive"); tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; onPulse("touch"); } if(role==="scratch"&&mobileScratchPointerId===null){ mobileScratchPointerId=e.pointerId; setScratchHeld(true); btn.classList.add("mobileScratchActive"); filterHeld=true; mouseDownRight=true; tutorialState.activeInput="touch"; tutorialState.lastSource="touch"; } },{passive:false});
+    const release=e=>{ if(role==="action"&&e.pointerId===mobileActionPointerId){ keys.MouseLeft=false; mobileActionPointerId=null; btn.classList.remove("mobileActionActive"); } if(role==="pulse"&&e.pointerId===mobilePulsePointerId){ mobilePulsePointerId=null; btn.classList.remove("mobilePulseActive"); } if(role==="scratch"&&e.pointerId===mobileScratchPointerId){ setScratchHeld(false); filterHeld=false; mouseDownRight=false; mobileScratchPointerId=null; btn.classList.remove("mobileScratchActive"); } };
     btn.addEventListener("pointerup",release,{passive:true}); btn.addEventListener("pointercancel",release,{passive:true});
   }
-  bindMobileGameButton(mobileActionBtn,"action"); bindMobileGameButton(mobileScratchBtn,"scratch");
+  bindMobileGameButton(mobileActionBtn,"action"); bindMobileGameButton(mobilePulseBtn,"pulse"); bindMobileGameButton(mobileScratchBtn,"scratch");
   window.addEventListener("pointercancel",releaseMobilePointers,{passive:true});
   window.addEventListener("resize",()=>{ releaseMobilePointers(); applyMobileControlLayout(); if(mobileLayoutEditing) renderMobileLayoutEditor(); }); window.addEventListener("orientationchange",()=>setTimeout(()=>{ releaseMobilePointers(); applyMobileControlLayout(); if(mobileLayoutEditing) renderMobileLayoutEditor(); },80)); applyMobileControlLayout();
   document.addEventListener("visibilitychange",()=>{ if(document.hidden){ releaseMobilePointers(); if(running && !paused) showPause(); } });
@@ -5097,6 +5163,7 @@ settingsOrigin=${settingsOrigin}`);
       if(e.code==="Escape"){ e.preventDefault(); closeUpdateLog(); }
       return;
     }
+    if((e.code==="ShiftLeft"||e.code==="ShiftRight")&&running&&!paused){ e.preventDefault(); pulseGate?.keydown(e); }
     keys[e.code]=true;
     if(e.code==="KeyA")keyA=true;
     if(e.code==="KeyD")keyD=true;
@@ -5131,14 +5198,14 @@ settingsOrigin=${settingsOrigin}`);
     if(e.code==="KeyF"&&!e.repeat)requestFullscreenSafe();
     if(e.code==="KeyH"&&!e.repeat)toggleSettings();
     if(e.code==="KeyE"&&!e.repeat){toggleSettings(true); toggleEditor();}
-    if(e.code==="ShiftLeft"||e.code==="ShiftRight")setScratchHeld(true);
   });
   window.addEventListener("keyup",e=>{
     keys[e.code]=false;
+    if(e.code==="ShiftLeft"||e.code==="ShiftRight")pulseGate?.keyup(e);
     if(e.code==="KeyA")keyA=false;
     if(e.code==="KeyD")keyD=false;
-    if(e.code==="ShiftLeft"||e.code==="ShiftRight")setScratchHeld(!!(mouseDownRight||keys.ShiftLeft||keys.ShiftRight));
   });
+  window.addEventListener("blur",()=>{ keys.ShiftLeft=false; keys.ShiftRight=false; pulseGate?.reset(); });
 
   song.addEventListener("ended", ()=>scheduleCompletion());
 
@@ -5664,10 +5731,23 @@ running=${running}`);
         maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
         return window.CircleMixTestApi.state();
       },
+      startPulseTestChart:()=>{
+        if(raf){ cancelAnimationFrame(raf); raf=0; }
+        cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
+        tutorialMode=false; paused=false; running=true; resultShown=false; completionPending=false;
+        browserTestClock=0; resetAimInput(-Math.PI/2); resize(); resetRenderWindow(); focusNote=null;
+        keys.MouseLeft=false; filterHeld=false; mouseDownRight=false; forceReleaseScratch();
+        chart=[make("pulse",2,0),make("cut",4,3)];
+        chart[0].id="test-pulse-0"; chart[0].hitTime=.8; chart[0].spawnTime=chart[0].hitTime-APPROACH;
+        chart[1].id="test-cut-after-pulse"; chart[1].hitTime=1.6; chart[1].spawnTime=chart[1].hitTime-APPROACH;
+        chartLastHitEnd=1.6; score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; gameState.autoEnabled=false;
+        maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
+        return window.CircleMixTestApi.state();
+      },
       advanceTestClock:(seconds,step=.02)=>{
         if(browserTestClock===null) throw new Error('deterministic chart is not running');
         const target=browserTestClock+Math.max(0,Number(seconds)||0), dt=Math.max(.001,Number(step)||.02);
-        while(browserTestClock<target){ const delta=Math.min(dt,target-browserTestClock); browserTestClock+=delta; filterHeld=mouseDownRight||keys.KeyZ||keys.KeyX||keys.Space; scratchHeld=mouseDownRight||keys.ShiftLeft||keys.ShiftRight; syncScratchHoldState(); updateAuto(browserTestClock); updateArm(delta); updateNotes(browserTestClock,delta); focusNote=currentFocusNote(browserTestClock); testFrameCount++; testRenderCount++; }
+        while(browserTestClock<target){ const delta=Math.min(dt,target-browserTestClock); browserTestClock+=delta; filterHeld=mouseDownRight||keys.KeyZ||keys.KeyX||keys.Space; scratchHeld=mouseDownRight; syncScratchHoldState(); updateAuto(browserTestClock); updateArm(delta); updateNotes(browserTestClock,delta); focusNote=currentFocusNote(browserTestClock); testFrameCount++; testRenderCount++; }
         if(judgedCount===chart.length && !resultShown) completeRun();
         return window.CircleMixTestApi.state();
       },
@@ -5675,8 +5755,13 @@ running=${running}`);
         aim:(clientX,clientY,timeStamp=performance.now(),pointerType='mouse')=>updateGameplayPointerFromEvent({clientX,clientY,timeStamp,pointerType,target:canvas},pointerType==='touch'?'touch':'pointer'),
         locked:(movementX,movementY,timeStamp=performance.now())=>processLockedAimMovement({movementX,movementY,timeStamp}),
         action:()=>onCut(),
+        pulse:()=>onPulse("browser-test"),
+        pulseKeyDown:(code="ShiftLeft",repeat=false)=>pulseGate.keydown({code,repeat,timeStamp:performance.now()}),
+        pulseKeyUp:(code="ShiftLeft")=>pulseGate.keyup({code,timeStamp:performance.now()}),
         scratch:(held)=>{ mouseDownRight=!!held; filterHeld=!!held; setScratchHeld(!!held); }
       },
+      setAuto:(enabled)=>{ setAutoPlayEnabled(!!enabled,"browser-test"); return window.CircleMixTestApi.state(); },
+      autoTargetAngle:()=>Number(targetAngle),
       startTutorial:()=>startTutorial(),
       openSongSelect:()=>showSongSelect(),
       skipTutorialStep:()=>nextTutorialStep(),
@@ -5714,7 +5799,7 @@ running=${running}`);
       completeTutorial:()=>completeTutorial(),
       markFirstPendingTutorialNoteMissed:()=>{ const n=chart.find(note=>!note.done&&!note.missed); if(n){ miss(n,"TEST_FORCED_MISS"); return true; } return false; },
       clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
-      state:()=>({running:!!running, paused:!!paused, tutorialMode:!!tutorialMode, tutorialStepIndex:Number(tutorialStepIndex), tutorialTargetProgress:Number(tutorialSteps[tutorialStepIndex]?._hit||0), tutorialPointerMoved:!!tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince==null?null:Number(tutorialState.exploreInsideSince), tutorialInputEnabledAt:Number(tutorialState.inputEnabledAt), tutorialSuccessCount:Number(tutorialState.successCount), tutorialValidUserInputCount:Number(tutorialState.validUserInputCount), tutorialLastSource:tutorialState.lastSource||null, tutorialCurrentJudgement:tutorialState.currentJudgement||null, tutorialTransitioning:!!tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState||null, pendingTutorialSkipCount:Number(tutorialState.pendingSkipQueue.length), tutorialStepToken:Number(tutorialStepToken), tutorialAttemptId:Number(tutorialAttemptId), tutorialTimerCount:Number(tutorialState.timers.length), tutorialFinalMixRetryScheduled:!!tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:Number(tutorialState.mixRetryCount), tutorialChartFinalizationCount:Number(tutorialState.chartFinalizationCount), tutorialLastChartFinalization:tutorialState.lastChartFinalization||null, tutorialChartSettled:!!tutorialChartSettled(), tutorialCompleteCount:Number(tutorialState.completeCount), tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:Number(tutorialState.rafIds.length+(raf?1:0)), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount:Number(judgedCount), perfectCount:Number(perfectCount), greatCount:Number(greatCount), missCount:Number(missCount), score:Number(score), combo:Number(combo), maxCombo:Number(maxCombo), visibleNoteCount:Number(getVisibleNotes(now()).length), visibleNotes:getVisibleNotes(now()).map(n=>({id:n.id||noteDebugId(n),type:n.type})), focusNote:focusNote?{id:focusNote.id||noteDebugId(focusNote),type:focusNote.type}:null, chartDoneStates:chart.map(n=>({id:n.id||noteDebugId(n),type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,coverage:Number(n.coverageRatio||0),quality:Number(n.traceQuality||0),started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime,angle:Number(n.angle),endAngle:n.endAngle==null?null:Number(n.endAngle),duration:Number(n.duration||0)})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:Number(chart.length), chartEndTime:Number(chartLastHitEnd), gameTime:Number(now()), browserNow:Number(performance.now()), frameCount:Number(testFrameCount), renderCount:Number(testRenderCount), W:Number(W), H:Number(H), lastPointerSource:lastPointerSource||null, pointerActive:!!pointerActive, mouseX:Number(mouseX), mouseY:Number(mouseY), armAngle:Number(armAngle), rawArmVel:Number(rawArmVel), rawAngularVelocity:Number(rawAngularVelocity), sampleAngularVelocity:Number(aimInput.sampleAngularVelocity), cx:Number(cx), cy:Number(cy), hitR:Number(hitR), selectedSongId:selectedSongId||null, selectedDifficultyId:selectedDifficultyId||null, mobileAimPointerId:mobileAimPointerId==null?null:Number(mobileAimPointerId), mobileActionPointerId:mobileActionPointerId==null?null:Number(mobileActionPointerId), mobileScratchPointerId:mobileScratchPointerId==null?null:Number(mobileScratchPointerId), actionHeld:!!keys.MouseLeft, scratchHeld:!!scratchHeld, mouseDownRight:!!mouseDownRight, pointerLockMode:inputSettings.pcAimMode, effectivePcAimMode:effectivePcAimMode(), pointerLockRequested:!!pointerLockRequested, pointerLockActive:!!pointerLockActive(), lockedVirtualAngle:Number(lockedVirtualAngle), lockedSensitivity:Number(inputSettings.lockedAimSensitivity), lastRelativeMovement:{x:Number(lastRelativeMovement.x),y:Number(lastRelativeMovement.y)}, rawInputAngle:Number(rawInputAngle), judgementAimAngle:Number(judgementAimAngle), visualArmAngle:Number(visualArmAngle), rawJudgementDifference:Number(norm(rawInputAngle-judgementAimAngle)), judgementVisualDifference:Number(norm(judgementAimAngle-visualArmAngle)), resultVisible:!!resultOverlay?.classList.contains('show')}),
+      state:()=>({running:!!running, paused:!!paused, tutorialMode:!!tutorialMode, tutorialStepIndex:Number(tutorialStepIndex), tutorialTargetProgress:Number(tutorialSteps[tutorialStepIndex]?._hit||0), tutorialPointerMoved:!!tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince==null?null:Number(tutorialState.exploreInsideSince), tutorialInputEnabledAt:Number(tutorialState.inputEnabledAt), tutorialSuccessCount:Number(tutorialState.successCount), tutorialValidUserInputCount:Number(tutorialState.validUserInputCount), tutorialLastSource:tutorialState.lastSource||null, tutorialCurrentJudgement:tutorialState.currentJudgement||null, tutorialTransitioning:!!tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState||null, pendingTutorialSkipCount:Number(tutorialState.pendingSkipQueue.length), tutorialStepToken:Number(tutorialStepToken), tutorialAttemptId:Number(tutorialAttemptId), tutorialTimerCount:Number(tutorialState.timers.length), tutorialFinalMixRetryScheduled:!!tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:Number(tutorialState.mixRetryCount), tutorialChartFinalizationCount:Number(tutorialState.chartFinalizationCount), tutorialLastChartFinalization:tutorialState.lastChartFinalization||null, tutorialChartSettled:!!tutorialChartSettled(), tutorialCompleteCount:Number(tutorialState.completeCount), tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:Number(tutorialState.rafIds.length+(raf?1:0)), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount:Number(judgedCount), perfectCount:Number(perfectCount), greatCount:Number(greatCount), missCount:Number(missCount), score:Number(score), combo:Number(combo), maxCombo:Number(maxCombo), visibleNoteCount:Number(getVisibleNotes(now()).length), visibleNotes:getVisibleNotes(now()).map(n=>({id:n.id||noteDebugId(n),type:n.type})), focusNote:focusNote?{id:focusNote.id||noteDebugId(focusNote),type:focusNote.type}:null, chartDoneStates:chart.map(n=>({id:n.id||noteDebugId(n),type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,coverage:Number(n.coverageRatio||0),quality:Number(n.traceQuality||0),started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime,angle:Number(n.angle),endAngle:n.endAngle==null?null:Number(n.endAngle),duration:Number(n.duration||0)})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:Number(chart.length), chartEndTime:Number(chartLastHitEnd), gameTime:Number(now()), browserNow:Number(performance.now()), frameCount:Number(testFrameCount), renderCount:Number(testRenderCount), W:Number(W), H:Number(H), lastPointerSource:lastPointerSource||null, pointerActive:!!pointerActive, mouseX:Number(mouseX), mouseY:Number(mouseY), armAngle:Number(armAngle), rawArmVel:Number(rawArmVel), rawAngularVelocity:Number(rawAngularVelocity), sampleAngularVelocity:Number(aimInput.sampleAngularVelocity), cx:Number(cx), cy:Number(cy), hitR:Number(hitR), selectedSongId:selectedSongId||null, selectedDifficultyId:selectedDifficultyId||null, mobileAimPointerId:mobileAimPointerId==null?null:Number(mobileAimPointerId), mobileActionPointerId:mobileActionPointerId==null?null:Number(mobileActionPointerId), mobilePulsePointerId:mobilePulsePointerId==null?null:Number(mobilePulsePointerId), mobileScratchPointerId:mobileScratchPointerId==null?null:Number(mobileScratchPointerId), actionHeld:!!keys.MouseLeft, scratchHeld:!!scratchHeld, mouseDownRight:!!mouseDownRight, pointerLockMode:inputSettings.pcAimMode, effectivePcAimMode:effectivePcAimMode(), pointerLockRequested:!!pointerLockRequested, pointerLockActive:!!pointerLockActive(), lockedVirtualAngle:Number(lockedVirtualAngle), lockedSensitivity:Number(inputSettings.lockedAimSensitivity), lastRelativeMovement:{x:Number(lastRelativeMovement.x),y:Number(lastRelativeMovement.y)}, rawInputAngle:Number(rawInputAngle), judgementAimAngle:Number(judgementAimAngle), visualArmAngle:Number(visualArmAngle), rawJudgementDifference:Number(norm(rawInputAngle-judgementAimAngle)), judgementVisualDifference:Number(norm(judgementAimAngle-visualArmAngle)), resultVisible:!!resultOverlay?.classList.contains('show')}),
       aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget}),
       visualArmProfile:()=>visualArmProfile(),
       traceVisualProfile:()=>traceVisualProfile(),
@@ -5748,8 +5833,8 @@ running=${running}`);
     {id:"fx",name:"D · FX",action:"Use the displayed production FX hold input at the target.",type:"fx",duration:.45},
     {id:"swing-cw",name:"E · SWING CW",action:"Move the aim quickly clockwise through the target.",type:"swingCW"},
     {id:"swing-ccw",name:"E · SWING CCW",action:"Move the aim quickly counter-clockwise through the target.",type:"swingCCW"},
-    {id:"scratch-cw",name:"F · SCRATCH CW",action:"Hold SCRATCH (right click/Shift), then rotate clockwise.",type:"scratchCW"},
-    {id:"scratch-ccw",name:"F · SCRATCH CCW",action:"Hold SCRATCH (right click/Shift), then rotate counter-clockwise.",type:"scratchCCW"},
+    {id:"scratch-cw",name:"F · SCRATCH CW",action:"Hold legacy SCRATCH (right click), then rotate clockwise.",type:"scratchCW"},
+    {id:"scratch-ccw",name:"F · SCRATCH CCW",action:"Hold legacy SCRATCH (right click), then rotate counter-clockwise.",type:"scratchCCW"},
     {id:"slide-cw",name:"G · SLIDE CW",action:"Hold ACTION from START and follow the yellow path to END.",type:"slideCW",duration:.8,endLane:3},
     {id:"slide-ccw",name:"G · SLIDE CCW",action:"Hold ACTION from START and follow the yellow path to END.",type:"slideCCW",duration:.8,endLane:5},
     {id:"trace",name:"H · TRACE",action:"Do not hold ACTION. Follow the thin cyan path using multiple samples.",type:"traceCW",duration:.8,endLane:3},
