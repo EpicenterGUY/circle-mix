@@ -1,0 +1,98 @@
+--- a/src/game.js
++++ b/src/game.js
+@@ -2493,6 +2493,17 @@
+     return best;
+   }
+ 
++  function nextAimNote(t){
++    let best=null,bd=999;
++    for(const n of chart){
++      if(n.done||n.missed||n.type==="pulse")continue;
++      if(activeHold(n,t))return n;
++      const d=n.hitTime-t;
++      if(d>-0.22&&d<bd){best=n;bd=d;}
++    }
++    return best;
++  }
++
+   function noteDebugId(n){
+     if(!n)return "-";
+     const idx=chart.indexOf(n);
+@@ -2561,8 +2572,8 @@
+         }
+       }
+     }else{
+-      const n=nextNote(t);
+-      if(n&&n.type!=="pulse")targetAngle=n.angle;
++      const n=nextAimNote(t);
++      if(n)targetAngle=n.angle;
+     }
+ 
+     for(const n of chart){
+@@ -5152,7 +5163,7 @@
+       if(e.code==="Escape"){ e.preventDefault(); closeUpdateLog(); }
+       return;
+     }
+-    if(e.code==="ShiftLeft"||e.code==="ShiftRight"){ e.preventDefault(); pulseGate?.keydown(e); }
++    if((e.code==="ShiftLeft"||e.code==="ShiftRight")&&running&&!paused){ e.preventDefault(); pulseGate?.keydown(e); }
+     keys[e.code]=true;
+     if(e.code==="KeyA")keyA=true;
+     if(e.code==="KeyD")keyD=true;
+@@ -5194,6 +5205,7 @@
+     if(e.code==="KeyA")keyA=false;
+     if(e.code==="KeyD")keyD=false;
+   });
++  window.addEventListener("blur",()=>{ keys.ShiftLeft=false; keys.ShiftRight=false; pulseGate?.reset(); });
+ 
+   song.addEventListener("ended", ()=>scheduleCompletion());
+ 
+@@ -5749,6 +5761,7 @@
+         scratch:(held)=>{ mouseDownRight=!!held; filterHeld=!!held; setScratchHeld(!!held); }
+       },
+       setAuto:(enabled)=>{ setAutoPlayEnabled(!!enabled,"browser-test"); return window.CircleMixTestApi.state(); },
++      autoTargetAngle:()=>Number(targetAngle),
+       startTutorial:()=>startTutorial(),
+       openSongSelect:()=>showSongSelect(),
+       skipTutorialStep:()=>nextTutorialStep(),
+--- a/tests/browser-regression.test.js
++++ b/tests/browser-regression.test.js
+@@ -657,9 +657,13 @@
+       const afterFirst=api.state();
+       const releaseLeft=api.testInput.pulseKeyUp('ShiftLeft');
+       const releaseRight=api.testInput.pulseKeyUp('ShiftRight');
+-      api.startPulseTestChart(); api.setAuto(true); api.advanceTestClock(.82);
++      api.startPulseTestChart(); api.advanceTestClock(.8); api.testInput.pulseKeyDown('ShiftLeft',false);
++      window.dispatchEvent(new Event('blur'));
++      const afterBlur=api.testInput.pulseKeyDown('ShiftRight',false); api.testInput.pulseKeyUp('ShiftRight');
++      api.startPulseTestChart(); api.setAuto(true); api.advanceTestClock(.2);
++      const autoLead=api.state(); autoLead.autoTargetAngle=api.autoTargetAngle(); api.advanceTestClock(.62);
+       const auto=api.state(); api.setAuto(false);
+-      return {first,heldOther,afterFirst,releaseLeft,releaseRight,auto};
++      return {first,heldOther,afterFirst,releaseLeft,releaseRight,afterBlur,autoLead,auto};
+     });
+     assert.equal(pulse.first.accepted,true,`first Shift accepts PULSE ${JSON.stringify(pulse)}`);
+     assert.equal(pulse.heldOther.reason,'RELEASE_REQUIRED',`other Shift cannot bypass shared release gate ${JSON.stringify(pulse)}`);
+@@ -668,6 +672,10 @@
+     assert.equal(pulse.afterFirst.scratchHeld,false,'Shift PULSE does not activate legacy SCRATCH');
+     assert.equal(pulse.releaseLeft.released,false,'one held Shift keeps the gate latched');
+     assert.equal(pulse.releaseRight.released,true,'all Shift keys released rearms PULSE');
++    assert.equal(pulse.afterBlur.accepted,true,'window blur resets the shared PULSE gate');
++    const autoAimNote=pulse.autoLead.chartDoneStates.find(n=>n.id==='test-cut-after-pulse');
++    const autoAimError=Math.abs(Math.atan2(Math.sin(pulse.autoLead.autoTargetAngle-autoAimNote.angle),Math.cos(pulse.autoLead.autoTargetAngle-autoAimNote.angle)));
++    assert.ok(autoAimError<1e-6,`pending PULSE must not block AUTO aim targeting ${JSON.stringify(pulse.autoLead)}`);
+     assert.equal(pulse.auto.chartDoneStates.find(n=>n.id==='test-pulse-0').done,true,'AUTO completes PULSE at hit time');
+     assert.equal(pulse.auto.perfectCount,1,'AUTO PULSE is PERFECT');
+     assert.deepEqual(errors, [], `deterministic gameplay errors ${JSON.stringify(errors)}`);
+--- a/tests/pulse-game-input.test.js
++++ b/tests/pulse-game-input.test.js
+@@ -6,7 +6,9 @@
+ const source=fs.readFileSync(path.join(__dirname,'../src/game.js'),'utf8');
+ 
+ assert.match(source,/pulseGate\s*=\s*pulseInput\.createGate/,'production game must use the shared PULSE gate');
+-assert.match(source,/if\(e\.code==="ShiftLeft"\|\|e\.code==="ShiftRight"\)\{ e\.preventDefault\(\); pulseGate\?\.keydown\(e\); \}/,'Shift keydown must enter the PULSE gate');
++assert.match(source,/if\(\(e\.code==="ShiftLeft"\|\|e\.code==="ShiftRight"\)\&\&running\&\&!paused\)\{ e\.preventDefault\(\); pulseGate\?\.keydown\(e\); \}/,'Shift keydown must enter PULSE only during active play');
++assert.match(source,/window\.addEventListener\("blur",\(\)=>\{ keys\.ShiftLeft=false; keys\.ShiftRight=false; pulseGate\?\.reset\(\); \}\);/,'window blur must reset the shared PULSE gate');
++assert.match(source,/function nextAimNote\(t\)[\s\S]*?n\.type==="pulse"[\s\S]*?const n=nextAimNote\(t\);/,'AUTO aim selection must skip global PULSE notes');
+ assert.doesNotMatch(source,/scratchHeld\s*=\s*mouseDownRight\s*\|\|\s*keys\.Shift/,'Shift must never arm SCRATCH from the render loop');
+ assert.doesNotMatch(source,/setScratchHeld\([^\n]*keys\.Shift/,'Shift must never re-arm SCRATCH from release handlers');
+ 
