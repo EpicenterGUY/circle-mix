@@ -1,0 +1,34 @@
+name: Apply PULSE tutorial patch
+
+on:
+  push:
+    branches:
+      - feat/pulse-note-v1
+    paths:
+      - .github/patches/pulse-tutorial.patch
+      - .github/workflows/apply-pulse-tutorial.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/pulse-note-v1
+          fetch-depth: 0
+      - name: Apply verified tutorial patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git apply --check .github/patches/pulse-tutorial.patch
+          git apply .github/patches/pulse-tutorial.patch
+          rm .github/patches/pulse-tutorial.patch
+          rm .github/workflows/apply-pulse-tutorial.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/game.js tests/pulse-game-input.test.js .github/patches/pulse-tutorial.patch .github/workflows/apply-pulse-tutorial.yml
+          git commit -m "feat: add PULSE tutorial steps"
+          git push origin HEAD:feat/pulse-note-v1
