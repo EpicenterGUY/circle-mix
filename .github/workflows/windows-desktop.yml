@@ -59,7 +59,7 @@ jobs:
               (Join-Path $env:LOCALAPPDATA 'com.epicenterguy.circlemix\circle-mix.exe')
             )
             if ($entry -and $entry.InstallLocation) {
-              $location = [Environment]::ExpandEnvironmentVariables([string]$entry.InstallLocation).TrimEnd('\')
+              $location = [Environment]::ExpandEnvironmentVariables([string]$entry.InstallLocation).Trim().Trim('"').TrimEnd('\')
               $exeCandidates += (Join-Path $location 'circle-mix.exe')
               $exeCandidates += (Join-Path $location 'CIRCLE MIX.exe')
             }
