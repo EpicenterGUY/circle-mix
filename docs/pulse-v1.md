@@ -24,6 +24,7 @@ PULSE is a position-independent rhythm note intended to replace new SCRATCH char
 - Shift is reserved for PULSE and never arms legacy SCRATCH; PC SCRATCH continues to use the right mouse button.
 - Window blur, pause, restart, and scene change reset held input safely.
 - AUTO activates PULSE at its hit time through the same judgement path.
+- Pending PULSE notes do not block AUTO from aiming toward the next position-dependent note.
 
 ## Mobile
 
