@@ -1,0 +1,82 @@
+diff --git a/src/cmix-validator.js b/src/cmix-validator.js
+index 1b4c0b9..bd8edaa 100644
+--- a/src/cmix-validator.js
++++ b/src/cmix-validator.js
+@@ -15,7 +15,7 @@
+   const AUDIO_EXTENSIONS = new Set([".ogg", ".mp3", ".wav"]);
+   const IMAGE_EXTENSIONS = new Set([".webp", ".png", ".jpg", ".jpeg"]);
+   const FORBIDDEN_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".html", ".htm", ".exe", ".dll", ".wasm", ".bat", ".cmd", ".ps1", ".sh"]);
+-  const NOTE_TYPES = new Set(["cut", "fx", "slideCW", "slideCCW", "trace", "traceCW", "traceCCW", "swingCW", "swingCCW", "scratchCW", "scratchCCW"]);
++  const NOTE_TYPES = new Set(["cut", "fx", "slideCW", "slideCCW", "trace", "traceCW", "traceCCW", "swingCW", "swingCCW", "scratchCW", "scratchCCW", "pulse"]);
+   const DURATION_TYPES = new Set(["fx", "slideCW", "slideCCW", "trace", "traceCW", "traceCCW", "scratchCW", "scratchCCW"]);
+   const END_ANGLE_TYPES = new Set(["slideCW", "slideCCW", "trace", "traceCW", "traceCCW"]);
+   const TRACE_TYPES = new Set(["trace", "traceCW", "traceCCW"]);
+@@ -164,6 +164,7 @@
+       return {ok:errors.length === 0, errors, warnings};
+     }
+     const noteIds = new Set();
++    const pulseBeats = new Set();
+     let previousBeat = -Infinity;
+     let previousNote = null;
+     chart.notes.forEach((note, index) => {
+@@ -173,7 +174,16 @@
+       if(!NOTE_TYPES.has(note.type)) errors.push(issue("UNSUPPORTED_NOTE_TYPE", `${path}/type`, `Unsupported note type: ${note.type}`));
+       if(!isFiniteNumber(note.beat) || note.beat < 0) errors.push(issue("INVALID_NOTE_BEAT", `${path}/beat`, "beat must be a finite number >= 0."));
+       else if(note.beat < previousBeat) errors.push(issue("UNSORTED_NOTES", `${path}/beat`, "Notes must be sorted by non-decreasing beat."));
+-      if(!validAngle(note.angle)) errors.push(issue("INVALID_NOTE_ANGLE", `${path}/angle`, "angle must be a finite number >= 0 and < 360."));
++      if(note.type === "pulse"){
++        for(const field of ["angle", "endAngle", "durationBeat", "signedSweepAngle", "direction"]){
++          if(note[field] !== undefined) errors.push(issue("UNEXPECTED_PULSE_FIELD", `${path}/${field}`, `PULSE must not define ${field}.`));
++        }
++        if(isFiniteNumber(note.beat)){
++          const beatKey=Number(note.beat).toFixed(6);
++          if(pulseBeats.has(beatKey)) errors.push(issue("DUPLICATE_PULSE_TIME", `${path}/beat`, "At most one PULSE may exist at the same timestamp."));
++          pulseBeats.add(beatKey);
++        }
++      }else if(!validAngle(note.angle)) errors.push(issue("INVALID_NOTE_ANGLE", `${path}/angle`, "angle must be a finite number >= 0 and < 360."));
+       if(note.id !== undefined){
+         if(typeof note.id !== "string" || !NOTE_ID_PATTERN.test(note.id)) errors.push(issue("INVALID_NOTE_ID", `${path}/id`, "Note id contains unsupported characters or is too long."));
+         else if(noteIds.has(note.id)) errors.push(issue("DUPLICATE_NOTE_ID", `${path}/id`, `Duplicate note id: ${note.id}`));
+@@ -191,7 +201,7 @@
+       }else if(note.signedSweepAngle !== undefined){
+         errors.push(issue("UNEXPECTED_SWEEP", `${path}/signedSweepAngle`, "signedSweepAngle is only valid for TRACE notes."));
+       }
+-      if(previousNote && isFiniteNumber(note.beat) && isFiniteNumber(previousNote.beat) && Math.abs(note.beat - previousNote.beat) < 0.000001 && validAngle(note.angle) && validAngle(previousNote.angle) && shortestDegrees(note.angle, previousNote.angle) < 8){
++      if(previousNote && note.type!=="pulse" && previousNote.type!=="pulse" && isFiniteNumber(note.beat) && isFiniteNumber(previousNote.beat) && Math.abs(note.beat - previousNote.beat) < 0.000001 && validAngle(note.angle) && validAngle(previousNote.angle) && shortestDegrees(note.angle, previousNote.angle) < 8){
+         warnings.push(issue("OVERLAPPING_NOTES", path, "Consecutive same-time notes are visually close."));
+       }
+       if(isFiniteNumber(note.beat)) previousBeat = Math.max(previousBeat, note.beat);
+diff --git a/src/editor.js b/src/editor.js
+index 4ddff68..b6e9355 100644
+--- a/src/editor.js
++++ b/src/editor.js
+@@ -1,7 +1,7 @@
+ (() => {
+   const $ = id => document.getElementById(id);
+   const TAU = Math.PI * 2;
+-  const NOTE_TYPES = ["cut","fx","slideCW","slideCCW","trace","traceCW","traceCCW","swingCW","swingCCW","scratchCW","scratchCCW"];
++  const NOTE_TYPES = ["cut","fx","slideCW","slideCCW","trace","traceCW","traceCCW","swingCW","swingCCW","scratchCW","scratchCCW","pulse"];
+   const state = { notes: [], selected: new Set(), type: "cut", audioUrl: null, audioFile: null, jacketFile: null, jacketData: null, localRecord:null, clipboard: [], undo: [], redo: [], db: null, autoPreview:false, lastMetro:-1 };
+   const audio = $("audio"), preview = $("preview"), ctx = preview.getContext("2d"), tl = $("timelineCanvas"), tx = tl.getContext("2d");
+   const fields = ["songId","title","artist","bpm","offset","difficulty","previewStart"];
+@@ -25,7 +25,7 @@
+   function makeNote(angleDeg){
+     const type = state.type, beat = snapBeat(beatAt(audio.currentTime));
+     const angle = cleanDeg(snapAngle(angleDeg));
+-    const note = { type, beat, angle };
++    const note = type==="pulse" ? {type,beat} : { type, beat, angle };
+     if(type === "fx") note.durationBeat = 4;
+     if(type.startsWith("slide") || type.startsWith("trace")){ note.endAngle = cleanDeg(angle + (type.endsWith("CCW") ? -90 : 90)); note.durationBeat = type.startsWith("trace") ? 1.5 : 4; if(type.startsWith("trace")) note.sweepAngle = type.endsWith("CCW") ? -90 : 90; }
+     if(type.startsWith("scratch")){ note.endAngle = cleanDeg(angle + (type.endsWith("CCW") ? -45 : 45)); note.durationBeat = .55; note.amount = Math.PI * .34; }
+@@ -33,16 +33,16 @@
+     return note;
+   }
+   function addNote(angleDeg){ pushHistory(); state.notes.push(makeNote(angleDeg)); state.notes.sort((a,b)=>noteTime(a)-noteTime(b)); state.selected = new Set([state.notes.length-1]); renderAll(); autosave(); }
+-  function updateSelectedFromInputs(){ const n=selectedNote(); if(!n) return; pushHistory(); n.beat=Number($("noteBeat").value)||0; n.angle=cleanDeg(Number($("noteAngle").value)||0); delete n.lane; if($("noteEndAngle").value!=="") { n.endAngle=cleanDeg(Number($("noteEndAngle").value)); delete n.endLane; } n.direction=$("noteDirection").value; if($("noteDuration").value!=="") n.durationBeat=Number($("noteDuration").value)||0; if($("noteSweepAngle")?.value!=="") n.sweepAngle=Number($("noteSweepAngle").value)||0; else delete n.sweepAngle; if($("noteTurns")?.value!=="") n.turns=Number($("noteTurns").value)||0; else delete n.turns; renderAll(); autosave(); }
+-  function fillProps(){ const n=selectedNote(); $("noteBeat").value=n?.beat??""; $("noteAngle").value=n?noteAngle(n):""; $("noteEndAngle").value=n?noteEndAngle(n):""; $("noteDirection").value=n?.direction || (n?.type?.endsWith("CCW")?"CCW":"CW"); $("noteDuration").value=n?.durationBeat??""; if($("noteSweepAngle")) $("noteSweepAngle").value=n?.sweepAngle??""; if($("noteTurns")) $("noteTurns").value=n?.turns??""; }
++  function updateSelectedFromInputs(){ const n=selectedNote(); if(!n) return; pushHistory(); n.beat=Number($("noteBeat").value)||0; if(n.type==="pulse"){ delete n.angle; delete n.lane; delete n.endAngle; delete n.endLane; delete n.direction; delete n.durationBeat; delete n.sweepAngle; delete n.turns; } else { n.angle=cleanDeg(Number($("noteAngle").value)||0); delete n.lane; if($("noteEndAngle").value!=="") { n.endAngle=cleanDeg(Number($("noteEndAngle").value)); delete n.endLane; } n.direction=$("noteDirection").value; if($("noteDuration").value!=="") n.durationBeat=Number($("noteDuration").value)||0; if($("noteSweepAngle")?.value!=="") n.sweepAngle=Number($("noteSweepAngle").value)||0; else delete n.sweepAngle; if($("noteTurns")?.value!=="") n.turns=Number($("noteTurns").value)||0; else delete n.turns; } renderAll(); autosave(); }
++  function fillProps(){ const n=selectedNote(), pulse=n?.type==="pulse"; $("noteBeat").value=n?.beat??""; $("noteAngle").value=pulse?"":(n?noteAngle(n):""); $("noteEndAngle").value=pulse?"":(n?noteEndAngle(n):""); $("noteDirection").value=n?.direction || (n?.type?.endsWith("CCW")?"CCW":"CW"); $("noteDuration").value=pulse?"":(n?.durationBeat??""); if($("noteSweepAngle")) $("noteSweepAngle").value=pulse?"":(n?.sweepAngle??""); if($("noteTurns")) $("noteTurns").value=pulse?"":(n?.turns??""); for(const id of ["noteAngle","noteEndAngle","noteDirection","noteDuration","noteSweepAngle","noteTurns"]) if($(id)) $(id).disabled=!!pulse; }
+   function chartJson(){ const m=meta(); return { schema:"angle-v1", title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, difficulty:m.difficulty, previewStart:m.previewStart, notes:state.notes.slice().sort((a,b)=>(a.beat??0)-(b.beat??0)) }; }
+   function songMetaJson(){ const m=meta(); return { id:m.songId, title:m.title, artist:m.artist, audio:"", jacket:state.jacketData?"local-jacket-not-embedded-in-chart":null, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, difficulties:{ custom:{ label:m.difficulty, chart:`${m.songId}.json` } } }; }
+   function download(name,obj){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:"application/json"})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500); }
+-  function validate(){ const dur=audio.duration||Infinity, errors=[], warnings=[]; const traceSign=n=>String(n.direction || (n.type?.endsWith("CCW")?"CCW":(n.type?.endsWith("CW")?"CW":""))).toUpperCase()==="CCW"?-1:(String(n.direction || (n.type?.endsWith("CW")?"CW":"")).toUpperCase()==="CW"?1:0); state.notes.forEach((n,i)=>{ const fam=n.type==="fx"?"hold":(n.type||"").replace(/CW|CCW/g,"").toLowerCase(); if(!NOTE_TYPES.includes(n.type)) errors.push(`#${i} unsupported type ${n.type}`); if((n.beat??0)<0 || noteTime(n)<0) errors.push(`#${i} negative time`); if(["fx","slideCW","slideCCW","trace","traceCW","traceCCW"].includes(n.type) && !(n.durationBeat>0)) errors.push(`#${i} ${fam} duration must be > 0`); if(noteTime(n)>dur) warnings.push(`#${i} outside song length`); if(n.angle!==undefined && !Number.isFinite(Number(n.angle))) errors.push(`#${i} invalid angle`); if(n.angle===undefined && (n.lane===undefined || n.lane<0 || n.lane>7)) errors.push(`#${i} invalid lane/angle`); if((n.type.startsWith("slide")||n.type.startsWith("trace")) && n.endAngle===undefined && n.endLane===undefined) errors.push(`#${i} missing endAngle`); const end=noteEndAngle(n); if((n.type.startsWith("slide")||n.type.startsWith("trace")) && end!=="" && shortestAngleDifference(noteAngle(n),end)<6) warnings.push(`#${i} path start/end angles are very close`); if(n.type.startsWith("trace")){ const sign=traceSign(n); if(n.sweepAngle!==undefined && !Number.isFinite(Number(n.sweepAngle))) errors.push(`#${i} invalid sweepAngle`); if(n.sweepAngle!==undefined && Number(n.sweepAngle)!==0 && sign && Math.sign(Number(n.sweepAngle))!==sign) errors.push(`#${i} direction conflicts with sweepAngle`); if(end!=="" && shortestAngleDifference(noteAngle(n),end)<6 && n.sweepAngle===undefined && n.turns===undefined) warnings.push(`#${i} TRACE needs sweepAngle/turns when startAngle equals endAngle`); } }); for(let i=0;i<state.notes.length;i++) for(let j=i+1;j<state.notes.length;j++){ if(Math.abs((state.notes[i].beat||0)-(state.notes[j].beat||0))<0.001 && shortestAngleDifference(noteAngle(state.notes[i]),noteAngle(state.notes[j]))<8) warnings.push(`#${i}/#${j} same-time angles overlap visually`); } $("validation").innerHTML=[...errors.map(e=>`<div class="err">ERROR ${e}</div>`),...warnings.map(w=>`<div class="warn">WARN ${w}</div>`)].join("") || "No errors."; return errors.length===0; }
