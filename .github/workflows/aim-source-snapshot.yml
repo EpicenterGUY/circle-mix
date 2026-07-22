@@ -17,9 +17,8 @@ jobs:
           name: circle-mix-aim-source
           retention-days: 1
           path: |
-            src/game.js
-            src/input.js
-            index.html
-            tests/smoke.test.js
-            tests/browser-regression.test.js
-            package.json
+            .
+            !.git/**
+            !node_modules/**
+            !desktop-dist/**
+            !src-tauri/target/**
