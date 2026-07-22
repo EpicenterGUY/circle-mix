@@ -1,0 +1,60 @@
+     {name:"360° TRACE → SWING",kind:"traceSwing",phase:"TRACE_ACTIVE",desc:"시작점에서 한 바퀴 회전해 끝점에 도달한 뒤 SWING 하세요.",notes:[{type:"traceCW",beat:4,lane:0,endLane:0,durationBeat:2.5,signedSweepAngle:360}]},
+     {name:"종합 연습",kind:"mix",phase:"standard",desc:"상세 가이드 없이 배운 노트를 순서대로 처리하세요.",notes:[{type:"cut",beat:4,lane:0},{type:"cut",beat:5,lane:2},{type:"fx",beat:6,lane:4,durationBeat:2},{type:"slideCW",beat:9,lane:6,endLane:1,durationBeat:3},{type:"traceCCW",beat:13,lane:2,endLane:7,durationBeat:2},{type:"swingCW",beat:16,lane:3},{type:"scratchCCW",beat:18,lane:5,endLane:4,durationBeat:.55},{type:"cut",beat:20,lane:7}]}
+   ];
+@@ -4367,7 +4421,7 @@
+     // Do not also advance from the render loop; that duplicate path caused
+     // intermittent stage skips when a late frame raced the next step.
+ 
+-    // Z/X/Space/우클릭을 기본 액션 홀드로 사용. SCRATCH는 우클릭이 기본, Shift는 보조 입력.
++    // Z/X/Space/우클릭을 기본 액션 홀드로 사용. Shift는 PULSE 전용이며 SCRATCH는 우클릭을 사용한다.
+     filterHeld = isAutoActive() || mouseDownRight || keys.KeyZ || keys.KeyX || keys.Space;
+     scratchHeld = mouseDownRight || keys.ShiftLeft || keys.ShiftRight;
+     syncScratchHoldState();
+@@ -4390,14 +4444,15 @@
+     // translucent shapes to overlap in the lesson screen.
+     const visibleNotes=getVisibleNotes(t);
+     if(!tutorialMode){
+-      for(let i=0;i<visibleNotes.length;i++) drawLandingGhost(visibleNotes[i],t);
+-      for(let i=0;i<visibleNotes.length;i++) drawApproachRail(visibleNotes[i],t);
++      for(let i=0;i<visibleNotes.length;i++) if(visibleNotes[i].type!=="pulse") drawLandingGhost(visibleNotes[i],t);
++      for(let i=0;i<visibleNotes.length;i++) if(visibleNotes[i].type!=="pulse") drawApproachRail(visibleNotes[i],t);
+     }
+     drawJudgeGuides(t);
+     drawTutorialExploreTarget(t);
+ 
++    for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(n.type==="pulse")drawNote(n,t); }
+     for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(n.type.startsWith("trace"))drawNote(n,t); }
+-    for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(!n.type.startsWith("trace"))drawNote(n,t); }
++    for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(n.type!=="pulse"&&!n.type.startsWith("trace"))drawNote(n,t); }
+     if(!tutorialMode)drawFocusHalo(focusNote,t);
+     drawArm();
+     drawEffects(dt);
+@@ -4772,8 +4827,8 @@ settingsOrigin=${settingsOrigin}`);
+   function rebuildCustomChart(){useCustomChart=customChartData.length>0;chart=generateChart();updateEditorStatus();}
+   function snapBeat(b,grid=.25){return Math.round(b/grid)*grid;}
+   function addEditorNote(type){
+-    const b=snapBeat(beatNow(),.25), lane=Math.round(selectedEditorAngle/45)%8;
+-    const d={type,beat:b,angle:roundAngleForJson(selectedEditorAngle)};
++    const b=snapBeat(beatNow(),.25);
++    const d=type==="pulse"?{type,beat:b}:{type,beat:b,angle:roundAngleForJson(selectedEditorAngle)};
+     if(type==="fx") d.durationBeat=4;
+     if(type==="slideCW"||type==="slideCCW"){
+       d.durationBeat=4;
+@@ -4871,10 +4926,10 @@ settingsOrigin=${settingsOrigin}`);
+ 
+   let mobileLayoutDraft=null, mobileLayoutSavedSnapshot=null, mobileLayoutEditing=false;
+   function mobileSafeRect(){ const gap=inputSettings.mobileControlGap||18; return {left:Math.max(gap,0), top:Math.max(gap+44,44), right:Math.max(gap,0), bottom:Math.max(gap,0), width:window.innerWidth, height:window.innerHeight}; }
+-  function presetMobileLayout(preset=inputSettings.mobileControlPreset){ const gap=(inputSettings.mobileControlGap||18); const w=Math.max(1,window.innerWidth), h=Math.max(1,window.innerHeight); const ay=Math.max(0,Math.min(1,(h-gap-44)/h)); const low=Math.max(0,Math.min(1,(gap+44)/w)); const right=Math.max(0,Math.min(1,(w-gap-44)/w)); if(preset==="LEFT_HANDED") return {actionX:low, actionY:ay, scratchX:right, scratchY:ay}; if(preset==="RIGHT_HANDED") return {actionX:Math.max(.62,right-.06), actionY:Math.max(.62,ay-.06), scratchX:low, scratchY:ay}; return {actionX:right, actionY:ay, scratchX:low, scratchY:ay}; }
++  function presetMobileLayout(preset=inputSettings.mobileControlPreset){ const gap=(inputSettings.mobileControlGap||18); const w=Math.max(1,window.innerWidth), h=Math.max(1,window.innerHeight); const ay=Math.max(0,Math.min(1,(h-gap-44)/h)); const sy=Math.max(0,Math.min(1,(h-gap-146)/h)); const low=Math.max(0,Math.min(1,(gap+44)/w)); const right=Math.max(0,Math.min(1,(w-gap-44)/w)); if(preset==="LEFT_HANDED") return {actionX:low, actionY:ay, scratchX:right, scratchY:ay}; if(preset==="RIGHT_HANDED") return {actionX:Math.max(.62,right-.06), actionY:Math.max(.62,ay-.06), scratchX:low, scratchY:sy}; return {actionX:right, actionY:ay, scratchX:low, scratchY:sy}; }
+   function getMobileLayout(){ const p=inputSettings.mobileControlPreset; const base=presetMobileLayout(p); return {actionX:p==="CUSTOM"&&inputSettings.mobileActionX!=null?inputSettings.mobileActionX:base.actionX, actionY:p==="CUSTOM"&&inputSettings.mobileActionY!=null?inputSettings.mobileActionY:base.actionY, scratchX:p==="CUSTOM"&&inputSettings.mobileScratchX!=null?inputSettings.mobileScratchX:base.scratchX, scratchY:p==="CUSTOM"&&inputSettings.mobileScratchY!=null?inputSettings.mobileScratchY:base.scratchY}; }
+   function clampMobilePoint(x,y,size,avoidPause=true){ const gap=inputSettings.mobileControlGap||18, r=size/2, w=window.innerWidth, h=window.innerHeight; let px=Math.min(w-gap-r,Math.max(gap+r,x*w)); let py=Math.min(h-gap-r,Math.max(gap+44+r, y*h)); if(avoidPause && px+r>w-90 && py-r<58) py=58+r; return {x:px/w,y:py/h,px,py}; }
+-  function applyMobileControlLayout(){ const l=getMobileLayout(); const a=clampMobilePoint(l.actionX,l.actionY,inputSettings.mobileActionSize); const sc=clampMobilePoint(l.scratchX,l.scratchY,inputSettings.mobileScratchSize); const root=document.documentElement.style; if(!root?.setProperty) return; root.setProperty('--mobile-action-size',`${inputSettings.mobileActionSize}px`); root.setProperty('--mobile-scratch-size',`${inputSettings.mobileScratchSize}px`); root.setProperty('--mobile-control-opacity',String(inputSettings.mobileButtonOpacity)); root.setProperty('--mobile-action-x',`${a.px}px`); root.setProperty('--mobile-action-y',`${a.py}px`); root.setProperty('--mobile-scratch-x',`${sc.px}px`); root.setProperty('--mobile-scratch-y',`${sc.py}px`); }
++  function applyMobileControlLayout(){ const l=getMobileLayout(); const a=clampMobilePoint(l.actionX,l.actionY,inputSettings.mobileActionSize); const sc=clampMobilePoint(l.scratchX,l.scratchY,inputSettings.mobileScratchSize); const pulseCandidates=[.08,.28,.5,.72,.92].map(x=>clampMobilePoint(x,.92,96)); const pulse=pulseCandidates.sort((p,q)=>Math.min(Math.hypot(q.px-a.px,q.py-a.py),Math.hypot(q.px-sc.px,q.py-sc.py))-Math.min(Math.hypot(p.px-a.px,p.py-a.py),Math.hypot(p.px-sc.px,p.py-sc.py)))[0]; const root=document.documentElement.style; if(!root?.setProperty) return; root.setProperty('--mobile-action-size',`${inputSettings.mobileActionSize}px`); root.setProperty('--mobile-scratch-size',`${inputSettings.mobileScratchSize}px`); root.setProperty('--mobile-control-opacity',String(inputSettings.mobileButtonOpacity)); root.setProperty('--mobile-action-x',`${a.px}px`); root.setProperty('--mobile-action-y',`${a.py}px`); root.setProperty('--mobile-pulse-x',`${pulse.px}px`); root.setProperty('--mobile-pulse-y',`${pulse.py}px`); root.setProperty('--mobile-scratch-x',`${sc.px}px`); root.setProperty('--mobile-scratch-y',`${sc.py}px`); }
+   function exportMobileControls(){ const l=getMobileLayout(); return JSON.stringify({version:window.CircleMixVersion?.version||"0.0.0",storageVersion:INPUT_SETTINGS_KEY,preset:inputSettings.mobileControlPreset,mobileActionX:l.actionX,mobileActionY:l.actionY,mobileScratchX:l.scratchX,mobileScratchY:l.scratchY,mobileActionSize:inputSettings.mobileActionSize,mobileScratchSize:inputSettings.mobileScratchSize,mobileButtonOpacity:inputSettings.mobileButtonOpacity,mobileControlGap:inputSettings.mobileControlGap,screenRatio:window.innerWidth/window.innerHeight},null,2); }
+   function resetMobileControls(){ Object.assign(inputSettings,MOBILE_CONTROL_DEFAULTS); saveInputSettings(); applyMobileControlLayout(); syncPauseSettingsUI(); }
+   function openMobileLayoutEditor(){ releaseMobilePointers(); mobileLayoutEditing=true; mobileLayoutSavedSnapshot={...inputSettings}; mobileLayoutDraft={...getMobileLayout()}; mobileLayoutOverlay.hidden=false; renderMobileLayoutEditor(); }
+@@ -4924,7 +4979,7 @@ settingsOrigin=${settingsOrigin}`);
+   bindPress(pauseSetMobileLayout,openMobileLayoutEditor); bindPress(pauseSetMobileInputTest,openMobileInputTest); bindPress(pauseSetMobileExport,()=>{try{navigator.clipboard?.writeText(exportMobileControls());}catch(e){} alert(exportMobileControls());}); bindPress(pauseSetMobileReset,resetMobileControls); bindPress(document.getElementById("pauseSetUpdateLog"),()=>openUpdateLog({index:0, auto:false}));
+   bindPress(document.getElementById("mobileLayoutSave"),()=>closeMobileLayoutEditor(true)); bindPress(document.getElementById("mobileLayoutCancel"),()=>closeMobileLayoutEditor(false)); bindPress(document.getElementById("mobileLayoutCancelTop"),()=>closeMobileLayoutEditor(false)); bindPress(document.getElementById("mobileLayoutReset"),()=>{Object.assign(inputSettings,MOBILE_CONTROL_DEFAULTS); mobileLayoutDraft=presetMobileLayout("STANDARD"); renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileLayoutSwap"),()=>{[mobileLayoutDraft.actionX,mobileLayoutDraft.scratchX]=[mobileLayoutDraft.scratchX,mobileLayoutDraft.actionX];[mobileLayoutDraft.actionY,mobileLayoutDraft.scratchY]=[mobileLayoutDraft.scratchY,mobileLayoutDraft.actionY]; renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileLayoutPreset"),()=>{const i=(MOBILE_CONTROL_PRESETS.indexOf(inputSettings.mobileControlPreset)+1)%3; inputSettings.mobileControlPreset=MOBILE_CONTROL_PRESETS[i]; mobileLayoutDraft=presetMobileLayout(inputSettings.mobileControlPreset); renderMobileLayoutEditor();});
+   bindPress(document.getElementById("mobileActionSizeDown"),()=>{inputSettings.mobileActionSize=finiteRange(inputSettings.mobileActionSize-4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileActionSizeUp"),()=>{inputSettings.mobileActionSize=finiteRange(inputSettings.mobileActionSize+4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileScratchSizeDown"),()=>{inputSettings.mobileScratchSize=finiteRange(inputSettings.mobileScratchSize-4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileScratchSizeUp"),()=>{inputSettings.mobileScratchSize=finiteRange(inputSettings.mobileScratchSize+4,64,124,88);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileOpacityDown"),()=>{inputSettings.mobileButtonOpacity=finiteRange(inputSettings.mobileButtonOpacity-.05,.35,1,.68);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileOpacityUp"),()=>{inputSettings.mobileButtonOpacity=finiteRange(inputSettings.mobileButtonOpacity+.05,.35,1,.68);renderMobileLayoutEditor();}); bindPress(document.getElementById("mobileInputTestClose"),closeMobileInputTest);
+-  bindPress(addCutBtn,()=>addEditorNote("cut"));bindPress(addSwingCWBtn,()=>addEditorNote("swingCW"));bindPress(addSwingCCWBtn,()=>addEditorNote("swingCCW"));bindPress(addFxBtn,()=>addEditorNote("fx"));bindPress(addSlideCWBtn,()=>addEditorNote("slideCW"));bindPress(addSlideCCWBtn,()=>addEditorNote("slideCCW"));bindPress(addScratchCWBtn,()=>addEditorNote("scratchCW"));bindPress(addScratchCCWBtn,()=>addEditorNote("scratchCCW"));
