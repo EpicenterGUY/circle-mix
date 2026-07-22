@@ -39,6 +39,7 @@ PULSE is a position-independent rhythm note intended to replace new SCRATCH char
 - The combined step pairs CUT and PULSE at the same timestamps and changes its input hint to the next unfinished note family.
 - The final mixed practice includes PULSE alongside the existing aimed and gesture notes.
 - Tutorial PULSE receives the same short late-input grace period as CUT before the step is finalized.
+- Regression checks locate TRACE lessons by their semantic name and kind, so inserting future lessons does not invalidate unrelated tutorial coverage.
 
 ## Visual language
 
