@@ -91,11 +91,17 @@ async function snapshot(page){
     const localTab=tabs.find(button=>/LOCAL/i.test(button.textContent||''))||null;
     const carousel=document.getElementById('songCarousel');
     const cards=[...document.querySelectorAll('.songCard')];
+    const rotateOverlay=document.getElementById('rotateOverlay');
     return {
       viewport:{width:innerWidth,height:innerHeight},
       coarse:matchMedia('(pointer:coarse)').matches,
       styleInstalled:!!document.getElementById('circleMixMobileSongSelectLayout'),
       bodyClass:document.body.className,
+      foldExpanded:document.body.classList.contains('foldExpanded'),
+      needsLandscape:document.body.classList.contains('needsLandscape'),
+      rotateOverlayVisible:!!rotateOverlay?.classList.contains('show'),
+      landscapeButtonExists:!!document.getElementById('rotateLandscapeBtn'),
+      landscapeButtonHidden:document.getElementById('rotateLandscapeBtn')?.hidden ?? null,
       updateLogVisible:!!document.getElementById('updateLogOverlay')?.classList.contains('show'),
       shell:rect(document.querySelector('.songSelectShell')),
       header:rect(document.querySelector('.songSelectHeader')),
@@ -146,6 +152,11 @@ async function snapshot(page){
         assert.equal(state.updateLogVisible,false,`${viewport.name} update log blocks song select ${JSON.stringify(state)}`);
         assert.equal(state.styleInstalled,true,`${viewport.name} responsive style missing`);
         assert.equal(state.coarse,true,`${viewport.name} coarse pointer media query missing`);
+        const expandedViewport=Math.min(viewport.width,viewport.height)>=600&&Math.max(viewport.width,viewport.height)>=700;
+        assert.equal(state.foldExpanded,expandedViewport,`${viewport.name} fold-expanded classification ${JSON.stringify(state)}`);
+        assert.equal(state.needsLandscape,false,`${viewport.name} song select should not be orientation-blocked ${JSON.stringify(state)}`);
+        assert.equal(state.rotateOverlayVisible,false,`${viewport.name} rotate overlay should stay closed before play ${JSON.stringify(state)}`);
+        if(state.landscapeButtonExists)assert.equal(state.landscapeButtonHidden,true,`${viewport.name} inactive landscape button should stay hidden ${JSON.stringify(state)}`);
         assert.equal(state.cardCount,7,`${viewport.name} LOCAL cards ${JSON.stringify(state)}`);
         assert.match(state.localTabText||'',/LOCAL/i,`${viewport.name} LOCAL tab missing`);
         assertInside(state.shell,viewportRect,`${viewport.name} shell`);
@@ -177,6 +188,19 @@ async function snapshot(page){
         await page.waitForFunction(()=>document.querySelectorAll('.songCard').length>=7,{timeout:3000});
         state=await snapshot(page);
         assertInside(state.localTab,state.tabs,`${viewport.name} LOCAL tab after tap`);
+
+        if(viewport.name==='unfolded-square-portrait'){
+          stage='verify portrait play fallback';
+          await page.evaluate(()=>window.CircleMixTestApi.startBuiltIn('anima','normal'));
+          await page.waitForFunction(()=>document.body.classList.contains('needsLandscape')&&document.getElementById('rotateOverlay')?.classList.contains('show')&&document.getElementById('rotateLandscapeBtn')?.hidden===false,{timeout:3000});
+          state=await snapshot(page);
+          assert.equal(state.foldExpanded,true,`${viewport.name} expanded state lost during play fallback ${JSON.stringify(state)}`);
+          assert.equal(state.needsLandscape,true,`${viewport.name} portrait play was not blocked ${JSON.stringify(state)}`);
+          assert.equal(state.rotateOverlayVisible,true,`${viewport.name} rotate overlay did not open ${JSON.stringify(state)}`);
+          assert.equal(state.landscapeButtonExists,true,`${viewport.name} landscape fallback button missing during blocked play ${JSON.stringify(state)}`);
+          assert.equal(state.landscapeButtonHidden,false,`${viewport.name} landscape fallback button hidden during blocked play ${JSON.stringify(state)}`);
+        }
+
         assert.deepEqual(errors,[],`${viewport.name} page errors: ${JSON.stringify(errors)}`);
         console.log(`mobile song select layout passed: ${viewport.name}`);
       }catch(error){

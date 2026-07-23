@@ -25,7 +25,8 @@ assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must nor
 assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must retain the dedicated visual pass');
 assert.match(prepare,/PC AIM INPUT V1/,'desktop changelog must announce PC aim v1');
 assert.match(prepare,/desktop-updater\.js/,'desktop build must inject the updater UI');
-assert.match(visualPass,/pulse:"#ff8a3d"/,'PULSE must use an orange color distinct from SWING CCW');
+assert.match(visualPass,/readPaletteColor\(game,'pulse'\)/,'desktop visual pass must retain the shared PULSE color');
+assert.match(visualPass,/pulseColor===swingCcwColor/,'desktop visual pass must verify PULSE and SWING CCW remain distinct');
 assert.match(visualPass,/PULSE_VISUAL_SINGLE_RING/,'PULSE must use the single-ring approach visual');
 assert.match(visualPass,/PULSE_HIT_SINGLE_RING/,'PULSE judgement must use a short single-ring burst');
 assert.match(visualPass,/SWING_VISUAL_DIRECTIONAL_ARC/,'SWING must use a local directional arc');

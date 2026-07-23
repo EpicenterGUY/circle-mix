@@ -1,22 +1,33 @@
 'use strict';
 
-function replaceOrThrow(source, search, replacement, label){
+function replaceOrVerify(source, search, replacement, label, isApplied){
   const next=source.replace(search,replacement);
-  if(next===source) throw new Error(`Unable to ${label}.`);
-  return next;
+  if(next!==source) return next;
+  if(isApplied(source)) return source;
+  throw new Error(`Unable to ${label}.`);
+}
+
+function readPaletteColor(game, name){
+  const palette=game.match(/const COLORS = \{[\s\S]*?\n  \};/);
+  const color=palette?.[0].match(new RegExp(`\\b${name}:"(#[0-9a-fA-F]{6})"`));
+  if(!color) throw new Error(`Unable to read ${name} from the game color palette.`);
+  return color[1].toLowerCase();
 }
 
 module.exports=function applyDesktopVisualPass(game){
-  game=replaceOrThrow(game,
-    'trace:"#4388ff", traceSoft:"#2466d9", pulse:"#ff4eb8", scratch:',
-    'trace:"#4388ff", traceSoft:"#2466d9", pulse:"#ff8a3d", scratch:',
-    'separate PULSE color from SWING CCW');
-  game=replaceOrThrow(game,
+  // PULSE is now supplied by the shared game palette.  Keep its current color rather
+  // than rewriting a historical literal, but retain a hard visual-separation check.
+  const pulseColor=readPaletteColor(game,'pulse');
+  const swingCcwColor=readPaletteColor(game,'swingCCW');
+  if(pulseColor===swingCcwColor) throw new Error('Unable to separate PULSE color from SWING CCW.');
+
+  game=replaceOrVerify(game,
     'ringBursts.push({color, power, life:.30, label});',
     'ringBursts.push({color, power, life:.22, label});',
-    'shorten PULSE hit-ring lifetime');
+    'shorten PULSE hit-ring lifetime',
+    current=>current.includes('ringBursts.push({color, power, life:.22, label});'));
 
-  game=replaceOrThrow(game,
+  game=replaceOrVerify(game,
     /  function drawSwing\(n,t\)\{[\s\S]*?\n  \}\n\n+  function drawSlide/,
 `  function drawSwing(n,t){
     // SWING_VISUAL_DIRECTIONAL_ARC: local direction only, never a full-screen ring.
@@ -51,9 +62,9 @@ module.exports=function applyDesktopVisualPass(game){
   }
 
   function drawSlide`,
-    'simplify SWING rendering');
+    'simplify SWING rendering',current=>current.includes('SWING_VISUAL_DIRECTIONAL_ARC'));
 
-  game=replaceOrThrow(game,
+  game=replaceOrVerify(game,
     /  function drawPulse\(n,t\)\{[\s\S]*?\n  \}\n\n  function drawNote/,
 `  function drawPulse(n,t){
     // PULSE_VISUAL_SINGLE_RING: one outlined center ring with no inner ring or orbiting arrows.
@@ -83,9 +94,9 @@ module.exports=function applyDesktopVisualPass(game){
   }
 
   function drawNote`,
-    'simplify PULSE rendering');
+    'simplify PULSE rendering',current=>current.includes('PULSE_VISUAL_SINGLE_RING'));
 
-  game=replaceOrThrow(game,
+  game=replaceOrVerify(game,
     /    const isPulse=n\.type==="pulse";\n    if\(isPulse\)\{[\s\S]*?\n    \}\n\n    let a=n\.angle;/,
 `    const isPulse=n.type==="pulse";
     if(isPulse){
@@ -98,23 +109,23 @@ module.exports=function applyDesktopVisualPass(game){
     }
 
     let a=n.angle;`,
-    'simplify PULSE judgement effects');
+    'simplify PULSE judgement effects',current=>current.includes('PULSE_HIT_SINGLE_RING'));
 
-  game=replaceOrThrow(game,
+  game=replaceOrVerify(game,
     '    addParticles(p.x,p.y,color,isScratch?16:(isSwing?22:14),isScratch?.85:(isSwing?1.35:1));',
     '    addParticles(p.x,p.y,color,isScratch?16:(isSwing?6:14),isScratch?.85:(isSwing?.55:1));',
-    'reduce SWING judgement particles');
+    'reduce SWING judgement particles',current=>current.includes('isSwing?6:14'));
 
-  game=replaceOrThrow(game,
+  game=replaceOrVerify(game,
     /    if\(isSwing\)\{[\s\S]*?\n    \}\n  \}\n  function inferMissReason/,
 `    if(isSwing){
       // SWING_HIT_LOCAL_ONLY: the shared local wave and six particles are enough.
     }
   }
   function inferMissReason`,
-    'remove SWING full-ring burst');
+    'remove SWING full-ring burst',current=>current.includes('SWING_HIT_LOCAL_ONLY'));
 
-  game=replaceOrThrow(game,
+  game=replaceOrVerify(game,
     /    for\(let i=ringBursts\.length-1;i>=0;i--\)\{[\s\S]*?\n    \}\n\n    for\(let i=scratchBursts\.length-1/,
 `    for(let i=ringBursts.length-1;i>=0;i--){
       const r=ringBursts[i];
@@ -130,7 +141,7 @@ module.exports=function applyDesktopVisualPass(game){
     }
 
     for(let i=scratchBursts.length-1`,
-    'simplify PULSE ring burst rendering');
+    'simplify PULSE ring burst rendering',current=>current.includes('const p=1-r.life/.22;'));
 
   if(!game.includes('PULSE_VISUAL_SINGLE_RING')||!game.includes('SWING_VISUAL_DIRECTIONAL_ARC')){
     throw new Error('Desktop visual clarity transforms were not applied.');

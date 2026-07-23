@@ -297,7 +297,8 @@ const sw = fs.readFileSync("service-worker.js", "utf8");
 const version = fs.readFileSync("src/version.js", "utf8");
 assert.match(index, /src\/charts\/routing\.js\?v=/);
 assert.match(sw, /versioned\("\.\/src\/charts\/routing\.js"\)/);
-assert.match(version, /cacheRevision:\s*"20260723-pwa-update-foundation"/);
+const cacheRevision=/cacheRevision:\s*"([^"]+)"/.exec(version)?.[1];
+assert.ok(cacheRevision,"release cache revision exists");
 assert.match(sw, /encodeURIComponent\(CACHE_REVISION\)/);
 assert.match(sw, /networkFirstStatic/);
 assert.doesNotMatch(sw, /20260721-local-difficulty-930/);
@@ -591,4 +592,17 @@ assert.match(src, /function judgementMarkerVisible\(\)\{\s*return judgementMarke
 assert.match(src, /if\(judgementMarkerVisible\(\)\)\{/);
 assert.match(src, /ctx\.arc\(hitR,0,5\.5,0,TAU\); ctx\.stroke\(\)/);
 assert.doesNotMatch(src, /ctx\.arc\(hitR,0,4\.5,0,TAU\); ctx\.fill\(\)/);
+});
+
+
+test("foldable mobile viewports retry landscape safely", () => {
+  const src=fs.readFileSync("src/game.js","utf8");
+  assert.match(src,/function mobileViewportMetrics\(\)/);
+  assert.match(src,/metrics\.shortSide>=600 && metrics\.longSide>=700/);
+  assert.match(src,/function handleAdaptiveMobileViewport\(reason="resize",forceRelock=false\)/);
+  assert.match(src,/state\.expanded && \(state\.changed \|\| forceRelock\) && canRelockLandscape\(\)/);
+  assert.match(src,/if\(isStandaloneDisplay\(\)\)\{ await lockLandscapeSafe\("standalone"\)/);
+  assert.match(src,/button\.textContent="가로 화면으로 전환"/);
+  assert.match(src,/await requestGameFullscreen\(\);[\s\S]{0,120}await lockLandscapeSafe\("rotate-button"\)/);
+  assert.match(src,/handleAdaptiveMobileViewport\("initial",true\)/);
 });
