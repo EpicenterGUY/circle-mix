@@ -49,9 +49,17 @@ if ($normalized -match $privateHeader) {
 } else {
   $compact = $normalized -replace '\s', ''
   $keyMaterial = $compact
+  $decoded = $null
   try {
     $decodedBytes = [Convert]::FromBase64String($compact)
     $decoded = [Text.Encoding]::UTF8.GetString($decodedBytes).TrimStart([char]0xFEFF)
+  } catch {
+    # Tauri officially accepts private-key content as well as the generated base64 backup.
+    # Preserve other opaque content and let the signer preflight provide the authoritative validation error.
+    $keyMaterial = $normalized
+  }
+
+  if ($null -ne $decoded) {
     if ($decoded -match $publicHeader) {
       throw 'TAURI_SIGNING_PRIVATE_KEY contains the base64 public updater key. Save the matching private .key file contents instead.'
     }
@@ -60,10 +68,6 @@ if ($normalized -match $privateHeader) {
     } else {
       $keyKind = 'base64 key content'
     }
-  } catch [FormatException] {
-    # Tauri officially accepts private-key content as well as the generated base64 backup.
-    # Preserve other opaque content and let the signer preflight provide the authoritative validation error.
-    $keyMaterial = $normalized
   }
 }
 
