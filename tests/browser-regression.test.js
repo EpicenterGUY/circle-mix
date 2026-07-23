@@ -775,14 +775,16 @@ async function runDeterministicAimAndCutRegression(browser){
     await waitForStableCircleMixPage(page, 'desktop');
     const releaseMetadata = await page.evaluate(async () => ({
       version: window.CircleMixVersion?.version,
+      cacheRevision: window.CircleMixVersion?.cacheRevision,
       changelogVersion: window.CircleMixChangelog?.[0]?.version,
       updateLogVisible: (() => { const overlay=document.getElementById('updateLogOverlay'); return !!overlay && !overlay.hidden && overlay.classList.contains('show'); })(),
       cacheNames: await caches.keys()
     }));
     assert.match(releaseMetadata.version || '', /^\d+\.\d+\.\d+$/, `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
+    assert.ok(releaseMetadata.cacheRevision, `CircleMixVersion cache revision ${JSON.stringify(releaseMetadata)}`);
     assert.equal(releaseMetadata.changelogVersion, releaseMetadata.version, `latest changelog ${JSON.stringify(releaseMetadata)}`);
     assert.equal(releaseMetadata.updateLogVisible, true, `new release auto-opens UPDATE LOG ${JSON.stringify(releaseMetadata)}`);
-    assert.ok(releaseMetadata.cacheNames.includes(`circle-mix-v${releaseMetadata.version}-app`), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);
+    assert.ok(releaseMetadata.cacheNames.includes(`circle-mix-v${releaseMetadata.version}-${releaseMetadata.cacheRevision}-app`), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);
     await dismissStartupOverlays(page);
 
     await page.evaluate(() => {
