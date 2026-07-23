@@ -291,13 +291,16 @@ assert.equal((animaHtml.match(/data-difficulty=/g)||[]).length,2);
 assert.doesNotMatch(animaHtml,/data-difficulty="reverb"/);
 });
 
-test("index and service worker use the same PWA cache query", () => {
+test("index and service worker use shared PWA release metadata", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-assert.match(index, /20260721-local-difficulty-930/);
-assert.match(sw, /20260721-local-difficulty-930/);
+const version = fs.readFileSync("src/version.js", "utf8");
 assert.match(index, /src\/charts\/routing\.js\?v=/);
-assert.match(sw, /src\/charts\/routing\.js\?v=/);
+assert.match(sw, /versioned\("\.\/src\/charts\/routing\.js"\)/);
+assert.match(version, /cacheRevision:\s*"20260723-pwa-update-foundation"/);
+assert.match(sw, /encodeURIComponent\(CACHE_REVISION\)/);
+assert.match(sw, /networkFirstStatic/);
+assert.doesNotMatch(sw, /20260721-local-difficulty-930/);
 assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
 assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
@@ -309,7 +312,7 @@ const sw = fs.readFileSync("service-worker.js", "utf8");
 assert.match(sw, /const APP_SHELL_URLS = \[/);
 assert.match(sw, /\.\/assets\/audio\/ghost-rule\.mp3/);
 assert.match(sw, /\.\/assets\/jackets\/ghost-rule\.jpg/);
-assert.match(sw, /\.\/src\/charts\/ghost-rule\.js\?v=/);
+assert.match(sw, /versioned\("\.\/src\/charts\/ghost-rule\.js"\)/);
 assert.match(sw, /requiredCount/);
 assert.match(sw, /cachedCount/);
 assert.match(sw, /missing/);
@@ -322,8 +325,8 @@ assert.doesNotMatch(sw, /cacheExisting\([\s\S]*catch\(\)=>/);
 
 test("PWA offline messages transfer MessagePort and clean status timeout", () => {
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
-assert.match(pwa, /postToSW\(\{type:"OFFLINE_STATUS", version:VERSION\}, \[channel\.port2\]\)/);
-assert.match(pwa, /postToSW\(\{type:"DOWNLOAD_OFFLINE", version:VERSION\}, \[channel\.port2\]\)/);
+assert.match(pwa, /postToSW\(\{type:"OFFLINE_STATUS", version:VERSION, revision:CACHE_REVISION\}, \[channel\.port2\]\)/);
+assert.match(pwa, /postToSW\(\{type:"DOWNLOAD_OFFLINE", version:VERSION, revision:CACHE_REVISION\}, \[channel\.port2\]\)/);
 assert.match(pwa, /clearTimeout\(timeoutId\)/);
 assert.match(pwa, /closePort\(channel\.port1\)/);
 assert.match(pwa, /closePort\(channel\.port2\)|finishOfflineDownload\(session\)/);
@@ -379,24 +382,28 @@ assert.doesNotMatch(css, /body\.safeTitle #safeMenu,body\.safeSettings #safeOver
 });
 
 
-test("direct play startup release versions are synchronized at 0.9.30", () => {
+test("web release metadata is shared without duplicate hard-coded versions", () => {
 const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
 assert.match(version, /version:\s*"0\.9\.30"/);
-assert.match(pwa, /const VERSION="0\.9\.30"/);
-assert.match(sw, /const VERSION = "0\.9\.30"/);
+assert.match(version, /cacheRevision:/);
+assert.match(pwa, /const RELEASE=window\.CircleMixVersion/);
+assert.match(sw, /^importScripts\("\.\/src\/version\.js"\);/);
+assert.doesNotMatch(pwa, /const VERSION="0\.9\.30"/);
+assert.doesNotMatch(sw, /const VERSION = "0\.9\.30"/);
 assert.match(changelog, /version:\s*"0\.9\.30"/);
 });
 
-test("index and service worker app shell cache-bust URLs match exactly", () => {
+test("service worker derives app shell cache-bust URLs from cache revision", () => {
 const index = fs.readFileSync("index.html", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
-const indexUrls = [...index.matchAll(/(?:href|src)="(\.\/(?:style\.css|src\/[^\"]+\.js)\?v=[^"]+)"/g)].map(m=>m[1]).sort();
-const swUrls = [...sw.matchAll(/"(\.\/(?:style\.css|src\/[^\"]+\.js)\?v=[^"]+)"/g)].map(m=>m[1]).sort();
-assert.deepEqual(swUrls, indexUrls);
+const indexUrls = [...index.matchAll(/(?:href|src)="(\.\/(?:style\.css|src\/[^\"]+\.js)\?v=[^"]+)"/g)].map(m=>m[1]);
 assert.ok(indexUrls.length > 5);
+assert.match(sw, /const versioned = path =>/);
+assert.match(sw, /encodeURIComponent\(CACHE_REVISION\)/);
+for(const asset of ["./style.css","./src/version.js","./src/charts/routing.js","./src/game.js","./src/pwa.js"]) assert.ok(sw.includes(`versioned("${asset}")`), asset);
 });
 
 test("old mobile PWA cache-bust token is fully removed", () => {
