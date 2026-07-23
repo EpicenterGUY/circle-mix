@@ -112,11 +112,8 @@ patchFile('src/game.js', [
 
 patchFile('tests/smoke.test.js', [
   [
-` difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,
- formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,`,
-` difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,
- SLIDE_JUDGEMENT_PROFILE, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,
- formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,`,
+`tutorialSteps, buildTutorialStepRuntime,\\n formatStarValue,`,
+`tutorialSteps, buildTutorialStepRuntime,\\n SLIDE_JUDGEMENT_PROFILE, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\\n formatStarValue,`,
     'smoke judgement exports'
   ],
   [
@@ -186,7 +183,8 @@ Smoke tests verify the SLIDE profile and exercise TRACE endpoint capture, post-c
 
 for (const temporaryPath of [
   'scripts/apply-slide-trace-judgement-v1.js',
-  '.github/workflows/apply-slide-trace-judgement-v1.yml'
+  '.github/workflows/apply-slide-trace-judgement-v1.yml',
+  'patch-result.txt'
 ]) {
   if (fs.existsSync(temporaryPath)) fs.rmSync(temporaryPath);
 }
