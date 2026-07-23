@@ -125,7 +125,7 @@ async function waitForStableCircleMixPage(page, label){
 async function assertStateContract(page, label){
   const state = await page.evaluate(() => window.CircleMixTestApi?.state?.());
   assert.ok(state && typeof state === 'object', `${label} exposes CircleMixTestApi.state()`);
-  const booleans = ['running','paused','tutorialMode','tutorialPointerMoved','tutorialTransitioning','tutorialFinalMixRetryScheduled','tutorialChartSettled','tutorialHudHidden','tutorialCompleteVisible','inputEnabled','pointerActive','actionHeld','scratchHeld','mouseDownRight'];
+  const booleans = ['running','paused','tutorialMode','tutorialPointerMoved','tutorialTransitioning','tutorialFinalMixRetryScheduled','tutorialChartSettled','tutorialHudHidden','tutorialCompleteVisible','inputEnabled','pointerActive','actionHeld','holdInputActive','scratchHeld','mouseDownRight'];
   const numbers = ['tutorialStepIndex','tutorialTargetProgress','tutorialInputEnabledAt','tutorialSuccessCount','tutorialValidUserInputCount','pendingTutorialSkipCount','tutorialStepToken','tutorialAttemptId','tutorialTimerCount','tutorialFinalMixRetryCount','tutorialChartFinalizationCount','tutorialCompleteCount','tutorialRafCount','judgedCount','chartLength','gameTime','browserNow','frameCount','renderCount','mouseX','mouseY','armAngle','rawArmVel','rawAngularVelocity','W','H','cx','cy','hitR'];
   for(const key of booleans) assert.equal(typeof state[key], 'boolean', `${label} state.${key} must be an explicit boolean`);
   for(const key of numbers) assert.ok(Number.isFinite(state[key]), `${label} state.${key} must be a finite explicit number`);
@@ -956,10 +956,25 @@ async function runDeterministicAimAndCutRegression(browser){
     const actionDown = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
     assert.equal(actionDown.mobileActionPointerId, 41);
     assert.equal(actionDown.actionHeld, true);
+    assert.equal(actionDown.holdInputActive, true, 'mobile ACTION immediately enters the shared SLIDE/HOLD input path');
+    const sustainedActionLoop = await measureLoop(mobilePage, 180);
+    assert.ok(sustainedActionLoop.frameDelta > 1, 'mobile ACTION hold survives multiple gameplay frames');
+    assert.equal(sustainedActionLoop.after.mobileActionPointerId, 41);
+    assert.equal(sustainedActionLoop.after.actionHeld, true);
+    assert.equal(sustainedActionLoop.after.holdInputActive, true, 'mobile ACTION is not cleared by the per-frame hold refresh');
+    const simultaneousAimPoint = await mobilePage.evaluate(() => { const st=window.CircleMixTestApi.state(); return {x:st.cx+st.hitR*.7,y:st.cy-st.hitR*.7}; });
+    await mobilePage.locator('#game').dispatchEvent('pointerdown', {pointerId:44, pointerType:'touch', isPrimary:false, bubbles:true, clientX:simultaneousAimPoint.x, clientY:simultaneousAimPoint.y});
+    await mobilePage.locator('#game').dispatchEvent('pointermove', {pointerId:44, pointerType:'touch', isPrimary:false, bubbles:true, clientX:simultaneousAimPoint.x+12, clientY:simultaneousAimPoint.y+8});
+    await mobilePage.locator('#game').dispatchEvent('pointerup', {pointerId:44, pointerType:'touch', isPrimary:false, bubbles:true, clientX:simultaneousAimPoint.x+12, clientY:simultaneousAimPoint.y+8});
+    const actionWithAim = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
+    assert.equal(actionWithAim.mobileActionPointerId, 41, 'AIM finger release does not release the ACTION finger');
+    assert.equal(actionWithAim.holdInputActive, true, 'ACTION remains valid while another finger moves the aim');
+    assert.equal(actionWithAim.lastPointerSource, 'touch');
     await mobilePage.locator('#mobileActionBtn').dispatchEvent('pointerup', {pointerId:41, pointerType:'touch', isPrimary:true, bubbles:true});
     const actionUp = await mobilePage.evaluate(() => window.CircleMixTestApi.state());
     assert.equal(actionUp.mobileActionPointerId, null);
     assert.equal(actionUp.actionHeld, false);
+    assert.equal(actionUp.holdInputActive, false);
     const controlBoxes = await Promise.all(['#mobilePulseBtn','#mobileActionBtn','#mobileScratchBtn'].map(selector=>mobilePage.locator(selector).boundingBox()));
     assert.ok(controlBoxes.every(Boolean),`all mobile controls are reachable ${JSON.stringify(controlBoxes)}`);
     const overlaps=(a,b)=>a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y;
