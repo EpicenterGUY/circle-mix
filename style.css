@@ -977,3 +977,11 @@ body.gameplayScrollLocked #game{
 .cmixImportEntry{justify-self:center;display:grid;gap:5px;text-align:center}.cmixImportEntry small{color:#a9c3df;letter-spacing:.08em}.cmixImportBtn{min-width:180px}.cmixImportModal,.cmixDropOverlay{position:fixed;inset:0;z-index:100001;display:grid;place-items:center;background:rgba(2,7,18,.82);color:#edf8ff}.cmixImportCard{width:min(620px,calc(100vw - 24px));max-height:min(82vh,760px);overflow:auto;padding:clamp(16px,4vw,24px);border:1px solid #5cfffb;border-radius:22px;background:#071226}.cmixImportCard h2{margin:0}.cmixImportCard p{white-space:pre-wrap}.cmixImportCard button{min-height:44px;margin:8px 8px 0 0}.cmixImportCard details{margin:12px 0;padding:8px;background:#101d36}.cmixJacket{display:block;max-width:min(180px,60vw);max-height:180px;margin:12px 0;border-radius:10px}.cmixDanger{border-color:#ff7b7b!important;color:#ffd4d4!important}.cmixDropOverlay{pointer-events:none;border:4px dashed #5cfffb;font-weight:1000;letter-spacing:.2em}
 
 .cmixImportModal[hidden],.cmixDropOverlay[hidden]{display:none!important;pointer-events:none!important}
+
+
+/* Foldable landscape affordance v1 */
+.rotateLandscapeBtn{margin-top:16px;min-height:46px;padding:11px 18px;border:0;border-radius:999px;background:#5cfffb;color:#06101d;font-size:13px;font-weight:1000;letter-spacing:.06em;box-shadow:0 0 28px rgba(92,255,251,.28);touch-action:manipulation;cursor:pointer}
+.rotateLandscapeBtn[hidden]{display:none!important}
+body.foldExpanded .rotateCard{width:min(520px,calc(100vw - 36px));border-color:rgba(141,107,255,.48);box-shadow:0 24px 80px rgba(0,0,0,.62),0 0 78px rgba(141,107,255,.20)}
+body.foldExpanded .rotateCard strong{font-size:clamp(22px,4vw,30px)}
+@media (pointer:coarse) and (min-width:600px){body.foldExpanded .rotateCard{padding:28px 32px}.rotateLandscapeBtn{min-width:220px}}

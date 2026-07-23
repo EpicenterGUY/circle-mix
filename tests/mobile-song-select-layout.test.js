@@ -96,6 +96,9 @@ async function snapshot(page){
       coarse:matchMedia('(pointer:coarse)').matches,
       styleInstalled:!!document.getElementById('circleMixMobileSongSelectLayout'),
       bodyClass:document.body.className,
+      foldExpanded:document.body.classList.contains('foldExpanded'),
+      landscapeButtonExists:!!document.getElementById('rotateLandscapeBtn'),
+      landscapeButtonHidden:document.getElementById('rotateLandscapeBtn')?.hidden ?? null,
       updateLogVisible:!!document.getElementById('updateLogOverlay')?.classList.contains('show'),
       shell:rect(document.querySelector('.songSelectShell')),
       header:rect(document.querySelector('.songSelectHeader')),
@@ -146,6 +149,10 @@ async function snapshot(page){
         assert.equal(state.updateLogVisible,false,`${viewport.name} update log blocks song select ${JSON.stringify(state)}`);
         assert.equal(state.styleInstalled,true,`${viewport.name} responsive style missing`);
         assert.equal(state.coarse,true,`${viewport.name} coarse pointer media query missing`);
+        const expandedViewport=Math.min(viewport.width,viewport.height)>=600&&Math.max(viewport.width,viewport.height)>=700;
+        assert.equal(state.foldExpanded,expandedViewport,`${viewport.name} fold-expanded classification ${JSON.stringify(state)}`);
+        assert.equal(state.landscapeButtonExists,true,`${viewport.name} landscape fallback button missing ${JSON.stringify(state)}`);
+        assert.equal(state.landscapeButtonHidden,true,`${viewport.name} landscape button should stay hidden outside blocked play ${JSON.stringify(state)}`);
         assert.equal(state.cardCount,7,`${viewport.name} LOCAL cards ${JSON.stringify(state)}`);
         assert.match(state.localTabText||'',/LOCAL/i,`${viewport.name} LOCAL tab missing`);
         assertInside(state.shell,viewportRect,`${viewport.name} shell`);
