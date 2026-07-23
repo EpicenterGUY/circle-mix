@@ -19,11 +19,11 @@ assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop bu
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
 assert.equal(pkg.version,tauri.version,'npm and desktop versions must match for updater releases');
-assert.equal(tauri.version,'0.9.36','Windows installer must publish the mobile landscape and Windows stability version');
-assert.match(prepare,/DESKTOP_VERSION='0\.9\.36'/,'desktop distribution must expose version 0.9.36');
+assert.equal(tauri.version,'0.9.37','Windows installer must publish the signed updater test version');
+assert.match(prepare,/DESKTOP_VERSION='0\.9\.37'/,'desktop distribution must expose version 0.9.37');
 assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must normalize Windows CRLF line endings');
 assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must retain the dedicated visual pass');
-assert.match(prepare,/MOBILE LANDSCAPE \+ WINDOWS FIX/,'desktop changelog must announce the 0.9.36 release');
+assert.match(prepare,/SIGNED UPDATER TEST/,'desktop changelog must announce the 0.9.37 updater test release');
 assert.match(prepare,/desktop-updater\.js/,'desktop build must inject the updater UI');
 assert.match(visualPass,/readPaletteColor\(game,'pulse'\)/,'desktop visual pass must retain the shared PULSE color');
 assert.match(visualPass,/pulseColor===swingCcwColor/,'desktop visual pass must verify PULSE and SWING CCW remain distinct');
