@@ -22,6 +22,7 @@ on:
       - main
     paths:
       - src-tauri/tauri.conf.json
+      - scripts/prepare-updater-signing-key.ps1
       - .github/workflows/windows-updater-release.yml
 
 permissions:
@@ -37,7 +38,6 @@ jobs:
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       RELEASE_EVENT: ${{ github.event_name }}
       INPUT_VERSION: ${{ github.event.inputs.version }}
@@ -50,12 +50,11 @@ jobs:
           node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
-      - name: Validate release secrets
+      - name: Prepare updater signing key
         shell: pwsh
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
-            throw 'TAURI_SIGNING_PRIVATE_KEY GitHub Actions secret is missing.'
-          }
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: ./scripts/prepare-updater-signing-key.ps1
       - name: Resolve release metadata
         shell: pwsh
         run: |
@@ -83,6 +82,19 @@ jobs:
           'CIRCLE_MIX_NOTES' >> $env:GITHUB_ENV
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.10.1" --locked
+      - name: Verify updater signing key
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-diagnostics | Out-Null
+          $probe = Join-Path $env:RUNNER_TEMP 'circle-mix-updater-signing-probe.txt'
+          [IO.File]::WriteAllText($probe, 'circle-mix-updater-signing-probe', [Text.UTF8Encoding]::new($false))
+          & cargo tauri signer sign --private-key-path $env:TAURI_SIGNING_PRIVATE_KEY_PATH $probe 2>&1 |
+            Tee-Object -FilePath release-diagnostics/signing-preflight.log
+          $exitCode = $LASTEXITCODE
+          Remove-Item $probe, "$probe.sig" -Force -ErrorAction SilentlyContinue
+          if ($exitCode -ne 0) {
+            throw 'Updater signing key preflight failed. Check the signing-preflight diagnostics without exposing the private key.'
+          }
       - name: Install dependencies
         run: npm ci
       - name: Verify desktop distribution
@@ -91,7 +103,19 @@ jobs:
           npm run desktop:audit
           npm test
       - name: Build signed NSIS updater
-        run: npm run desktop:release-build
+        shell: pwsh
+        run: |
+          npm run desktop:release-build 2>&1 |
+            Tee-Object -FilePath release-diagnostics/windows-updater-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload release diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: circle-mix-windows-updater-release-diagnostics
+          if-no-files-found: warn
+          retention-days: 14
+          path: release-diagnostics/
       - name: Assemble release assets
         id: assets
         shell: pwsh
@@ -155,7 +179,7 @@ jobs:
           $version = [string]$config.version
           $title = "Windows updater release failed: v$version"
           $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-          $body = "The signed Windows updater release failed. Run: $runUrl`n`nNo private signing material is included in this report."
+          $body = "The signed Windows updater release failed. Run: $runUrl`n`nDiagnostics artifact: circle-mix-windows-updater-release-diagnostics`n`nNo private signing material is included in this report."
           $issue = gh issue list --state open --search "in:title $title" --json number,title | ConvertFrom-Json | Where-Object { $_.title -eq $title } | Select-Object -First 1
           if ($issue) {
             gh issue edit $issue.number --body $body
