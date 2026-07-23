@@ -1,0 +1,37 @@
+name: Agent PWA Diagnostic
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Capture npm test output
+        shell: bash
+        run: |
+          mkdir -p artifacts/pwa-diagnostic
+          set +e
+          npm test > artifacts/pwa-diagnostic/npm-test.log 2>&1
+          code=$?
+          echo "$code" > artifacts/pwa-diagnostic/exit-code.txt
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pwa-update-npm-test
+          path: artifacts/pwa-diagnostic
+          if-no-files-found: error
+      - name: Fail when npm test failed
+        shell: bash
+        run: test "$(cat artifacts/pwa-diagnostic/exit-code.txt)" = "0"
