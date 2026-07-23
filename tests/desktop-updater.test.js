@@ -4,6 +4,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 
 const root=path.resolve(__dirname,'..');
+const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
 const tauri=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.conf.json'),'utf8'));
 const cargo=fs.readFileSync(path.join(root,'src-tauri/Cargo.toml'),'utf8');
 const rust=fs.readFileSync(path.join(root,'src-tauri/src/lib.rs'),'utf8');
@@ -46,6 +47,10 @@ assert.match(releaseWorkflow,/RELEASE_VERSION/,'release metadata must resolve fr
 assert.match(releaseWorkflow,/RELEASE_DRAFT/,'manual draft releases and automatic published releases must share one workflow');
 assert.match(releaseWorkflow,/latest\.json/);
 assert.match(releaseWorkflow,/windows-x86_64/);
+const releaseBuildScript=pkg.scripts?.['desktop:release-build']||'';
+assert.match(releaseBuildScript,/^npm run desktop:icons\s+&&\s+cargo tauri build\s+--config\s+src-tauri\/tauri\.release\.conf\.json$/,'signed release builds must generate Tauri icons before using the release configuration');
+assert.match(releaseWorkflow,/Build signed NSIS updater\n\s+run: npm run desktop:release-build/,'the signed updater workflow must use the icon-generating release build script');
+assert.doesNotMatch(releaseWorkflow,/run: cargo tauri build/,'the signed updater workflow must not duplicate the release build command');
 assert.doesNotMatch(releaseWorkflow,/untrusted comment: minisign secret key/,'private signing key must never be committed');
 
 console.log('desktop updater configuration tests passed');

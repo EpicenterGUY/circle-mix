@@ -9,6 +9,7 @@
     "desktop:check": "npm run desktop:prepare && npm run desktop:audit",
     "desktop:dev": "npm run desktop:icons && cargo tauri dev",
     "desktop:build": "npm run desktop:icons && cargo tauri build",
+    "desktop:release-build": "npm run desktop:icons && cargo tauri build --config src-tauri/tauri.release.conf.json",
     "desktop:icons": "cargo tauri icon src-tauri/app-icon.svg -o src-tauri/icons"
   },
   "devDependencies": {

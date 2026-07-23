@@ -91,7 +91,7 @@ jobs:
           npm run desktop:audit
           npm test
       - name: Build signed NSIS updater
-        run: cargo tauri build --config src-tauri/tauri.release.conf.json
+        run: npm run desktop:release-build
       - name: Assemble release assets
         id: assets
         shell: pwsh
