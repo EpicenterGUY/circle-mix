@@ -74,5 +74,6 @@ if ($normalized -match $privateHeader) {
 $keyPath = Join-Path $env:RUNNER_TEMP 'circle-mix-updater.key'
 [IO.File]::WriteAllText($keyPath, $keyMaterial, [Text.UTF8Encoding]::new($false))
 "TAURI_SIGNING_PRIVATE_KEY_PATH=$keyPath" >> $env:GITHUB_ENV
+"TAURI_SIGNING_PRIVATE_KEY=$keyPath" >> $env:GITHUB_ENV
 
-Write-Host "Prepared $keyKind at a runner-temporary path; Tauri signer preflight will validate it."
+Write-Host "Prepared $keyKind at a runner-temporary path; Tauri signer preflight and release build will validate it."
