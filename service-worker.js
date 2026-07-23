@@ -1,41 +1,46 @@
-const VERSION = "0.9.30";
+importScripts("./src/version.js");
+const RELEASE = self.CircleMixVersion;
+if(!RELEASE?.version) throw new Error("CIRCLE MIX release metadata is unavailable");
+const VERSION = String(RELEASE.version);
+const CACHE_REVISION = String(RELEASE.cacheRevision || VERSION);
 const CACHE_PREFIX = "circle-mix-v";
-const APP_CACHE = `${CACHE_PREFIX}${VERSION}-app`;
-const MEDIA_CACHE = `${CACHE_PREFIX}${VERSION}-media`;
+const APP_CACHE = `${CACHE_PREFIX}${VERSION}-${CACHE_REVISION}-app`;
+const MEDIA_CACHE = `${CACHE_PREFIX}${VERSION}-${CACHE_REVISION}-media`;
+const versioned = path => `${path}${path.includes("?")?"&":"?"}v=${encodeURIComponent(CACHE_REVISION)}`;
 const APP_SHELL_URLS = [
   "./",
   "./index.html",
   "./editor.html",
-  "./style.css?v=20260721-local-difficulty-930",
+  versioned("./style.css"),
   "./manifest.webmanifest",
   "./icons/circle-mix-icon-192.png",
   "./icons/circle-mix-icon-512.png",
   "./icons/circle-mix-icon-maskable-512.png",
   "./icons/circle-mix-icon.svg",
-  "./src/version.js?v=20260721-local-difficulty-930",
-  "./src/changelog.js?v=20260721-local-difficulty-930",
-  "./src/build-config.js?v=20260721-local-difficulty-930",
-  "./src/song-record.js?v=20260721-local-difficulty-930",
-  "./src/song-package-adapter.js?v=20260721-local-difficulty-930",
-  "./src/charts/ghost-rule.js?v=20260721-local-difficulty-930",
-  "./src/charts/routing.js?v=20260721-local-difficulty-930",
-  "./src/local-library.js?v=20260721-local-difficulty-930",
-  "./src/chart-difficulty.js?v=20260721-local-difficulty-930",
-  "./src/songs.js?v=20260721-local-difficulty-930",
-  "./src/chart.js?v=20260721-local-difficulty-930",
-  "./src/audio.js?v=20260721-local-difficulty-930",
-  "./src/effects.js?v=20260721-local-difficulty-930",
-  "./src/ui.js?v=20260721-local-difficulty-930",
-  "./src/input.js?v=20260721-local-difficulty-930",
-  "./src/game.js?v=20260721-local-difficulty-930",
-  "./src/cmix-validator.js?v=20260721-local-difficulty-930",
-  "./src/cmix-audio.js?v=20260721-local-difficulty-930",
-  "./src/cmix-zip.js?v=20260721-local-difficulty-930",
-  "./src/cmix-exporter.js?v=20260721-local-difficulty-930",
-  "./src/cmix-importer.js?v=20260721-local-difficulty-930",
-  "./src/cmix-local-install.js?v=20260721-local-difficulty-930",
-  "./src/cmix-import-ui.js?v=20260721-local-difficulty-930",
-  "./src/pwa.js?v=20260721-local-difficulty-930"
+  versioned("./src/version.js"),
+  versioned("./src/changelog.js"),
+  versioned("./src/build-config.js"),
+  versioned("./src/song-record.js"),
+  versioned("./src/song-package-adapter.js"),
+  versioned("./src/charts/ghost-rule.js"),
+  versioned("./src/charts/routing.js"),
+  versioned("./src/local-library.js"),
+  versioned("./src/chart-difficulty.js"),
+  versioned("./src/songs.js"),
+  versioned("./src/chart.js"),
+  versioned("./src/audio.js"),
+  versioned("./src/effects.js"),
+  versioned("./src/ui.js"),
+  versioned("./src/input.js"),
+  versioned("./src/game.js"),
+  versioned("./src/cmix-validator.js"),
+  versioned("./src/cmix-audio.js"),
+  versioned("./src/cmix-zip.js"),
+  versioned("./src/cmix-exporter.js"),
+  versioned("./src/cmix-importer.js"),
+  versioned("./src/cmix-local-install.js"),
+  versioned("./src/cmix-import-ui.js"),
+  versioned("./src/pwa.js")
 ];
 // ANiMA uses the #embedded-anima <audio> element. Routing accepts a user-linked
 // local Blob and is deliberately absent here; Ghost Rule uses cached media.
@@ -49,8 +54,7 @@ function cacheNameForUrl(url){ return BUILTIN_OFFLINE_URLS.includes(url) ? MEDIA
 async function putRequired(url, port, done, total){
   const cache = await caches.open(cacheNameForUrl(url));
   const cached = await cache.match(url, {ignoreSearch:false});
-  const refreshDynamicUi=url.includes("cmix-import-ui.js");
-  if(cached?.ok && cached.status === 200 && !refreshDynamicUi) return {ok:true, reused:true};
+  if(cached?.ok && cached.status === 200 && BUILTIN_OFFLINE_URLS.includes(url)) return {ok:true, reused:true};
   const response = await fetch(new Request(url, {cache:"reload"}));
   if(!response.ok || response.status !== 200) return {ok:false, url, status:response.status};
   await cache.put(url, response.clone());
@@ -76,7 +80,7 @@ async function offlineStatus(){
     const response = await cache.match(url, {ignoreSearch:false});
     if(response?.ok && response.status === 200) cachedCount++; else missing.push(url);
   }
-  return {ready:missing.length===0, version:VERSION, requiredCount:REQUIRED_OFFLINE_URLS.length, cachedCount, missing, appCache:APP_CACHE, mediaCache:MEDIA_CACHE};
+  return {ready:missing.length===0, version:VERSION, revision:CACHE_REVISION, requiredCount:REQUIRED_OFFLINE_URLS.length, cachedCount, missing, appCache:APP_CACHE, mediaCache:MEDIA_CACHE};
 }
 async function rangeResponse(request, response){
   const range = request.headers.get("Range");
@@ -97,10 +101,20 @@ async function rangeResponse(request, response){
   headers.set("Content-Length", String(body.byteLength));
   return new Response(body, {status:206, statusText:"Partial Content", headers});
 }
+async function networkFirstStatic(request){
+  const cache = await caches.open(APP_CACHE);
+  try{
+    const response = await fetch(new Request(request, {cache:"no-cache"}));
+    if(response.ok && response.status === 200) await cache.put(request, response.clone());
+    return response;
+  }catch(error){
+    return (await cache.match(request)) || (await cache.match(request, {ignoreSearch:true})) || Response.error();
+  }
+}
 self.addEventListener("install", event=>{ event.waitUntil(cacheRequired().catch(()=>{})); });
 self.addEventListener("activate", event=>{ event.waitUntil((async()=>{ const keys=await caches.keys(); await Promise.all(keys.filter(k=>k.startsWith(CACHE_PREFIX) && ![APP_CACHE,MEDIA_CACHE].includes(k)).map(k=>caches.delete(k))); await self.clients.claim(); })()); });
 function safePost(port, message){ try{ port?.postMessage(message); }catch(error){ console.warn("Offline response postMessage failed", error); } }
-function missingPortStatus(type){ return {type:"OFFLINE_FAILED", failures:[{status:"missing-message-port", requestType:type}], status:{ready:false, version:VERSION, requiredCount:REQUIRED_OFFLINE_URLS.length, cachedCount:0, missing:REQUIRED_OFFLINE_URLS.slice(), appCache:APP_CACHE, mediaCache:MEDIA_CACHE, error:"missing-message-port"}}; }
+function missingPortStatus(type){ return {type:"OFFLINE_FAILED", failures:[{status:"missing-message-port", requestType:type}], status:{ready:false, version:VERSION, revision:CACHE_REVISION, requiredCount:REQUIRED_OFFLINE_URLS.length, cachedCount:0, missing:REQUIRED_OFFLINE_URLS.slice(), appCache:APP_CACHE, mediaCache:MEDIA_CACHE, error:"missing-message-port"}}; }
 self.addEventListener("message", event=>{
   const data=event.data||{};
   const port=event.ports?.[0];
@@ -118,11 +132,10 @@ self.addEventListener("fetch", event=>{
   const request=event.request; if(request.method!=="GET" || !sameOrigin(request) || request.url.startsWith("blob:")) return;
   const url=new URL(request.url); const accept=request.headers.get("accept")||"";
   if(request.mode==="navigate" || accept.includes("text/html")){
-    event.respondWith(fetch(request).then(async response=>{ const cache=await caches.open(APP_CACHE); if(response.ok && response.status===200) cache.put("./index.html", response.clone()); return response; }).catch(async()=> (await caches.match("./index.html")) || (await caches.match("./")) || Response.error())); return;
+    event.respondWith(fetch(new Request(request,{cache:"no-cache"})).then(async response=>{ const cache=await caches.open(APP_CACHE); if(response.ok && response.status===200) await cache.put("./index.html", response.clone()); return response; }).catch(async()=> (await caches.match("./index.html")) || (await caches.match("./")) || Response.error())); return;
   }
   const isStatic=/\.(?:js|css|png|jpg|jpeg|svg|webp|gif|json|webmanifest)$/i.test(url.pathname);
   const isAudio=/\.(?:mp3|ogg|wav|m4a)$/i.test(url.pathname);
-  if(isStatic){ event.respondWith(caches.match(request).then(cached=>cached || fetch(request).then(async response=>{ if(response.ok && response.status===200){ const cache=await caches.open(APP_CACHE); cache.put(request,response.clone()); } return response; }))); return;
-  }
-  if(isAudio){ event.respondWith(caches.open(MEDIA_CACHE).then(cache=>cache.match(request, {ignoreSearch:false}).then(cached=> cached ? rangeResponse(request,cached) : fetch(request).then(async response=>{ if(response.ok && response.status===200) cache.put(request,response.clone()); return response; })))); }
+  if(isStatic){ event.respondWith(networkFirstStatic(request)); return; }
+  if(isAudio){ event.respondWith(caches.open(MEDIA_CACHE).then(cache=>cache.match(request, {ignoreSearch:false}).then(cached=> cached ? rangeResponse(request,cached) : fetch(request).then(async response=>{ if(response.ok && response.status===200) await cache.put(request,response.clone()); return response; })))); }
 });
