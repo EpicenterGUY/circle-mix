@@ -15,4 +15,4 @@ The SLIDE and TRACE judgement rules merged in PR #120 are shared by desktop and 
 
 ## Regression coverage
 
-The mobile browser regression now holds ACTION over multiple frames, moves a second AIM pointer, verifies the ACTION pointer remains active, and checks clean release of the shared hold state.
+The mobile browser regression holds ACTION over multiple frames, moves and releases a second AIM pointer, verifies that the ACTION pointer and shared hold state remain active, and then checks clean ACTION release.
