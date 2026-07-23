@@ -87,7 +87,7 @@
     if(offlineDownloadSession) return;
     if(!navigator.serviceWorker?.controller){ rememberOfflineReady(false); setOfflineState("FAILED"); return; }
     setOfflineState("DOWNLOADING",0);
-    const btn=$("offlineDataBtn"); if(btn){ btn.disabled=true; btn.setAttribute("aria-disabled","false"); }
+    const btn=$("offlineDataBtn"); if(btn){ btn.disabled=true; btn.setAttribute("aria-disabled","true"); }
     const channel=new MessageChannel();
     const session={port1:channel.port1, port2:channel.port2, timeoutId:null};
     offlineDownloadSession=session;
