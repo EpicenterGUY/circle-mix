@@ -18,7 +18,7 @@ setAttribute(){}, removeAttribute(){}, focus(){}, blur(){}, getBoundingClientRec
 }
 function loadGameExports(){
 const src = fs.readFileSync("src/game.js", "utf8");
-const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
+const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n SLIDE_JUDGEMENT_PROFILE, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
 const patched = src.replace(/\r?\n\s*updateModeButtons\(\);\r?\n\s*updateButtons\(\);\r?\n\}\)\(\);\s*$/, `${exportPatch}\n updateModeButtons();\n updateButtons();\n})();`);
 const elements = new Map();
 const document = {
@@ -149,6 +149,50 @@ const n90 = api.buildTutorialStepRuntime(trace90Index).chart[0]; assert.ok(short
 const n180 = api.buildTutorialStepRuntime(trace180Index).chart[0]; assert.ok(shortestDeg(n180.angle*180/Math.PI, n180.endAngle*180/Math.PI) >= 175 && shortestDeg(n180.angle*180/Math.PI, n180.endAngle*180/Math.PI) <= 185);
 const traceSwing = api.buildTutorialStepRuntime(traceSwingIndex); assert.ok(traceSwing.chart.length && traceSwing.chart.every(n=>String(n.type).startsWith("trace"))); assert.equal(traceSwing.step.kind, "traceSwing");
 });
+test("SLIDE judgement profile keeps sustained tracking humanly achievable", () => {
+  assert.equal(api.SLIDE_JUDGEMENT_PROFILE.angleExtra, .025);
+  assert.equal(api.SLIDE_JUDGEMENT_PROFILE.greatHoldRatio, .52);
+  assert.equal(api.SLIDE_JUDGEMENT_PROFILE.perfectHoldRatio, .84);
+  const totalToleranceDeg = 13.5 + api.SLIDE_JUDGEMENT_PROFILE.angleExtra * 180;
+  assert.equal(totalToleranceDeg, 18);
+  const src = fs.readFileSync("src/game.js", "utf8");
+  assert.ok(src.includes("aligned(a,SLIDE_JUDGEMENT_PROFILE.angleExtra)"));
+  assert.ok(src.includes("ratio>=SLIDE_JUDGEMENT_PROFILE.greatHoldRatio"));
+  assert.ok(src.includes("ratio>=SLIDE_JUDGEMENT_PROFILE.perfectHoldRatio"));
+});
+
+test("TRACE endpoint capture remains latched after first valid arrival", () => {
+  const profile = {greatTravelRatio:.85, endpointGreatToleranceDeg:30, endpointPerfectToleranceDeg:15, endpointWindow:.25};
+  const note = {requiredTravel:Math.PI*2,directedTravel:Math.PI*.4,motionTime:.2,minimumMotionTime:.12,endpointCaptured:false,endpointCapturedAt:null,bestEndpointError:Infinity,bestPerfectEndpointTimingError:Infinity};
+  const rad = Math.PI / 180;
+  assert.equal(api.updateTraceEndpointCapture(note, 0, 1, 2, profile), false, "a full-turn TRACE must not capture its shared start/end angle before enough travel");
+  assert.equal(note.endpointCapturedAt, null);
+  assert.equal(note.bestEndpointError, Infinity);
+  note.directedTravel=Math.PI*2*.9;
+  note.motionTime=.5;
+  assert.equal(api.updateTraceEndpointCapture(note, 10 * rad, 1.6, 2, profile), true);
+  assert.equal(note.endpointCapturedAt, 1.6);
+  assert.ok(Math.abs(note.bestEndpointError - 10 * rad) < 1e-12);
+  assert.equal(api.updateTraceEndpointCapture(note, 8 * rad, 1.95, 2, profile), true);
+  assert.equal(note.endpointCapturedAt, 1.6, "the first eligible endpoint arrival stays latched");
+  assert.ok(Math.abs(note.bestEndpointError - 8 * rad) < 1e-12);
+  assert.ok(Math.abs(note.bestPerfectEndpointTimingError - .05) < 1e-12);
+  assert.equal(api.updateTraceEndpointCapture(note, 80 * rad, 2.25, 2, profile), true);
+  assert.equal(note.endpointCapturedAt, 1.6);
+  assert.ok(Math.abs(note.bestEndpointError - 8 * rad) < 1e-12);
+  const judgement = api.traceEndpointJudgement(note, 2, profile);
+  assert.equal(judgement.great, true);
+  assert.equal(judgement.perfect, true);
+  assert.equal(judgement.onTime, true);
+  const missed = api.traceEndpointJudgement({endpointCaptured:false,bestEndpointError:Infinity,bestPerfectEndpointTimingError:Infinity}, 2, profile);
+  assert.equal(missed.great, false);
+  assert.equal(missed.perfect, false);
+  assert.equal(missed.onTime, false);
+  const src = fs.readFileSync("src/game.js", "utf8");
+  assert.ok(!src.includes("n.endpointCaptured=n.endpointError<="));
+  assert.ok(src.includes("const greatEndpoint=endpointJudgement.great"));
+});
+
 test("input mapping and pointer fallback policies stay static", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
 assert.match(src, /e\.code==="KeyA"\)keyA=true/); assert.match(src, /e\.code==="KeyD"\)keyD=true/);

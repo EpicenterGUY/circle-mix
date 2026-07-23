@@ -217,6 +217,12 @@
     normal:{...COMMON_TRACE_PROFILE},
     tutorial:{...COMMON_TRACE_PROFILE}
   };
+  const SLIDE_JUDGEMENT_PROFILE = Object.freeze({
+    // DIAL_ARC_HALF is 13.5 degrees; + .025 PI gives an 18 degree total window.
+    angleExtra:.025,
+    greatHoldRatio:.52,
+    perfectHoldRatio:.84
+  });
   const TRACE_SWING_LINK_MIN = .15;
   const TRACE_SWING_LINK_MAX = .25;
   const BASE_NOTE_WIDTH = 8;
@@ -1928,6 +1934,40 @@
     return {targetAngle:motion.finalAngle,targetRadius:hitR,pointerAngle:judgementAimAngle,pointerRadius:hitR,angleError,radiusError:0,inside:angleError<=profile.endpointGreatToleranceDeg*Math.PI/180,motion};
   }
   function traceProfile(){ return TRACE_PROFILES.normal; }
+  function traceEndpointCaptureEligible(n,profile=traceProfile()){
+    return Number.isFinite(n.requiredTravel)
+      && n.directedTravel>=n.requiredTravel*profile.greatTravelRatio
+      && n.motionTime>=n.minimumMotionTime;
+  }
+  function updateTraceEndpointCapture(n,endpointError,t,end,profile=traceProfile()){
+    n.endpointError=endpointError;
+    if(!traceEndpointCaptureEligible(n,profile)) return n.endpointCaptured;
+    const previousBest=Number.isFinite(n.bestEndpointError)?n.bestEndpointError:Infinity;
+    n.bestEndpointError=Math.min(previousBest,endpointError);
+    const greatTolerance=profile.endpointGreatToleranceDeg*Math.PI/180;
+    const perfectTolerance=profile.endpointPerfectToleranceDeg*Math.PI/180;
+    if(endpointError<=greatTolerance){
+      if(!n.endpointCaptured){
+        n.endpointCaptured=true;
+        n.endpointCapturedAt=t;
+      }
+      if(endpointError<=perfectTolerance){
+        const timingError=Math.abs(t-end);
+        const previousTiming=Number.isFinite(n.bestPerfectEndpointTimingError)?n.bestPerfectEndpointTimingError:Infinity;
+        n.bestPerfectEndpointTimingError=Math.min(previousTiming,timingError);
+      }
+    }
+    return n.endpointCaptured;
+  }
+  function traceEndpointJudgement(n,end,profile=traceProfile()){
+    const best=Number.isFinite(n.bestEndpointError)?n.bestEndpointError:Infinity;
+    const perfectTiming=Number.isFinite(n.bestPerfectEndpointTimingError)?n.bestPerfectEndpointTimingError:Infinity;
+    return {
+      great:n.endpointCaptured===true,
+      perfect:best<=profile.endpointPerfectToleranceDeg*Math.PI/180,
+      onTime:perfectTiming<=profile.endpointWindow
+    };
+  }
   // Kept for diagnostics and guide rendering: TRACE has an angular start gate only.
   function getTraceJudgementRegion(n,t,profile=traceProfile()){
     const targetAngle=traceTargetAngle(n,t), angleError=Math.abs(norm(judgementAimAngle-targetAngle));
@@ -1957,7 +1997,7 @@
     if(!n.startCaptured) return "START MISSED";
     if(n.directedTravel < n.requiredTravel*profile.greatTravelRatio) return "NOT ENOUGH TURN";
     if(n.reverseTravel > Math.min(n.requiredTravel*profile.reverseGreatRatio,profile.maxReverseGreatDeg*Math.PI/180)) return "TOO MUCH REVERSE";
-    if((n.endpointError||Infinity) > profile.endpointGreatToleranceDeg*Math.PI/180) return "ENDPOINT MISSED";
+    if(!n.endpointCaptured) return "ENDPOINT MISSED";
     if(n.motionTime < n.minimumMotionTime) return "TURN TOO INSTANT";
     return "TRACE TIMEOUT";
   }
@@ -1967,7 +2007,7 @@
     if(family === "trace") return traceTolerance(profile);
     if(family === "swing") return {angular:DIAL_ARC_HALF + Math.PI*.12, radial:Math.max(18, hitR*.05), directionCone:Math.PI*.42, minSpeed:SWING_FLICK_SPEED};
     if(family === "scratch") return {angular:DIAL_ARC_HALF + Math.PI*.026, radial:Math.max(18, hitR*.05), directionCone:Math.PI*.34, minSpeed:SCRATCH_FLICK_SPEED};
-    const extra = family === "slide" ? .010 : (family === "hold" ? .020 : .015);
+    const extra = family === "slide" ? SLIDE_JUDGEMENT_PROFILE.angleExtra : (family === "hold" ? .020 : .015);
     return {angular:DIAL_ARC_HALF + Math.PI*extra, radial:Math.max(16, hitR*.045)};
   }
 
@@ -2728,7 +2768,7 @@
 
       if(n.type.startsWith("trace")){
         const end=n.hitTime+n.duration, profile=traceProfile(), motion=resolveTraceMotion(n);
-        if(n.requiredTravel===undefined) Object.assign(n,{requiredTravel:traceRequiredTravel(n),directedTravel:0,reverseTravel:0,progressRatio:0,startCaptured:false,endpointCaptured:false,completionTime:null,failReason:null,motionTime:0,minimumMotionTime:traceMinimumMotionTime(traceRequiredTravel(n),n.duration)});
+        if(n.requiredTravel===undefined) Object.assign(n,{requiredTravel:traceRequiredTravel(n),directedTravel:0,reverseTravel:0,progressRatio:0,startCaptured:false,endpointCaptured:false,endpointCapturedAt:null,bestEndpointError:Infinity,bestPerfectEndpointTimingError:Infinity,completionTime:null,failReason:null,motionTime:0,minimumMotionTime:traceMinimumMotionTime(traceRequiredTravel(n),n.duration)});
         if(t>=n.hitTime && !n.startCaptured && t<=n.hitTime+profile.startGrace){
           const startError=distAng(judgementAimAngle,motion.startAngle);
           if(isAutoActive() || startError<=profile.startToleranceDeg*Math.PI/180){
@@ -2738,21 +2778,22 @@
         if(n.startCaptured && t>=n.hitTime && t<=end+profile.endpointGrace){
           updateTraceTravel(n);
           n.motionTime=t-n.traceStartedAt;
-          n.endpointError=distAng(judgementAimAngle,motion.finalAngle);
-          n.endpointCaptured=n.endpointError<=profile.endpointGreatToleranceDeg*Math.PI/180;
+          const endpointError=distAng(judgementAimAngle,motion.finalAngle);
+          updateTraceEndpointCapture(n,endpointError,t,end,profile);
         }
-        // Evaluation waits until the authored endpoint (or its small grace), so early turns must hold the endpoint.
+        // Evaluation waits until the authored endpoint (or its grace), while an eligible endpoint arrival stays latched.
         if(t>end+profile.endpointGrace){
           const greatTravel=n.directedTravel>=n.requiredTravel*profile.greatTravelRatio;
           const perfectTravel=n.directedTravel>=n.requiredTravel*profile.perfectTravelRatio;
           const greatReverse=n.reverseTravel<=Math.min(n.requiredTravel*profile.reverseGreatRatio,profile.maxReverseGreatDeg*Math.PI/180);
           const perfectReverse=n.reverseTravel<=Math.min(n.requiredTravel*profile.reversePerfectRatio,profile.maxReversePerfectDeg*Math.PI/180);
-          const greatEndpoint=n.endpointError<=profile.endpointGreatToleranceDeg*Math.PI/180;
-          const perfectEndpoint=n.endpointError<=profile.endpointPerfectToleranceDeg*Math.PI/180;
-          const onTime=Math.abs((n.completionTime||end)-end)<=profile.endpointWindow;
+          const endpointJudgement=traceEndpointJudgement(n,end,profile);
+          const greatEndpoint=endpointJudgement.great;
+          const perfectEndpoint=endpointJudgement.perfect;
+          const onTime=endpointJudgement.onTime;
           const passed=n.startCaptured && greatTravel && greatReverse && greatEndpoint && n.motionTime>=n.minimumMotionTime;
           n.completed=passed; n.failReason=passed?null:traceFailureReason(n,profile);
-          if(passed){ const perfect=perfectTravel&&perfectReverse&&perfectEndpoint&&onTime; n.completionTime=t; addWave(motion.finalAngle,COLORS.trace); addRingBurst(COLORS.trace,.42,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"}); }
+          if(passed){ const perfect=perfectTravel&&perfectReverse&&perfectEndpoint&&onTime; n.completionTime=Number.isFinite(n.endpointCapturedAt)?n.endpointCapturedAt:t; addWave(motion.finalAngle,COLORS.trace); addRingBurst(COLORS.trace,.42,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"}); }
           else miss(n,n.failReason);
         }
         continue;
@@ -2806,7 +2847,7 @@
       if(n.type.startsWith("slide")){
         const end=n.hitTime+n.duration;
         const a=slideAngle(n,t);
-        const held=isAutoActive() || (filterHeld&&aligned(a,.010));
+        const held=isAutoActive() || (filterHeld&&aligned(a,SLIDE_JUDGEMENT_PROFILE.angleExtra));
         const color=noteColor(n);
         const isScratch=false;
         if(t>=n.hitTime&&t<=end){
@@ -2818,7 +2859,7 @@
         }
         if(t>end){
           const ratio=n.hold/n.duration;
-          if(ratio>=.58)judge(n,ratio>.88?"PERFECT":"GREAT",color,{source:tutorialState.activeInput||"keyboard",reason:"USER_JUDGEMENT"});
+          if(ratio>=SLIDE_JUDGEMENT_PROFILE.greatHoldRatio)judge(n,ratio>=SLIDE_JUDGEMENT_PROFILE.perfectHoldRatio?"PERFECT":"GREAT",color,{source:tutorialState.activeInput||"keyboard",reason:"USER_JUDGEMENT"});
           else miss(n,filterHeld?"FOLLOW THE CURRENT TARGET":"HOLD THE BUTTON");
         }
         if(t>n.hitTime+.40&&n.hold<.03&&!isAutoActive())miss(n,filterHeld?"FOLLOW THE CURRENT TARGET":"HOLD THE BUTTON");
