@@ -24,31 +24,27 @@ jobs:
           from pathlib import Path
           path = Path("tests/browser-regression.test.js")
           text = path.read_text()
-          old = '''    const releaseMetadata = await page.evaluate(async () => ({
-              version: window.CircleMixVersion?.version,
-              changelogVersion: window.CircleMixChangelog?.[0]?.version,
-              updateLogVisible: (() => { const overlay=document.getElementById('updateLogOverlay'); return !!overlay && !overlay.hidden && overlay.classList.contains('show'); })(),
-              cacheNames: await caches.keys()
-            }));
-            assert.match(releaseMetadata.version || '', /^\\d+\\.\\d+\\.\\d+$/, `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
-            assert.equal(releaseMetadata.changelogVersion, releaseMetadata.version, `latest changelog ${JSON.stringify(releaseMetadata)}`);
-            assert.equal(releaseMetadata.updateLogVisible, true, `new release auto-opens UPDATE LOG ${JSON.stringify(releaseMetadata)}`);
-            assert.ok(releaseMetadata.cacheNames.includes(`circle-mix-v${releaseMetadata.version}-app`), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);'''
-          new = '''    const releaseMetadata = await page.evaluate(async () => ({
-              version: window.CircleMixVersion?.version,
-              cacheRevision: window.CircleMixVersion?.cacheRevision,
-              changelogVersion: window.CircleMixChangelog?.[0]?.version,
-              updateLogVisible: (() => { const overlay=document.getElementById('updateLogOverlay'); return !!overlay && !overlay.hidden && overlay.classList.contains('show'); })(),
-              cacheNames: await caches.keys()
-            }));
-            assert.match(releaseMetadata.version || '', /^\\d+\\.\\d+\\.\\d+$/, `CircleMixVersion ${JSON.stringify(releaseMetadata)}`);
-            assert.ok(releaseMetadata.cacheRevision, `CircleMixVersion cache revision ${JSON.stringify(releaseMetadata)}`);
-            assert.equal(releaseMetadata.changelogVersion, releaseMetadata.version, `latest changelog ${JSON.stringify(releaseMetadata)}`);
-            assert.equal(releaseMetadata.updateLogVisible, true, `new release auto-opens UPDATE LOG ${JSON.stringify(releaseMetadata)}`);
-            assert.ok(releaseMetadata.cacheNames.includes(`circle-mix-v${releaseMetadata.version}-${releaseMetadata.cacheRevision}-app`), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);'''
-          if text.count(old) != 1:
-              raise SystemExit(f"expected one browser cache block, found {text.count(old)}")
-          path.write_text(text.replace(old, new, 1))
+
+          replacements = [
+              (
+                  "      version: window.CircleMixVersion?.version,\n      changelogVersion:",
+                  "      version: window.CircleMixVersion?.version,\n      cacheRevision: window.CircleMixVersion?.cacheRevision,\n      changelogVersion:"
+              ),
+              (
+                  "    assert.equal(releaseMetadata.changelogVersion, releaseMetadata.version, `latest changelog ${JSON.stringify(releaseMetadata)}`);",
+                  "    assert.ok(releaseMetadata.cacheRevision, `CircleMixVersion cache revision ${JSON.stringify(releaseMetadata)}`);\n    assert.equal(releaseMetadata.changelogVersion, releaseMetadata.version, `latest changelog ${JSON.stringify(releaseMetadata)}`);"
+              ),
+              (
+                  "    assert.ok(releaseMetadata.cacheNames.includes(`circle-mix-v${releaseMetadata.version}-app`), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);",
+                  "    assert.ok(releaseMetadata.cacheNames.includes(`circle-mix-v${releaseMetadata.version}-${releaseMetadata.cacheRevision}-app`), `PWA app cache version ${JSON.stringify(releaseMetadata)}`);"
+              )
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one replacement, found {count}: {old!r}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
           PY
           node --check tests/browser-regression.test.js
       - name: Commit patch and remove helper workflow
