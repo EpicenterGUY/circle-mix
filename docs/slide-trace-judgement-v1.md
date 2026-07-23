@@ -18,4 +18,4 @@ This pass follows the PC aim-input rebuild and changes judgement only. Rendering
 
 ## Regression coverage
 
-Smoke tests verify the SLIDE profile and exercise TRACE endpoint capture, post-capture drift, best-error preservation, timing and uncaptured failure.
+Smoke tests verify the SLIDE profile and exercise TRACE travel eligibility, full-turn start/end alias rejection, endpoint capture, post-capture drift, best-error preservation, timing and uncaptured failure.
