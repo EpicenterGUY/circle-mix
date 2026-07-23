@@ -1,0 +1,269 @@
+
+> test
+> node --check src/chart-difficulty.js && node --check src/build-config.js && node --check src/song-record.js && node --check src/song-package-adapter.js && node --check src/local-library.js && node --check src/player-profile.js && node --check src/player-profile-ui.js && node --check src/input.js && node --check src/game.js && node --check src/version.js && node --check src/changelog.js && node --check src/pwa.js && node --check src/desktop-updater.js && node --check src/cmix-validator.js && node --check src/cmix-zip.js && node --check src/cmix-audio.js && node --check src/cmix-exporter.js && node --check src/cmix-importer.js && node --check src/cmix-import-ui.js && node --check src/cmix-local-install.js && node --check src/editor.js && node --check service-worker.js && node tests/smoke.test.js && node tests/song-record.test.js && node tests/local-library.test.js && node tests/player-profile.test.js && node tests/pulse-input.test.js && node tests/pulse-game-input.test.js && node tests/cmix-validator.test.js && node tests/cmix-importer.test.js && node tests/cmix-exporter.test.js && node tests/chart-difficulty.test.js && node tests/local-auto-toggle.test.js && node tests/desktop-installer.test.js && node tests/desktop-updater.test.js
+
+PASS version.js and changelog latest version match
+PASS ANiMA NORMAL/TECH charts generate valid runtime notes
+PASS tutorial TRACE regression invariants
+FAIL SLIDE judgement profile keeps sustained tracking humanly achievable
+/home/runner/work/circle-mix/circle-mix/tests/smoke.test.js:6
+catch(error){ console.error(`FAIL ${name}`); throw error; }
+                                             ^
+
+AssertionError [ERR_ASSERTION]: The input did not match the regular expression /aligned(a,SLIDE_JUDGEMENT_PROFILE.angleExtra)/. Input:
+
+'(() => {\n' +
+  '  function ensurePulseUi(){\n' +
+  '    const controls=document.querySelector(".mobileGameplayControls");\n' +
+  '    if(controls&&!document.getElementById("mobilePulseBtn")){ const button=document.createElement("button"); button.className="mobilePulseBtn mobilePlayBtn"; button.id="mobilePulseBtn"; button.type="button"; button.setAttribute("aria-label","Tap pulse"); button.textContent="PULSE"; controls.prepend(button); }\n' +
+  '    const scratchEditor=document.getElementById("addScratchCWBtn");\n' +
+  '    if(scratchEditor&&!document.getElementById("addPulseBtn")){ const button=document.createElement("button"); button.className="editBtn editFull"; button.id="addPulseBtn"; button.type="button"; button.textContent="PULSE (SHIFT)"; scratchEditor.parentElement?.insertBefore(button,scratchEditor); }\n' +
+  '    const hint=document.querySelector("#editorPanel .editorHint");\n' +
+  '    if(hint) hint.textContent="현재 음악 위치에 노트 찍기. PULSE는 각도 없이 Shift로 치는 전역 탭이며, SCRATCH는 레거시 우클릭 방향 액션입니다.";\n' +
+  '    const keyGrid=document.querySelector("#keymapOverlay .keyGrid");\n' +
+  `    if(keyGrid&&!keyGrid.querySelector('[data-pulse-keymap="true"]')){ const cells=["PULSE",'<span class="kbd">L Shift</span> / <span class="kbd">R Shift</span> 탭',"에임과 무관한 전역 리듬 링. 다음 입력 전 양쪽 Shift를 모두 놓아야 함"]; for(const html of cells){ const cell=document.createElement("div"); cell.className="keyCell"; cell.dataset.pulseKeymap="true"; cell.innerHTML=html; keyGrid.append(cell); } }\n` +
+  '  }\n' +
+  '  ensurePulseUi();\n' +
+  '  const song = document.getElementById("song");\n' +
+  '  const embeddedAnimaSrc = (song && typeof song.getAttribute === "function") ? (song.getAttribute("src") || "") : (song?.src || "");\n' +
+  '  const canvas = document.getElementById("game");\n' +
+  '  const gameRoot = document.getElementById("gameRoot") || document.documentElement;\n' +
+  '  const fullscreenTarget = document.documentElement;\n' +
+  '  const ctx = canvas.getContext("2d");\n' +
+  '  const scoreBox = document.getElementById("scoreBox");\n' +
+  '  const comboBox = document.getElementById("comboBox");\n' +
+  '  const accuracyBox = document.getElementById("accuracyBox");\n' +
+  '  const autoBox = document.getElementById("autoBox");\n' +
+  '  const mapBox = document.getElementById("mapBox");\n' +
+  '  const autoToggle = document.getElementById("autoToggle");\n' +
+  '  const mapToggle = document.getElementById("mapToggle");\n' +
+  '  const debugToggle = document.getElementById("debugToggle");\n' +
+  '  const keymapToggle = document.getElementById("keymapToggle");\n' +
+  '  const keymapOverlay = document.getElementById("keymapOverlay");\n' +
+  '  const closeKeymap = document.getElementById("closeKeymap");\n' +
+  '  const startLayer = document.getElementById("startLayer");\n' +
+  '  const startBtn = document.getElementById("startBtn");\n' +
+  '  const editorStartBtn=document.getElementById("editorStartBtn"), startFullBtn=document.getElementById("startFullBtn");\n' +
+  '  const editorToggle=document.getElementById("editorToggle"), fullToggle=document.getElementById("fullToggle");\n' +
+  '  const editorPanel=document.getElementById("editorPanel"), laneGrid=document.getElementById("laneGrid");\n' +
+  '  const addCutBtn=document.getElementById("addCutBtn"), addSwingCWBtn=document.getElementById("addSwingCWBtn"), addSwingCCWBtn=document.getElementById("addSwingCCWBtn"), addFxBtn=document.getElementById("addFxBtn"), addSlideCWBtn=document.getElementById("addSlideCWBtn"), addSlideCCWBtn=document.getElementById("addSlideCCWBtn"), addPulseBtn=document.getElementById("addPulseBtn"), addScratchCWBtn=document.getElementById("addScratchCWBtn"), addScratchCCWBtn=document.getElementById("addScratchCCWBtn");\n' +
+  '  const seekBackBtn=document.getElementById("seekBackBtn"), seekFwdBtn=document.getElementById("seekFwdBtn"), playPauseBtn=document.getElementById("playPauseBtn"), deleteLastBtn=document.getElementById("deleteLastBtn");\n' +
+  '  const exportBtn=document.getElementById("exportBtn"), importBtn=document.getElementById("importBtn"), clearChartBtn=document.getElementById("clearChartBtn"), editorStatus=document.getElementById("editorStatus"), chartText=document.getElementById("chartText");\n' +
+  '  const angleSnapSelect=document.getElementById("angleSnapSelect"), editorAngleInput=document.getElementById("editorAngleInput");\n' +
+  '  const speedDown = document.getElementById("speedDown");\n' +
+  '  const speedUp = document.getElementById("speedUp");\n' +
+  '  const offsetDown = document.getElementById("offsetDown");\n' +
+  '  const offsetUp = document.getElementById("offsetUp");\n' +
+  '  const speedValue = document.getElementById("speedValue");\n' +
+  '  const offsetValue = document.getElementById("offsetValue");\n' +
+  '  const sfxDown = document.getElementById("sfxDown");\n' +
+  '  const sfxUp = document.getElementById("sfxUp");\n' +
+  '  const sfxValue = document.getElementById("sfxValue");\n' +
+  '  const musicDown = document.getElementById("musicDown");\n' +
+  '  const musicUp = document.getElementById("musicUp");\n' +
+  '  const musicValue = document.getElementById("musicValue");\n' +
+  '  const difficultyBox = document.getElementById("difficultyBox");\n' +
+  '  const debugParams = new URLSearchParams(window.location.search);\n' +
+  '  const debugMode = debugParams.get("debug")==="1";\n' +
+  '  const mobileDebug = debugParams.get("pwaDebug")==="1" || debugParams.get("mobileDebug")==="1";\n' +
+  '  const audioDebugStats = {play:0,pause:0,load:0,currentTimeSet:0,previewStart:0,previewStop:0};\n' +
+  '  let mobileAudioDebugPanel=null, mobileAudioDebugLastPaint=0;\n' +
+  '  document.body.classList.toggle("debugMode", debugMode);\n' +
+  '  function setSongCurrentTime(value, source="unknown"){ audioDebugStats.currentTimeSet++; if(mobileDebug) console.log(`[AudioDebug] currentTime=${value} source=${source}`); song.currentTime=value; }\n' +
+  '  function playSong(source="unknown"){ audioDebugStats.play++; if(mobileDebug) console.log(`[AudioDebug] play source=${source}`); return song.play(); }\n' +
+  '  function pauseSong(source="unknown"){ audioDebugStats.pause++; if(mobileDebug) console.log(`[AudioDebug] pause source=${source}`); return song.pause(); }\n' +
+  '  function loadSong(source="unknown"){ audioDebugStats.load++; if(mobileDebug) console.log(`[AudioDebug] load source=${source}`); return song.load(); }\n' +
+  '  const modeNormalStar = document.getElementById("modeNormalStar");\n' +
+  '  const modeTechStar = document.getElementById("modeTechStar");\n' +
+  '  const modeNormalBtn = document.getElementById("modeNormalBtn");\n' +
+  '  const modeTechBtn = document.getElementById("modeTechBtn");\n' +
+  '  const modeCustomBtn = document.getElementById("modeCustomBtn");\n' +
+  '  const pauseOverlay = document.getElementById("pauseOverlay");\n' +
+  '  const pauseResume = document.getElementById("resumeBtn");\n' +
+  '  const pauseRetry = document.getElementById("retryBtn");\n' +
+  '  const pauseMenu = document.getElementById("exitBtn");\n' +
+  '  const mobilePauseBtn = document.getElementById("mobilePauseBtn");\n' +
+  '  const settingsBtn = document.getElementById("settingsBtn");\n' +
+  '  const enterFullscreenBtn = document.getElementById("enterFullscreenBtn");\n' +
+  '  const fullscreenRetryBtn = document.getElementById("fullscreenRetryBtn");\n' +
+  '  const pauseMessage = document.getElementById("pauseMessage");\n' +
+  '  const pauseSettingsOverlay = document.getElementById("pauseSettingsOverlay");\n' +
+  '  const pauseSettingsBack = document.getElementById("pauseSettingsBack");\n' +
+  '  const pauseSetSpdDown = document.getElementById("pauseSetSpdDown");\n' +
+  '  const pauseSetSpdUp = document.getElementById("pauseSetSpdUp");\n' +
+  '  const pauseSetOffDown = document.getElementById("pauseSetOffDown");\n' +
+  '  const pauseSetOffUp = document.getElementById("pauseSetOffUp");\n' +
+  '  const pauseSetMusic = document.getElementById("pauseSetMusic");\n' +
+  '  const pauseSetSfx = document.getElementById("pauseSetSfx");\n' +
+  '  const pauseSetAuto = document.getElementById("pauseSetAuto");\n' +
+  '  const pauseSetFull = document.getElementById("pauseSetFull");\n' +
+  '  const pauseSetNoteContrast = document.getElementById("pauseSetNoteContrast");\n' +
+  '  const pauseSetPathBrightness = document.getElementById("pauseSetPathBrightness");\n' +
+  '  const pauseSetEffectIntensity = document.getElementById("pauseSetEffectIntensity");\n' +
+  '  const pauseSetJudgeGuide = document.getElementById("pauseSetJudgeGuide");\n' +
+  '  const pauseSetAimStabilizer = document.getElementById("pauseSetAimStabilizer");\n' +
+  '  const pauseSetAimVisual = document.getElementById("pauseSetAimVisual");\n' +
+  '  const pauseSetVisualResponse = document.getElementById("pauseSetVisualResponse");\n' +
+  '  const pauseSetPcAim = document.getElementById("pauseSetPcAim");\n' +
+  '  const pauseSetLockedSensitivity = document.getElementById("pauseSetLockedSensitivity");\n' +
+  '  const pauseSetMobileQuality = document.getElementById("pauseSetMobileQuality");\n' +
+  '  const pauseSetHaptic = document.getElementById("pauseSetHaptic");\n' +
+  '  const mobileActionBtn = document.getElementById("mobileActionBtn");\n' +
+  '  const mobilePulseBtn = document.getElementById("mobilePulseBtn");\n' +
+  '  const mobileScratchBtn = document.getElementById("mobileScratchBtn");\n' +
+  '  const pauseSetMobileLayout = document.getElementById("pauseSetMobileLayout");\n' +
+  '  const pauseSetMobileInputTest = document.getElementById("pauseSetMobileInputTest");\n' +
+  '  const pauseSetMobileExport = document.getElementById("pauseSetMobileExport");\n' +
+  '  const pauseSetMobileReset = document.getElementById("pauseSetMobileReset");\n' +
+  '  const mobileLayoutOverlay = document.getElementById("mobileLayoutOverlay");\n' +
+  '  const mobileLayoutPreview = document.getElementById("mobileLayoutPreview");\n' +
+  '  const mobileLayoutAction = document.getElementById("mobileLayoutAction");\n' +
+  '  const mobileLayoutScratch = document.getElementById("mobileLayoutScratch");\n' +
+  '  const mobileLayoutWarning = document.getElementById("mobileLayoutWarning");\n' +
+  '  const mobileLayoutCoord = document.getElementById("mobileLayoutCoord");\n' +
+  '  const mobileLayoutResolution = document.getElementById("mobileLayoutResolution");\n' +
+  '  const mobileLayoutExport = document.getElementById("mobileLayoutExport");\n' +
+  '  const mobileSafeArea = document.getElementById("mobileSafeArea");\n' +
+  '  const mobileJudgeGhost = document.getElementById("mobileJudgeGhost");\n' +
+  '  const mobileInputTestOverlay = document.getElementById("mobileInputTestOverlay");\n' +
+  '  const mobileInputTestCanvas = document.getElementById("mobileInputTestCanvas");\n' +
+  '  const mobileInputTestStats = document.getElementById("mobileInputTestStats");\n' +
+  '  const mobileInputTestSteps = document.getElementById("mobileInputTestSteps");\n' +
+  '  const'... 336661 more characters
+
+    at /home/runner/work/circle-mix/circle-mix/tests/smoke.test.js:159:10
+    at test (/home/runner/work/circle-mix/circle-mix/tests/smoke.test.js:5:6)
+    at Object.<anonymous> (/home/runner/work/circle-mix/circle-mix/tests/smoke.test.js:152:1)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+    at node:internal/main/run_main_module:36:49 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: '(() => {\n' +
+    '  function ensurePulseUi(){\n' +
+    '    const controls=document.querySelector(".mobileGameplayControls");\n' +
+    '    if(controls&&!document.getElementById("mobilePulseBtn")){ const button=document.createElement("button"); button.className="mobilePulseBtn mobilePlayBtn"; button.id="mobilePulseBtn"; button.type="button"; button.setAttribute("aria-label","Tap pulse"); button.textContent="PULSE"; controls.prepend(button); }\n' +
+    '    const scratchEditor=document.getElementById("addScratchCWBtn");\n' +
+    '    if(scratchEditor&&!document.getElementById("addPulseBtn")){ const button=document.createElement("button"); button.className="editBtn editFull"; button.id="addPulseBtn"; button.type="button"; button.textContent="PULSE (SHIFT)"; scratchEditor.parentElement?.insertBefore(button,scratchEditor); }\n' +
+    '    const hint=document.querySelector("#editorPanel .editorHint");\n' +
+    '    if(hint) hint.textContent="현재 음악 위치에 노트 찍기. PULSE는 각도 없이 Shift로 치는 전역 탭이며, SCRATCH는 레거시 우클릭 방향 액션입니다.";\n' +
+    '    const keyGrid=document.querySelector("#keymapOverlay .keyGrid");\n' +
+    `    if(keyGrid&&!keyGrid.querySelector('[data-pulse-keymap="true"]')){ const cells=["PULSE",'<span class="kbd">L Shift</span> / <span class="kbd">R Shift</span> 탭',"에임과 무관한 전역 리듬 링. 다음 입력 전 양쪽 Shift를 모두 놓아야 함"]; for(const html of cells){ const cell=document.createElement("div"); cell.className="keyCell"; cell.dataset.pulseKeymap="true"; cell.innerHTML=html; keyGrid.append(cell); } }\n` +
+    '  }\n' +
+    '  ensurePulseUi();\n' +
+    '  const song = document.getElementById("song");\n' +
+    '  const embeddedAnimaSrc = (song && typeof song.getAttribute === "function") ? (song.getAttribute("src") || "") : (song?.src || "");\n' +
+    '  const canvas = document.getElementById("game");\n' +
+    '  const gameRoot = document.getElementById("gameRoot") || document.documentElement;\n' +
+    '  const fullscreenTarget = document.documentElement;\n' +
+    '  const ctx = canvas.getContext("2d");\n' +
+    '  const scoreBox = document.getElementById("scoreBox");\n' +
+    '  const comboBox = document.getElementById("comboBox");\n' +
+    '  const accuracyBox = document.getElementById("accuracyBox");\n' +
+    '  const autoBox = document.getElementById("autoBox");\n' +
+    '  const mapBox = document.getElementById("mapBox");\n' +
+    '  const autoToggle = document.getElementById("autoToggle");\n' +
+    '  const mapToggle = document.getElementById("mapToggle");\n' +
+    '  const debugToggle = document.getElementById("debugToggle");\n' +
+    '  const keymapToggle = document.getElementById("keymapToggle");\n' +
+    '  const keymapOverlay = document.getElementById("keymapOverlay");\n' +
+    '  const closeKeymap = document.getElementById("closeKeymap");\n' +
+    '  const startLayer = document.getElementById("startLayer");\n' +
+    '  const startBtn = document.getElementById("startBtn");\n' +
+    '  const editorStartBtn=document.getElementById("editorStartBtn"), startFullBtn=document.getElementById("startFullBtn");\n' +
+    '  const editorToggle=document.getElementById("editorToggle"), fullToggle=document.getElementById("fullToggle");\n' +
+    '  const editorPanel=document.getElementById("editorPanel"), laneGrid=document.getElementById("laneGrid");\n' +
+    '  const addCutBtn=document.getElementById("addCutBtn"), addSwingCWBtn=document.getElementById("addSwingCWBtn"), addSwingCCWBtn=document.getElementById("addSwingCCWBtn"), addFxBtn=document.getElementById("addFxBtn"), addSlideCWBtn=document.getElementById("addSlideCWBtn"), addSlideCCWBtn=document.getElementById("addSlideCCWBtn"), addPulseBtn=document.getElementById("addPulseBtn"), addScratchCWBtn=document.getElementById("addScratchCWBtn"), addScratchCCWBtn=document.getElementById("addScratchCCWBtn");\n' +
+    '  const seekBackBtn=document.getElementById("seekBackBtn"), seekFwdBtn=document.getElementById("seekFwdBtn"), playPauseBtn=document.getElementById("playPauseBtn"), deleteLastBtn=document.getElementById("deleteLastBtn");\n' +
+    '  const exportBtn=document.getElementById("exportBtn"), importBtn=document.getElementById("importBtn"), clearChartBtn=document.getElementById("clearChartBtn"), editorStatus=document.getElementById("editorStatus"), chartText=document.getElementById("chartText");\n' +
+    '  const angleSnapSelect=document.getElementById("angleSnapSelect"), editorAngleInput=document.getElementById("editorAngleInput");\n' +
+    '  const speedDown = document.getElementById("speedDown");\n' +
+    '  const speedUp = document.getElementById("speedUp");\n' +
+    '  const offsetDown = document.getElementById("offsetDown");\n' +
+    '  const offsetUp = document.getElementById("offsetUp");\n' +
+    '  const speedValue = document.getElementById("speedValue");\n' +
+    '  const offsetValue = document.getElementById("offsetValue");\n' +
+    '  const sfxDown = document.getElementById("sfxDown");\n' +
+    '  const sfxUp = document.getElementById("sfxUp");\n' +
+    '  const sfxValue = document.getElementById("sfxValue");\n' +
+    '  const musicDown = document.getElementById("musicDown");\n' +
+    '  const musicUp = document.getElementById("musicUp");\n' +
+    '  const musicValue = document.getElementById("musicValue");\n' +
+    '  const difficultyBox = document.getElementById("difficultyBox");\n' +
+    '  const debugParams = new URLSearchParams(window.location.search);\n' +
+    '  const debugMode = debugParams.get("debug")==="1";\n' +
+    '  const mobileDebug = debugParams.get("pwaDebug")==="1" || debugParams.get("mobileDebug")==="1";\n' +
+    '  const audioDebugStats = {play:0,pause:0,load:0,currentTimeSet:0,previewStart:0,previewStop:0};\n' +
+    '  let mobileAudioDebugPanel=null, mobileAudioDebugLastPaint=0;\n' +
+    '  document.body.classList.toggle("debugMode", debugMode);\n' +
+    '  function setSongCurrentTime(value, source="unknown"){ audioDebugStats.currentTimeSet++; if(mobileDebug) console.log(`[AudioDebug] currentTime=${value} source=${source}`); song.currentTime=value; }\n' +
+    '  function playSong(source="unknown"){ audioDebugStats.play++; if(mobileDebug) console.log(`[AudioDebug] play source=${source}`); return song.play(); }\n' +
+    '  function pauseSong(source="unknown"){ audioDebugStats.pause++; if(mobileDebug) console.log(`[AudioDebug] pause source=${source}`); return song.pause(); }\n' +
+    '  function loadSong(source="unknown"){ audioDebugStats.load++; if(mobileDebug) console.log(`[AudioDebug] load source=${source}`); return song.load(); }\n' +
+    '  const modeNormalStar = document.getElementById("modeNormalStar");\n' +
+    '  const modeTechStar = document.getElementById("modeTechStar");\n' +
+    '  const modeNormalBtn = document.getElementById("modeNormalBtn");\n' +
+    '  const modeTechBtn = document.getElementById("modeTechBtn");\n' +
+    '  const modeCustomBtn = document.getElementById("modeCustomBtn");\n' +
+    '  const pauseOverlay = document.getElementById("pauseOverlay");\n' +
+    '  const pauseResume = document.getElementById("resumeBtn");\n' +
+    '  const pauseRetry = document.getElementById("retryBtn");\n' +
+    '  const pauseMenu = document.getElementById("exitBtn");\n' +
+    '  const mobilePauseBtn = document.getElementById("mobilePauseBtn");\n' +
+    '  const settingsBtn = document.getElementById("settingsBtn");\n' +
+    '  const enterFullscreenBtn = document.getElementById("enterFullscreenBtn");\n' +
+    '  const fullscreenRetryBtn = document.getElementById("fullscreenRetryBtn");\n' +
+    '  const pauseMessage = document.getElementById("pauseMessage");\n' +
+    '  const pauseSettingsOverlay = document.getElementById("pauseSettingsOverlay");\n' +
+    '  const pauseSettingsBack = document.getElementById("pauseSettingsBack");\n' +
+    '  const pauseSetSpdDown = document.getElementById("pauseSetSpdDown");\n' +
+    '  const pauseSetSpdUp = document.getElementById("pauseSetSpdUp");\n' +
+    '  const pauseSetOffDown = document.getElementById("pauseSetOffDown");\n' +
+    '  const pauseSetOffUp = document.getElementById("pauseSetOffUp");\n' +
+    '  const pauseSetMusic = document.getElementById("pauseSetMusic");\n' +
+    '  const pauseSetSfx = document.getElementById("pauseSetSfx");\n' +
+    '  const pauseSetAuto = document.getElementById("pauseSetAuto");\n' +
+    '  const pauseSetFull = document.getElementById("pauseSetFull");\n' +
+    '  const pauseSetNoteContrast = document.getElementById("pauseSetNoteContrast");\n' +
+    '  const pauseSetPathBrightness = document.getElementById("pauseSetPathBrightness");\n' +
+    '  const pauseSetEffectIntensity = document.getElementById("pauseSetEffectIntensity");\n' +
+    '  const pauseSetJudgeGuide = document.getElementById("pauseSetJudgeGuide");\n' +
+    '  const pauseSetAimStabilizer = document.getElementById("pauseSetAimStabilizer");\n' +
+    '  const pauseSetAimVisual = document.getElementById("pauseSetAimVisual");\n' +
+    '  const pauseSetVisualResponse = document.getElementById("pauseSetVisualResponse");\n' +
+    '  const pauseSetPcAim = document.getElementById("pauseSetPcAim");\n' +
+    '  const pauseSetLockedSensitivity = document.getElementById("pauseSetLockedSensitivity");\n' +
+    '  const pauseSetMobileQuality = document.getElementById("pauseSetMobileQuality");\n' +
+    '  const pauseSetHaptic = document.getElementById("pauseSetHaptic");\n' +
+    '  const mobileActionBtn = document.getElementById("mobileActionBtn");\n' +
+    '  const mobilePulseBtn = document.getElementById("mobilePulseBtn");\n' +
+    '  const mobileScratchBtn = document.getElementById("mobileScratchBtn");\n' +
+    '  const pauseSetMobileLayout = document.getElementById("pauseSetMobileLayout");\n' +
+    '  const pauseSetMobileInputTest = document.getElementById("pauseSetMobileInputTest");\n' +
+    '  const pauseSetMobileExport = document.getElementById("pauseSetMobileExport");\n' +
+    '  const pauseSetMobileReset = document.getElementById("pauseSetMobileReset");\n' +
+    '  const mobileLayoutOverlay = document.getElementById("mobileLayoutOverlay");\n' +
+    '  const mobileLayoutPreview = document.getElementById("mobileLayoutPreview");\n' +
+    '  const mobileLayoutAction = document.getElementById("mobileLayoutAction");\n' +
+    '  const mobileLayoutScratch = document.getElementById("mobileLayoutScratch");\n' +
+    '  const mobileLayoutWarning = document.getElementById("mobileLayoutWarning");\n' +
+    '  const mobileLayoutCoord = document.getElementById("mobileLayoutCoord");\n' +
+    '  const mobileLayoutResolution = document.getElementById("mobileLayoutResolution");\n' +
+    '  const mobileLayoutExport = document.getElementById("mobileLayoutExport");\n' +
+    '  const mobileSafeArea = document.getElementById("mobileSafeArea");\n' +
+    '  const mobileJudgeGhost = document.getElementById("mobileJudgeGhost");\n' +
+    '  const mobileInputTestOverlay = document.getElementById("mobileInputTestOverlay");\n' +
+    '  const mobileInputTestCanvas = document.getElementById("mobileInputTestCanvas");\n' +
+    '  const mobileInputTestStats = document.getElementById("mobileInputTestStats");\n' +
+    '  const mobileInputTestSteps = document.getElementById("mobileInputTestSteps");\n' +
+    '  const'... 336661 more characters,
+  expected: /aligned(a,SLIDE_JUDGEMENT_PROFILE.angleExtra)/,
+  operator: 'match',
+  diff: 'simple'
+}
+
+Node.js v22.23.1
