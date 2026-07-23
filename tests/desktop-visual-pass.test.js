@@ -4,7 +4,8 @@ const fs=require('node:fs');
 const path=require('node:path');
 const applyDesktopVisualPass=require('../scripts/desktop-visual-pass.js');
 
-const game=fs.readFileSync(path.resolve(__dirname,'../src/game.js'),'utf8');
+// Match prepare-desktop.js: GitHub's Windows checkout can expose CRLF source.
+const game=fs.readFileSync(path.resolve(__dirname,'../src/game.js'),'utf8').replace(/\r\n/g,'\n');
 const palette=game.match(/const COLORS = \{[\s\S]*?\n  \};/)?.[0] || '';
 const color=name=>palette.match(new RegExp(`\\b${name}:"(#[0-9a-fA-F]{6})"`))?.[1];
 
