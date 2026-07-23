@@ -2,7 +2,7 @@
 'use strict';
 const fs=require('fs'), path=require('path');
 const root=path.resolve(__dirname,'..'), out=path.join(root,'desktop-dist');
-const DESKTOP_VERSION='0.9.35';
+const DESKTOP_VERSION='0.9.36';
 const DESKTOP_BUILD_DATE='2026-07-23';
 const files=['style.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
@@ -59,9 +59,38 @@ const desktopSongs=path.join(out,'src/songs.js');
 let songs=fs.readFileSync(desktopSongs,'utf8');
 songs=songs.replaceAll('CircleMixGhostRuleBundle','ExcludedBundle').replaceAll('CircleMixRoutingBundle','ExcludedBundle').replaceAll('./assets/audio/ghost-rule.mp3','').replaceAll('./assets/jackets/ghost-rule.jpg','');
 fs.writeFileSync(desktopSongs,songs);
-const desktopRelease=`(function(){\n  "use strict";\n  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"PC AIM INPUT V1",summary:"PC 마우스 판정 에임을 포인터 이벤트에 직접 연결하고 큰 각도 이동과 빠른 원형 움직임의 지연을 줄였습니다.",changes:[\n    {category:"DIRECT",text:"AIM STABILIZER OFF는 중앙의 1~2px 특이점 외에는 포인터 각도를 즉시 판정에 사용합니다."},\n    {category:"STABILIZER",text:"LOW와 MEDIUM도 다음 화면 프레임을 기다리지 않고 포인터 이벤트 안에서 판정 에임을 갱신합니다."},\n    {category:"JUMP",text:"큰 각도 점프와 빠른 이동은 보정과 시각 스무딩을 우회해 즉시 목표 각도에 도달합니다."},\n    {category:"SYMMETRY",text:"시계·반시계 이동 모두 같은 속도 기준으로 자석 보정이 해제됩니다."},\n    {category:"UPDATER",text:"0.9.34에서 도입한 서명된 Windows 자동 업데이트 기능을 유지합니다."}\n  ]};\n  window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});\n  const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];\n  window.CircleMixChangelog=[release,...previous.filter(entry=>entry?.version!==release.version)];\n})();\n`;
+const desktopRelease=`(function(){
+  "use strict";
+  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"MOBILE LANDSCAPE + WINDOWS FIX",summary:"폴더블과 모바일 가로화면 대응을 강화하고 Windows 설치판의 빌드 및 업데이트 경로를 안정화했습니다.",changes:[
+    {category:"FOLD",text:"접힌 화면과 펼친 화면의 크기 변화를 감지해 캔버스와 모바일 조작 UI를 다시 배치합니다."},
+    {category:"LANDSCAPE",text:"PWA와 전체화면에서 가로 고정을 다시 시도하며, 차단될 때는 한 번 눌러 전환하는 버튼을 표시합니다."},
+    {category:"VISUAL",text:"PULSE와 CUT의 공통 주황색 가독성을 유지하면서 SWING CCW와의 색상 구분을 검증합니다."},
+    {category:"WINDOWS",text:"데스크톱 시각 변환을 반복 실행 가능하게 만들고 Windows 줄바꿈 환경의 회귀 테스트를 보강했습니다."},
+    {category:"UPDATER",text:"서명된 Windows 업데이트로 0.9.35 설치판에서 0.9.36을 직접 내려받아 설치할 수 있습니다."}
+  ]};
+  window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
+  const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];
+  window.CircleMixChangelog=[release,...previous.filter(entry=>entry?.version!==release.version)];
+})();
+`;
 fs.writeFileSync(path.join(out,'src/desktop-release.js'),desktopRelease);
-const desktopPwa=`(function(){\n  "use strict";\n  const $=id=>document.getElementById(id);\n  const setText=(id,text)=>{const el=$(id);if(el)el.textContent=text;};\n  function syncDesktopOfflineUi(){\n    setText("pwaNetworkState","DESKTOP · READY");\n    setText("offlineDataStatus","READY");\n    setText("offlineDataProgress","100%");\n    const offlineBtn=$("offlineDataBtn");\n    if(offlineBtn){offlineBtn.disabled=true;offlineBtn.setAttribute("aria-disabled","true");offlineBtn.title="Windows 설치판의 앱 데이터는 이미 로컬에 설치되어 있습니다.";}\n    const installBtn=$("installAppBtn");if(installBtn)installBtn.hidden=true;\n    const updateRow=$("pwaUpdateRow");if(updateRow)updateRow.hidden=true;\n  }\n  window.CircleMixPWA=Object.freeze({setGameplayState(){},canApplyUpdate(){return true;},isOfflineDownloadActive(){return false;},isDesktopOfflineReady(){return true;}});\n  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",syncDesktopOfflineUi,{once:true});else syncDesktopOfflineUi();\n})();\n`;
+const desktopPwa=`(function(){
+  "use strict";
+  const $=id=>document.getElementById(id);
+  const setText=(id,text)=>{const el=$(id);if(el)el.textContent=text;};
+  function syncDesktopOfflineUi(){
+    setText("pwaNetworkState","DESKTOP · READY");
+    setText("offlineDataStatus","READY");
+    setText("offlineDataProgress","100%");
+    const offlineBtn=$("offlineDataBtn");
+    if(offlineBtn){offlineBtn.disabled=true;offlineBtn.setAttribute("aria-disabled","true");offlineBtn.title="Windows 설치판의 앱 데이터는 이미 로컬에 설치되어 있습니다.";}
+    const installBtn=$("installAppBtn");if(installBtn)installBtn.hidden=true;
+    const updateRow=$("pwaUpdateRow");if(updateRow)updateRow.hidden=true;
+  }
+  window.CircleMixPWA=Object.freeze({setGameplayState(){},canApplyUpdate(){return true;},isOfflineDownloadActive(){return false;},isDesktopOfflineReady(){return true;}});
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",syncDesktopOfflineUi,{once:true});else syncDesktopOfflineUi();
+})();
+`;
 fs.writeFileSync(path.join(out,'src/pwa.js'),desktopPwa);
 fs.writeFileSync(path.join(out,'src/build-config.js'),`window.CircleMixBuildConfig=Object.freeze({target:'desktop',includeBundledSongs:false,enableServiceWorker:false,enablePwaInstallUi:false,enableSignedUpdater:true});\n`);
 console.log(`Prepared desktop-dist v${DESKTOP_VERSION} with ${files.length+3} allowlisted files.`);
