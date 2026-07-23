@@ -88,6 +88,9 @@ jobs:
           New-Item -ItemType Directory -Force release-diagnostics | Out-Null
           $probe = Join-Path $env:RUNNER_TEMP 'circle-mix-updater-signing-probe.txt'
           [IO.File]::WriteAllText($probe, 'circle-mix-updater-signing-probe', [Text.UTF8Encoding]::new($false))
+          # The build needs TAURI_SIGNING_PRIVATE_KEY, while this explicit preflight uses --private-key-path.
+          # Remove the inherited variable only in this step to avoid passing the same key twice.
+          Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue
           & cargo tauri signer sign --private-key-path $env:TAURI_SIGNING_PRIVATE_KEY_PATH $probe 2>&1 |
             Tee-Object -FilePath release-diagnostics/signing-preflight.log
           $exitCode = $LASTEXITCODE

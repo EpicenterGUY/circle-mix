@@ -48,7 +48,7 @@ assert.match(signingHelper,/TAURI_SIGNING_PRIVATE_KEY_PATH=\$keyPath/,'the signi
 assert.match(signingHelper,/TAURI_SIGNING_PRIVATE_KEY=\$keyPath/,'the signing helper must pass the same runner-temporary file path to the release build');
 assert.match(signingHelper,/UTF8Encoding\]::new\(\$false\)/,'the signing key file must be written without a UTF-8 BOM');
 assert.doesNotMatch(signingHelper,/Write-Host[^\n]*(normalized|secret|decoded|keyMaterial)/i,'the signing helper must never print private key material');
-assert.match(releaseWorkflow,/Verify updater signing key[\s\S]*cargo tauri signer sign --private-key-path \$env:TAURI_SIGNING_PRIVATE_KEY_PATH/,'the workflow must validate signing before the expensive desktop build');
+assert.match(releaseWorkflow,/Verify updater signing key[\s\S]*Remove-Item Env:TAURI_SIGNING_PRIVATE_KEY -ErrorAction SilentlyContinue[\s\S]*cargo tauri signer sign --private-key-path \$env:TAURI_SIGNING_PRIVATE_KEY_PATH/,'the explicit signer preflight must clear the inherited build key to avoid passing the same key twice');
 assert.match(releaseWorkflow,/signing-preflight\.log/);
 assert.match(releaseWorkflow,/windows-updater-build\.log/);
 assert.match(releaseWorkflow,/Upload release diagnostics[\s\S]*actions\/upload-artifact@v4/,'release failures must retain safe diagnostics');
