@@ -709,6 +709,36 @@ async function runDeterministicAimAndCutRegression(browser){
     assert.ok(autoAimError<1e-6,`pending PULSE must not block AUTO aim targeting ${JSON.stringify(pulse.autoLead)}`);
     assert.equal(pulse.auto.chartDoneStates.find(n=>n.id==='test-pulse-0').done,true,'AUTO completes PULSE at hit time');
     assert.equal(pulse.auto.perfectCount,1,'AUTO PULSE is PERFECT');
+    const autoStress = await page.evaluate(() => {
+      const api=window.CircleMixTestApi; api.startDeterministicChart(); api.setAuto(true); api.advanceTestClock(8.5,.75); const state=api.state(); api.setAuto(false); return state;
+    });
+    assert.equal(autoStress.judgedCount,autoStress.chartLength,`AUTO resolves every note across skipped frames ${JSON.stringify(autoStress)}`);
+    assert.equal(autoStress.perfectCount,autoStress.chartLength,`AUTO remains all PERFECT across skipped frames ${JSON.stringify(autoStress)}`);
+    assert.equal(autoStress.greatCount,0,`AUTO creates no GREAT across skipped frames ${JSON.stringify(autoStress)}`);
+    assert.equal(autoStress.missCount,0,`AUTO creates no MISS across skipped frames ${JSON.stringify(autoStress)}`);
+    assert.ok(autoStress.chartDoneStates.every(note=>note.done&&!note.missed),`AUTO completes every chart note ${JSON.stringify(autoStress.chartDoneStates)}`);
+
+    const autoAimStress = await page.evaluate(() => {
+      const api=window.CircleMixTestApi; api.startAutoAimStressChart(); api.setAuto(true); const samples=[];
+      api.advanceTestClock(.50,.02); samples.push(api.state());
+      api.advanceTestClock(.08,.08); samples.push(api.state());
+      api.advanceTestClock(.08,.08); samples.push(api.state());
+      api.setAuto(false); return samples;
+    });
+    for(let index=0;index<autoAimStress.length;index++){
+      const sample=autoAimStress[index], note=sample.chartDoneStates.find(entry=>entry.id===`test-auto-aim-${index}`);
+      assert.ok(note?.done,`dense AUTO target ${index} is judged ${JSON.stringify(sample)}`);
+      assert.ok(Math.abs(shortestAngleDifference(sample.armAngle,note.angle))<1e-6,`AUTO arm snaps to dense target ${index} ${JSON.stringify(sample)}`);
+      assert.ok(Math.abs(shortestAngleDifference(sample.judgementAimAngle,note.angle))<1e-6,`AUTO judgement aim matches dense target ${index} ${JSON.stringify(sample)}`);
+      assert.ok(Math.abs(shortestAngleDifference(sample.visualArmAngle,note.angle))<1e-6,`AUTO visual aim matches dense target ${index} ${JSON.stringify(sample)}`);
+    }
+
+    const pulseSyncVisual = await page.evaluate(() => { const api=window.CircleMixTestApi; api.startPulseSyncVisualTestChart(); return api.state(); });
+    const pulseSyncNote=pulseSyncVisual.chartDoneStates.find(note=>note.id==='test-pulse-sync');
+    const pulseSyncCut=pulseSyncVisual.chartDoneStates.find(note=>note.id==='test-cut-sync');
+    assert.equal(pulseSyncCut.pulseSync,true,`simultaneous CUT is tagged as PULSE-synchronized ${JSON.stringify(pulseSyncVisual)}`);
+    assert.equal(pulseSyncCut.displayColor,pulseSyncNote.displayColor,`simultaneous CUT shares PULSE color ${JSON.stringify(pulseSyncVisual)}`);
+    assert.equal(pulseSyncCut.displayColor,'#ff9f43','PULSE sync language is orange');
     assert.deepEqual(errors, [], `deterministic gameplay errors ${JSON.stringify(errors)}`);
   } finally { unregisterDiagnosticContext(context, page); await context.close(); }
 }
