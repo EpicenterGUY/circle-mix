@@ -19,11 +19,11 @@ assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop bu
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
 assert.equal(pkg.version,tauri.version,'npm and desktop versions must match for updater releases');
-assert.equal(tauri.version,'0.9.34','Windows installer must publish the updater bootstrap version');
-assert.match(prepare,/DESKTOP_VERSION='0\.9\.34'/,'desktop distribution must expose the updater bootstrap version');
+assert.equal(tauri.version,'0.9.35','Windows installer must publish the PC aim v1 version');
+assert.match(prepare,/DESKTOP_VERSION='0\.9\.35'/,'desktop distribution must expose the PC aim v1 version');
 assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must normalize Windows CRLF line endings');
 assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must retain the dedicated visual pass');
-assert.match(prepare,/WINDOWS UPDATER BOOTSTRAP/,'desktop changelog must announce the updater bootstrap');
+assert.match(prepare,/PC AIM INPUT V1/,'desktop changelog must announce PC aim v1');
 assert.match(prepare,/desktop-updater\.js/,'desktop build must inject the updater UI');
 assert.match(visualPass,/pulse:"#ff8a3d"/,'PULSE must use an orange color distinct from SWING CCW');
 assert.match(visualPass,/PULSE_VISUAL_SINGLE_RING/,'PULSE must use the single-ring approach visual');

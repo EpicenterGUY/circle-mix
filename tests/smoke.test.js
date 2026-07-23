@@ -400,13 +400,15 @@ assert.match(src, /function wantsLockedAim\(pointerType="mouse"\)\{ return point
 assert.match(src, /PC AIM " \+ inputSettings\.pcAimMode \+ \(inputSettings\.pcAimMode==="AUTO" \? " · ABSOLUTE" : ""\)/);
 });
 
-test("aim visual response is visual-only and has no velocity snap threshold", () => {
+test("aim visual response is visual-only with deterministic large-error catch-up", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
 assert.match(src, /const AIM_VISUAL_RESPONSE_MODES = \["FAST","NORMAL","SOFT"\]/);
 assert.match(src, /aimVisualResponse:AIM_VISUAL_RESPONSE_MODES\.includes\(saved\.aimVisualResponse\)\?saved\.aimVisualResponse:"FAST"/);
-assert.match(src, /function updateVisualArmAngle\(visualTarget,dt\)/);
-assert.match(src, /const urgency=Math\.max\(1-Math\.exp\(-velocity\/3\.2\),1-Math\.exp\(-error\/\(Math\.PI\/5\)\)\)/);
-assert.doesNotMatch(src.match(/function updateArm\(dt\)\{[\s\S]*?\n  \}\n\n  function logAutoProcessing/)?.[0] || "", /sampleAngularVelocity\)>=4\.2\) visualArmAngle=/);
+assert.match(src, /const AIM_VISUAL_SNAP_ERROR=\{FAST:Math\.PI\*\.38,NORMAL:Math\.PI\*\.46,SOFT:Math\.PI\*\.56\}/);
+assert.match(src, /function shouldSnapVisualAim\(visualTarget\)/);
+assert.match(src, /if\(inputSettings\.aimVisual==="DIRECT" \|\| lastPointerSource==="touch" \|\| shouldSnapVisualAim\(visualTarget\)\)/);
+assert.match(src, /const urgency=Math\.max\(1-Math\.exp\(-velocity\/3\.6\),1-Math\.exp\(-error\/\(Math\.PI\/6\)\)\)/);
+assert.doesNotMatch(src.match(/function updateVisualArmAngle\(visualTarget,dt\)\{[\s\S]*?\n  \}/)?.[0] || "", /velocity\s*[><=]+\s*\d[^;]*visualArmAngle/);
 assert.match(fs.readFileSync("index.html", "utf8"), /VISUAL RESPONSE FAST/);
 });
 
@@ -429,25 +431,31 @@ assert.equal(sanitized, saved);
 }
 });
 
-test("event aim input keeps OFF direct and exposes continuous state", () => {
+test("event aim input keeps OFF direct and updates stabilization before RAF", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
 assert.match(src, /const aimInput=\{rawAngle:/);
 assert.match(src, /function processAimSample\(x,y,timestamp,source="pointer"\)/);
+assert.match(src, /function applyPointerAimJudgement\(angle,delta,sampleDt,profile,source\)/);
 assert.match(src, /const delta=norm\(angle-aimInput\.previousSampleAngle\)/);
 assert.match(src, /aimInput\.unwrappedAngle\+=delta/);
-assert.match(src, /judgementAimAngle=profile\.mode==="OFF" \? rawInputAngle : stabilizedTargetAngle/);
-assert.match(src, /getCoalescedEvents/);
+assert.match(src, /judgementAimAngle=armAngle=stabilizedTargetAngle=angle/);
+assert.match(src, /applyPointerAimJudgement\(angle,delta,sampleDt,profile,source\)/);
+assert.match(src, /const samples=\(coalesced\.length\?coalesced:\[fallbackPoint\]\)\.slice\(\)\.sort/);
+assert.match(src, /function clientPointToAimPoint\(clientX,clientY\)/);
+assert.match(src, /e\.pointerType==="pen"\?"pen":"pointer"/);
 });
 
-test("LOW/MEDIUM keep center deadzone and magnet disengage is symmetric", () => {
+test("LOW/MEDIUM use a small center guard and symmetric magnet disengage", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /if\(mode==="MEDIUM"\) return \{mode, slowTime:\.040/);
-assert.match(src, /if\(mode==="LOW"\) return \{mode, slowTime:\.028/);
-assert.match(src, /Math\.abs\(velocity\)>profile\.disengageVel/);
-const disengageVel = 4.6;
-assert.equal(Math.abs(5.1) > disengageVel, true);
-assert.equal(Math.abs(-5.1) > disengageVel, true);
-const movingAway = (velocity, err) => Math.sign(velocity) === -Math.sign(err) && Math.abs(velocity) > 1.15;
+assert.match(src, /if\(mode==="MEDIUM"\) return \{mode, slowTime:\.030[\s\S]*centerEnterRatio:\.055[\s\S]*jumpBypass:Math\.PI\*\.40\}/);
+assert.match(src, /if\(mode==="LOW"\) return \{mode, slowTime:\.018[\s\S]*centerEnterRatio:\.040[\s\S]*jumpBypass:Math\.PI\*\.34\}/);
+assert.match(src, /function centerDeadzoneForProfile\(profile\)/);
+assert.match(src, /speed>=profile\.disengageVel/);
+assert.match(src, /const movingAway=velocity\*err<0 && speed>1\.15/);
+const disengageVel = 4.4;
+assert.equal(Math.abs(5.1) >= disengageVel, true);
+assert.equal(Math.abs(-5.1) >= disengageVel, true);
+const movingAway = (velocity, err) => velocity * err < 0 && Math.abs(velocity) > 1.15;
 assert.equal(movingAway(1.2, -0.1), true);
 assert.equal(movingAway(-1.2, 0.1), true);
 assert.equal(movingAway(1.2, 0.1), false);
@@ -490,7 +498,7 @@ assert.match(src, /function freshAimSample\(\)/);
 assert.match(src, /AIM_SAMPLE_FRESH_MS=120/);
 assert.match(src, /e\.touches\?\.\[0\] \|\| e\.changedTouches\?\.\[0\] \|\| e/);
 assert.match(src, /aimInput\.unwrappedAngle\+=delta; aimInput\.lastSampleDelta=delta/);
-assert.match(src, /aimInput\.unwrappedAngle\+=delta; aimInput\.lastSampleDelta=delta; aimInput\.sampleAngularVelocity=delta\/Math\.max\(dt/);
+assert.match(src, /aimInput\.unwrappedAngle\+=delta; aimInput\.lastSampleDelta=delta; aimInput\.sampleInterval=dt; aimInput\.sampleAngularVelocity=delta\/Math\.max\(dt/);
 });
 
 test("keyboard and AUTO aim synchronize the unified rotation state", () => {
