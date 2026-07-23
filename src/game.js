@@ -1934,23 +1934,38 @@
     return {targetAngle:motion.finalAngle,targetRadius:hitR,pointerAngle:judgementAimAngle,pointerRadius:hitR,angleError,radiusError:0,inside:angleError<=profile.endpointGreatToleranceDeg*Math.PI/180,motion};
   }
   function traceProfile(){ return TRACE_PROFILES.normal; }
-  function updateTraceEndpointCapture(n,endpointError,t,profile=traceProfile()){
+  function traceEndpointCaptureEligible(n,profile=traceProfile()){
+    return Number.isFinite(n.requiredTravel)
+      && n.directedTravel>=n.requiredTravel*profile.greatTravelRatio
+      && n.motionTime>=n.minimumMotionTime;
+  }
+  function updateTraceEndpointCapture(n,endpointError,t,end,profile=traceProfile()){
     n.endpointError=endpointError;
+    if(!traceEndpointCaptureEligible(n,profile)) return n.endpointCaptured;
     const previousBest=Number.isFinite(n.bestEndpointError)?n.bestEndpointError:Infinity;
     n.bestEndpointError=Math.min(previousBest,endpointError);
-    if(!n.endpointCaptured && endpointError<=profile.endpointGreatToleranceDeg*Math.PI/180){
-      n.endpointCaptured=true;
-      n.endpointCapturedAt=t;
+    const greatTolerance=profile.endpointGreatToleranceDeg*Math.PI/180;
+    const perfectTolerance=profile.endpointPerfectToleranceDeg*Math.PI/180;
+    if(endpointError<=greatTolerance){
+      if(!n.endpointCaptured){
+        n.endpointCaptured=true;
+        n.endpointCapturedAt=t;
+      }
+      if(endpointError<=perfectTolerance){
+        const timingError=Math.abs(t-end);
+        const previousTiming=Number.isFinite(n.bestPerfectEndpointTimingError)?n.bestPerfectEndpointTimingError:Infinity;
+        n.bestPerfectEndpointTimingError=Math.min(previousTiming,timingError);
+      }
     }
     return n.endpointCaptured;
   }
   function traceEndpointJudgement(n,end,profile=traceProfile()){
     const best=Number.isFinite(n.bestEndpointError)?n.bestEndpointError:Infinity;
-    const capturedAt=Number.isFinite(n.endpointCapturedAt)?n.endpointCapturedAt:null;
+    const perfectTiming=Number.isFinite(n.bestPerfectEndpointTimingError)?n.bestPerfectEndpointTimingError:Infinity;
     return {
       great:n.endpointCaptured===true,
       perfect:best<=profile.endpointPerfectToleranceDeg*Math.PI/180,
-      onTime:capturedAt!==null && Math.abs(capturedAt-end)<=profile.endpointWindow
+      onTime:perfectTiming<=profile.endpointWindow
     };
   }
   // Kept for diagnostics and guide rendering: TRACE has an angular start gate only.
@@ -2753,7 +2768,7 @@
 
       if(n.type.startsWith("trace")){
         const end=n.hitTime+n.duration, profile=traceProfile(), motion=resolveTraceMotion(n);
-        if(n.requiredTravel===undefined) Object.assign(n,{requiredTravel:traceRequiredTravel(n),directedTravel:0,reverseTravel:0,progressRatio:0,startCaptured:false,endpointCaptured:false,endpointCapturedAt:null,bestEndpointError:Infinity,completionTime:null,failReason:null,motionTime:0,minimumMotionTime:traceMinimumMotionTime(traceRequiredTravel(n),n.duration)});
+        if(n.requiredTravel===undefined) Object.assign(n,{requiredTravel:traceRequiredTravel(n),directedTravel:0,reverseTravel:0,progressRatio:0,startCaptured:false,endpointCaptured:false,endpointCapturedAt:null,bestEndpointError:Infinity,bestPerfectEndpointTimingError:Infinity,completionTime:null,failReason:null,motionTime:0,minimumMotionTime:traceMinimumMotionTime(traceRequiredTravel(n),n.duration)});
         if(t>=n.hitTime && !n.startCaptured && t<=n.hitTime+profile.startGrace){
           const startError=distAng(judgementAimAngle,motion.startAngle);
           if(isAutoActive() || startError<=profile.startToleranceDeg*Math.PI/180){
@@ -2764,9 +2779,9 @@
           updateTraceTravel(n);
           n.motionTime=t-n.traceStartedAt;
           const endpointError=distAng(judgementAimAngle,motion.finalAngle);
-          updateTraceEndpointCapture(n,endpointError,t,profile);
+          updateTraceEndpointCapture(n,endpointError,t,end,profile);
         }
-        // Evaluation waits until the authored endpoint (or its small grace), so early turns must hold the endpoint.
+        // Evaluation waits until the authored endpoint (or its grace), while an eligible endpoint arrival stays latched.
         if(t>end+profile.endpointGrace){
           const greatTravel=n.directedTravel>=n.requiredTravel*profile.greatTravelRatio;
           const perfectTravel=n.directedTravel>=n.requiredTravel*profile.perfectTravelRatio;

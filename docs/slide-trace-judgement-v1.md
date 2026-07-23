@@ -12,9 +12,9 @@ This pass follows the PC aim-input rebuild and changes judgement only. Rendering
 ## TRACE
 
 - Start, travel, reverse-motion and endpoint tolerance values are unchanged.
-- The first valid endpoint arrival is latched.
-- Small aim movement after that arrival cannot erase a valid endpoint capture before evaluation.
-- PERFECT still requires a best endpoint error within 15 degrees and an endpoint arrival within the authored timing window.
+- Endpoint capture only opens after GREAT-level directed travel and the minimum motion time are satisfied, so full-turn paths cannot capture their shared start/end angle immediately.
+- The first eligible endpoint arrival is latched, and small aim movement after that arrival cannot erase it before evaluation.
+- PERFECT still requires a 15-degree endpoint sample inside the authored timing window; arriving early and holding the endpoint remains valid.
 
 ## Regression coverage
 

@@ -162,20 +162,29 @@ test("SLIDE judgement profile keeps sustained tracking humanly achievable", () =
 });
 
 test("TRACE endpoint capture remains latched after first valid arrival", () => {
-  const profile = {endpointGreatToleranceDeg:30, endpointPerfectToleranceDeg:15, endpointWindow:.25};
-  const note = {endpointCaptured:false, endpointCapturedAt:null, bestEndpointError:Infinity};
+  const profile = {greatTravelRatio:.85, endpointGreatToleranceDeg:30, endpointPerfectToleranceDeg:15, endpointWindow:.25};
+  const note = {requiredTravel:Math.PI*2,directedTravel:Math.PI*.4,motionTime:.2,minimumMotionTime:.12,endpointCaptured:false,endpointCapturedAt:null,bestEndpointError:Infinity,bestPerfectEndpointTimingError:Infinity};
   const rad = Math.PI / 180;
-  assert.equal(api.updateTraceEndpointCapture(note, 10 * rad, 2.05, profile), true);
-  assert.equal(note.endpointCapturedAt, 2.05);
+  assert.equal(api.updateTraceEndpointCapture(note, 0, 1, 2, profile), false, "a full-turn TRACE must not capture its shared start/end angle before enough travel");
+  assert.equal(note.endpointCapturedAt, null);
+  assert.equal(note.bestEndpointError, Infinity);
+  note.directedTravel=Math.PI*2*.9;
+  note.motionTime=.5;
+  assert.equal(api.updateTraceEndpointCapture(note, 10 * rad, 1.6, 2, profile), true);
+  assert.equal(note.endpointCapturedAt, 1.6);
   assert.ok(Math.abs(note.bestEndpointError - 10 * rad) < 1e-12);
-  assert.equal(api.updateTraceEndpointCapture(note, 80 * rad, 2.25, profile), true);
-  assert.equal(note.endpointCapturedAt, 2.05);
-  assert.ok(Math.abs(note.bestEndpointError - 10 * rad) < 1e-12);
+  assert.equal(api.updateTraceEndpointCapture(note, 8 * rad, 1.95, 2, profile), true);
+  assert.equal(note.endpointCapturedAt, 1.6, "the first eligible endpoint arrival stays latched");
+  assert.ok(Math.abs(note.bestEndpointError - 8 * rad) < 1e-12);
+  assert.ok(Math.abs(note.bestPerfectEndpointTimingError - .05) < 1e-12);
+  assert.equal(api.updateTraceEndpointCapture(note, 80 * rad, 2.25, 2, profile), true);
+  assert.equal(note.endpointCapturedAt, 1.6);
+  assert.ok(Math.abs(note.bestEndpointError - 8 * rad) < 1e-12);
   const judgement = api.traceEndpointJudgement(note, 2, profile);
   assert.equal(judgement.great, true);
   assert.equal(judgement.perfect, true);
   assert.equal(judgement.onTime, true);
-  const missed = api.traceEndpointJudgement({endpointCaptured:false,endpointCapturedAt:null,bestEndpointError:Infinity}, 2, profile);
+  const missed = api.traceEndpointJudgement({endpointCaptured:false,bestEndpointError:Infinity,bestPerfectEndpointTimingError:Infinity}, 2, profile);
   assert.equal(missed.great, false);
   assert.equal(missed.perfect, false);
   assert.equal(missed.onTime, false);
