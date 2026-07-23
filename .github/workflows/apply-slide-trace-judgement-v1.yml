@@ -35,27 +35,36 @@ jobs:
           cat /tmp/patch-result.txt
           echo "status=$status" >> "$GITHUB_OUTPUT"
           if [ "$status" -ne 0 ]; then cp /tmp/patch-result.txt patch-result.txt; fi
-      - name: Commit patch diagnostics
-        if: steps.patch.outputs.status != '0'
+      - name: Run syntax and smoke tests
+        id: tests
+        if: steps.patch.outputs.status == '0'
+        shell: bash
+        run: |
+          set +e
+          npm test > /tmp/test-result.txt 2>&1
+          status=$?
+          set -e
+          cat /tmp/test-result.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" -ne 0 ]; then cp /tmp/test-result.txt test-result.txt; fi
+      - name: Commit diagnostics
+        if: steps.patch.outputs.status != '0' || steps.tests.outputs.status != '0'
         shell: bash
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add patch-result.txt
+          git add patch-result.txt test-result.txt
           git commit -m "ci: capture slide trace patch failure"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
-      - name: Stop after patch failure
-        if: steps.patch.outputs.status != '0'
+      - name: Stop after failure
+        if: steps.patch.outputs.status != '0' || steps.tests.outputs.status != '0'
         run: exit 1
-      - name: Run syntax and smoke tests
-        if: steps.patch.outputs.status == '0'
-        run: npm test
       - name: Commit applied patch
-        if: steps.patch.outputs.status == '0'
+        if: steps.patch.outputs.status == '0' && steps.tests.outputs.status == '0'
         shell: bash
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src/game.js tests/smoke.test.js docs/slide-trace-judgement-v1.md scripts/apply-slide-trace-judgement-v1.js .github/workflows/apply-slide-trace-judgement-v1.yml patch-result.txt
+          git add src/game.js tests/smoke.test.js docs/slide-trace-judgement-v1.md scripts/apply-slide-trace-judgement-v1.js .github/workflows/apply-slide-trace-judgement-v1.yml patch-result.txt test-result.txt
           git commit -m "feat: tune SLIDE and TRACE judgement v1"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
