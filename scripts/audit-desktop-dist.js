@@ -28,7 +28,9 @@ if(desktopGame.includes('name:"SCRATCH · 가이드"')||desktopGame.includes('ki
 if(!desktopGame.includes('{type:"pulse",beat:18}'))throw new Error('final tutorial mix did not replace SCRATCH with PULSE');
 if(!desktopGame.includes('addScratchCWBtn","addScratchCCWBtn')||!desktopGame.includes('legacyScratchButton.hidden=true'))throw new Error('desktop SCRATCH authoring or mobile controls were not retired');
 if(!desktopGame.includes('function checkScratch'))throw new Error('legacy SCRATCH playback compatibility is missing');
-if(!desktopGame.includes('pulse:"#ff8a3d"'))throw new Error('PULSE color was not separated from SWING CCW');
+const palette=desktopGame.match(/const COLORS = \{[\s\S]*?\n  \};/)?.[0] || '';
+const color=name=>palette.match(new RegExp(`\\b${name}:\"(#[0-9a-fA-F]{6})\"`))?.[1];
+if(!color('pulse')||!color('swingCCW')||color('pulse')===color('swingCCW'))throw new Error('PULSE color was not separated from SWING CCW');
 if(!desktopGame.includes('PULSE_VISUAL_SINGLE_RING')||!desktopGame.includes('PULSE_HIT_SINGLE_RING'))throw new Error('PULSE single-ring visual pass is missing');
 if(!desktopGame.includes('SWING_VISUAL_DIRECTIONAL_ARC')||!desktopGame.includes('SWING_HIT_LOCAL_ONLY'))throw new Error('SWING directional visual pass is missing');
 if(desktopGame.includes('addRingBurst(color,label==="PERFECT"?1.22:1.0,label)'))throw new Error('SWING still emits a full-ring judgement burst');
