@@ -17,9 +17,18 @@ on:
         required: true
         default: true
         type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - src-tauri/tauri.conf.json
 
 permissions:
   contents: write
+
+concurrency:
+  group: windows-updater-release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -28,6 +37,10 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      RELEASE_EVENT: ${{ github.event_name }}
+      INPUT_VERSION: ${{ github.event.inputs.version }}
+      INPUT_NOTES: ${{ github.event.inputs.notes }}
+      INPUT_DRAFT: ${{ github.event.inputs.draft }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,13 +54,31 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
             throw 'TAURI_SIGNING_PRIVATE_KEY GitHub Actions secret is missing.'
           }
-      - name: Validate committed version
+      - name: Resolve release metadata
         shell: pwsh
         run: |
           $config = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
-          if ($config.version -ne '${{ inputs.version }}') {
-            throw "Workflow version ${{ inputs.version }} does not match committed version $($config.version)."
+          $committedVersion = [string]$config.version
+          if ([string]::IsNullOrWhiteSpace($committedVersion)) {
+            throw 'The committed Tauri version is empty.'
           }
+
+          if ($env:RELEASE_EVENT -eq 'workflow_dispatch') {
+            if ($committedVersion -ne $env:INPUT_VERSION) {
+              throw "Workflow version $env:INPUT_VERSION does not match committed version $committedVersion."
+            }
+            $releaseNotes = if ([string]::IsNullOrWhiteSpace($env:INPUT_NOTES)) { 'Windows desktop update' } else { $env:INPUT_NOTES }
+            $releaseDraft = if ($env:INPUT_DRAFT -eq 'true') { 'true' } else { 'false' }
+          } else {
+            $releaseNotes = "CIRCLE MIX $committedVersion Windows update"
+            $releaseDraft = 'false'
+          }
+
+          "RELEASE_VERSION=$committedVersion" >> $env:GITHUB_ENV
+          "RELEASE_DRAFT=$releaseDraft" >> $env:GITHUB_ENV
+          'RELEASE_NOTES<<CIRCLE_MIX_NOTES' >> $env:GITHUB_ENV
+          $releaseNotes >> $env:GITHUB_ENV
+          'CIRCLE_MIX_NOTES' >> $env:GITHUB_ENV
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.10.1" --locked
       - name: Install dependencies
@@ -68,16 +99,16 @@ jobs:
           $sigPath = "$($setup.FullName).sig"
           if (-not (Test-Path $sigPath)) { throw 'Signed updater .sig file was not generated.' }
           New-Item -ItemType Directory -Force release-assets | Out-Null
-          $assetName = 'circle-mix-${{ inputs.version }}-windows-x64-setup.exe'
+          $assetName = "circle-mix-$env:RELEASE_VERSION-windows-x64-setup.exe"
           $assetPath = Join-Path release-assets $assetName
           Copy-Item $setup.FullName $assetPath
           Copy-Item $sigPath "$assetPath.sig"
           $signature = (Get-Content $sigPath -Raw).Trim()
-          $tag = 'v${{ inputs.version }}'
+          $tag = "v$env:RELEASE_VERSION"
           $downloadUrl = "https://github.com/EpicenterGUY/circle-mix/releases/download/$tag/$assetName"
           $latest = [ordered]@{
-            version = '${{ inputs.version }}'
-            notes = '${{ inputs.notes }}'
+            version = $env:RELEASE_VERSION
+            notes = $env:RELEASE_NOTES
             pub_date = (Get-Date).ToUniversalTime().ToString('o')
             platforms = [ordered]@{
               'windows-x86_64' = [ordered]@{
@@ -92,6 +123,6 @@ jobs:
       - name: Create GitHub release
         shell: pwsh
         run: |
-          $args = @('release','create','${{ steps.assets.outputs.tag }}','${{ steps.assets.outputs.asset }}','${{ steps.assets.outputs.asset }}.sig','release-assets/latest.json','--title','CIRCLE MIX ${{ inputs.version }}','--notes','${{ inputs.notes }}')
-          if ('${{ inputs.draft }}' -eq 'true') { $args += '--draft' }
+          $args = @('release','create','${{ steps.assets.outputs.tag }}','${{ steps.assets.outputs.asset }}','${{ steps.assets.outputs.asset }}.sig','release-assets/latest.json','--title',"CIRCLE MIX $env:RELEASE_VERSION",'--notes',$env:RELEASE_NOTES)
+          if ($env:RELEASE_DRAFT -eq 'true') { $args += '--draft' }
           & gh @args
