@@ -33,6 +33,7 @@ test("PWA and service worker consume the shared release metadata", () => {
   assert.match(serviceWorkerSource, /^importScripts\("\.\/src\/version\.js"\);/);
   assert.match(serviceWorkerSource, /const RELEASE = self\.CircleMixVersion/);
   assert.match(serviceWorkerSource, /\$\{CACHE_PREFIX\}\$\{VERSION\}-\$\{CACHE_REVISION\}-app/);
+  assert.match(serviceWorkerSource, /return \{ready:missing\.length===0, version:VERSION, revision:CACHE_REVISION/);
   assert.doesNotMatch(serviceWorkerSource, /const VERSION\s*=\s*["'][0-9]/);
   assert.match(serviceWorkerSource, /cacheRevision/);
 });
