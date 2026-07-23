@@ -22,9 +22,11 @@ on:
       - main
     paths:
       - src-tauri/tauri.conf.json
+      - .github/workflows/windows-updater-release.yml
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: windows-updater-release
@@ -120,9 +122,43 @@ jobs:
           $latest | ConvertTo-Json -Depth 5 | Set-Content release-assets/latest.json -Encoding utf8NoBOM
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "asset=$assetPath" >> $env:GITHUB_OUTPUT
-      - name: Create GitHub release
+      - name: Create or update GitHub release
         shell: pwsh
         run: |
-          $args = @('release','create','${{ steps.assets.outputs.tag }}','${{ steps.assets.outputs.asset }}','${{ steps.assets.outputs.asset }}.sig','release-assets/latest.json','--title',"CIRCLE MIX $env:RELEASE_VERSION",'--notes',$env:RELEASE_NOTES)
-          if ($env:RELEASE_DRAFT -eq 'true') { $args += '--draft' }
-          & gh @args
+          $tag = '${{ steps.assets.outputs.tag }}'
+          $asset = '${{ steps.assets.outputs.asset }}'
+          & gh release view $tag *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+          if ($releaseExists) {
+            & gh release upload $tag $asset "$asset.sig" 'release-assets/latest.json' --clobber
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to replace existing release assets.' }
+            & gh release edit $tag --title "CIRCLE MIX $env:RELEASE_VERSION" --notes $env:RELEASE_NOTES "--draft=$env:RELEASE_DRAFT" --latest
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to update the existing GitHub release.' }
+          } else {
+            $args = @('release','create',$tag,$asset,"$asset.sig",'release-assets/latest.json','--title',"CIRCLE MIX $env:RELEASE_VERSION",'--notes',$env:RELEASE_NOTES)
+            if ($env:RELEASE_DRAFT -eq 'true') { $args += '--draft' }
+            & gh @args
+            if ($LASTEXITCODE -ne 0) { throw 'Unable to create the GitHub release.' }
+          }
+      - name: Clear matching release failure report
+        if: ${{ success() }}
+        shell: pwsh
+        run: |
+          $title = "Windows updater release failed: v$env:RELEASE_VERSION"
+          $issue = gh issue list --state open --search "in:title $title" --json number,title | ConvertFrom-Json | Where-Object { $_.title -eq $title } | Select-Object -First 1
+          if ($issue) { gh issue close $issue.number --reason completed --comment "The signed updater release completed successfully on run $env:GITHUB_RUN_ID." }
+      - name: Report release failure
+        if: ${{ failure() }}
+        shell: pwsh
+        run: |
+          $config = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $version = [string]$config.version
+          $title = "Windows updater release failed: v$version"
+          $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $body = "The signed Windows updater release failed. Run: $runUrl`n`nNo private signing material is included in this report."
+          $issue = gh issue list --state open --search "in:title $title" --json number,title | ConvertFrom-Json | Where-Object { $_.title -eq $title } | Select-Object -First 1
+          if ($issue) {
+            gh issue edit $issue.number --body $body
+          } else {
+            gh issue create --title $title --body $body
+          }
