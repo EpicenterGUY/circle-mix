@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: slide-trace-judgement-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   apply:
     if: github.event.pull_request.head.repo.full_name == github.repository
@@ -58,7 +62,7 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add patch-result.txt test-result.txt
+          git add -A
           git commit -m "ci: capture slide trace patch failure"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
       - name: Stop after failure
@@ -71,6 +75,6 @@ jobs:
           rm -f patch-result.txt test-result.txt scripts/fix-slide-trace-test-assertions.js
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src/game.js tests/smoke.test.js docs/slide-trace-judgement-v1.md scripts/apply-slide-trace-judgement-v1.js scripts/fix-slide-trace-test-assertions.js .github/workflows/apply-slide-trace-judgement-v1.yml patch-result.txt test-result.txt
+          git add -A
           git commit -m "feat: tune SLIDE and TRACE judgement v1"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
