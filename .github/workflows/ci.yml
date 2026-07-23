@@ -47,3 +47,34 @@ jobs:
           path: artifacts/browser-regression
           if-no-files-found: warn
           retention-days: 14
+
+  fold-landscape-patch:
+    if: github.event_name == 'pull_request' && github.head_ref == 'agent/fold-landscape-v1'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Apply and validate fold landscape patch
+        run: |
+          python scripts/agent-fold-patch.py
+          node --check src/game.js
+          node --check tests/mobile-song-select-layout.test.js
+          npm test
+      - name: Commit clean implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/ci.yml
+          git rm .github/workflows/agent-fold-patch.yml .github/workflows/agent-fold-inspect.yml scripts/agent-fold-patch.py
+          git add src/game.js src/version.js style.css tests/smoke.test.js tests/mobile-song-select-layout.test.js .github/workflows/ci.yml
+          git commit -m "fix: adapt mobile landscape to unfolded foldables"
+          git push origin HEAD:${{ github.head_ref }}
