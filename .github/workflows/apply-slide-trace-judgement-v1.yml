@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/apply-slide-trace-judgement-v1.js'
+      - 'scripts/fix-slide-trace-test-assertions.js'
       - '.github/workflows/apply-slide-trace-judgement-v1.yml'
 
 permissions:
@@ -29,8 +30,12 @@ jobs:
         shell: bash
         run: |
           set +e
-          node scripts/apply-slide-trace-judgement-v1.js > /tmp/patch-result.txt 2>&1
+          node scripts/fix-slide-trace-test-assertions.js > /tmp/patch-result.txt 2>&1
           status=$?
+          if [ "$status" -eq 0 ]; then
+            node scripts/apply-slide-trace-judgement-v1.js >> /tmp/patch-result.txt 2>&1
+            status=$?
+          fi
           set -e
           cat /tmp/patch-result.txt
           echo "status=$status" >> "$GITHUB_OUTPUT"
@@ -63,8 +68,9 @@ jobs:
         if: steps.patch.outputs.status == '0' && steps.tests.outputs.status == '0'
         shell: bash
         run: |
+          rm -f patch-result.txt test-result.txt scripts/fix-slide-trace-test-assertions.js
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add src/game.js tests/smoke.test.js docs/slide-trace-judgement-v1.md scripts/apply-slide-trace-judgement-v1.js .github/workflows/apply-slide-trace-judgement-v1.yml patch-result.txt test-result.txt
+          git add src/game.js tests/smoke.test.js docs/slide-trace-judgement-v1.md scripts/apply-slide-trace-judgement-v1.js scripts/fix-slide-trace-test-assertions.js .github/workflows/apply-slide-trace-judgement-v1.yml patch-result.txt test-result.txt
           git commit -m "feat: tune SLIDE and TRACE judgement v1"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
