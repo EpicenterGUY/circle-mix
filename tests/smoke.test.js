@@ -18,7 +18,7 @@ setAttribute(){}, removeAttribute(){}, focus(){}, blur(){}, getBoundingClientRec
 }
 function loadGameExports(){
 const src = fs.readFileSync("src/game.js", "utf8");
-const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n SLIDE_JUDGEMENT_PROFILE, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
+const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n SLIDE_JUDGEMENT_PROFILE, PULSE_SYNC_EPSILON, COLORS, isPulseSynchronizedCut, noteColor, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
 const patched = src.replace(/\r?\n\s*updateModeButtons\(\);\r?\n\s*updateButtons\(\);\r?\n\}\)\(\);\s*$/, `${exportPatch}\n updateModeButtons();\n updateButtons();\n})();`);
 const elements = new Map();
 const document = {
@@ -159,6 +159,16 @@ test("SLIDE judgement profile keeps sustained tracking humanly achievable", () =
   assert.ok(src.includes("aligned(a,SLIDE_JUDGEMENT_PROFILE.angleExtra)"));
   assert.ok(src.includes("ratio>=SLIDE_JUDGEMENT_PROFILE.greatHoldRatio"));
   assert.ok(src.includes("ratio>=SLIDE_JUDGEMENT_PROFILE.perfectHoldRatio"));
+});
+
+test("PULSE-synchronized CUT uses the shared orange readability language", () => {
+  const cut={type:"cut",hitTime:1}, pulse={type:"pulse",hitTime:1}, nearPulse={type:"pulse",hitTime:1+api.PULSE_SYNC_EPSILON*.5};
+  assert.equal(api.COLORS.pulse,"#ff9f43");
+  assert.equal(api.isPulseSynchronizedCut(cut,[cut,pulse]),true);
+  assert.equal(api.isPulseSynchronizedCut(cut,[cut,nearPulse]),true);
+  assert.equal(api.isPulseSynchronizedCut(cut,[cut,{type:"pulse",hitTime:1+api.PULSE_SYNC_EPSILON*2}]),false);
+  assert.equal(api.noteColor(cut,[cut,pulse]),api.COLORS.pulse);
+  assert.equal(api.noteColor(cut,[cut]),api.COLORS.cut);
 });
 
 test("TRACE endpoint capture remains latched after first valid arrival", () => {
@@ -550,7 +560,8 @@ const src = fs.readFileSync("src/game.js", "utf8");
 assert.match(src, /const delta=\(keyD-keyA\)\*9\.5\*dt/);
 assert.match(src, /aimInput\.accumulatedCWTravel\+=delta/);
 assert.match(src, /aimInput\.accumulatedCCWTravel-=delta/);
-assert.match(src, /armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=a/);
+assert.match(src, /function setAutoAimAngle\(angle,velocity=0\)/);
+assert.match(src, /targetAngle=armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a/);
 });
 
 

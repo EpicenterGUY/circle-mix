@@ -225,6 +225,7 @@
   });
   const TRACE_SWING_LINK_MIN = .15;
   const TRACE_SWING_LINK_MAX = .25;
+  const PULSE_SYNC_EPSILON = .004;
   const BASE_NOTE_WIDTH = 8;
   const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, pulse:10, trace:3.0, hold:11.5 };
   const VISUAL_SETTINGS_KEY = "circleMixVisualSettings.v1";
@@ -242,7 +243,7 @@
 
   const COLORS = {
     cut:"#5cfffb", swingCW:"#79ff7d", swingCCW:"#ff72d6", slide:"#ffe15a", fx:"#b77cff",
-    trace:"#4388ff", traceSoft:"#2466d9", pulse:"#ff4eb8", scratch:"#ee3d9a", scratchCW:"#ee3d9a", scratchCCW:"#ff5aa8",
+    trace:"#4388ff", traceSoft:"#2466d9", pulse:"#ff9f43", scratch:"#ee3d9a", scratchCW:"#ee3d9a", scratchCCW:"#ff5aa8",
     perfect:"#fff36a", great:"#80ffdb", miss:"#ff4567"
   };
 
@@ -2143,8 +2144,11 @@
   function progress(n,t){return clamp((t-n.spawnTime)/(n.hitTime-n.spawnTime),0,1);}
   function noteR(n,t){return lerp(outerR,hitR,progress(n,t));}
   function notePos(n,t){const r=noteR(n,t); return {x:cx+Math.cos(n.angle)*r,y:cy+Math.sin(n.angle)*r,r};}
-  function noteColor(n){
-    if(n.type==="cut")return COLORS.cut;
+  function isPulseSynchronizedCut(n, notes=chart){
+    return !!n && n.type==="cut" && notes.some(note=>note!==n && note.type==="pulse" && Math.abs(Number(note.hitTime)-Number(n.hitTime))<=PULSE_SYNC_EPSILON);
+  }
+  function noteColor(n, notes=chart){
+    if(n.type==="cut")return isPulseSynchronizedCut(n,notes)?COLORS.pulse:COLORS.cut;
     if(n.type==="swingCW")return COLORS.swingCW;
     if(n.type==="swingCCW")return COLORS.swingCCW;
     if(n.type.startsWith("slide"))return COLORS.slide;
@@ -2598,6 +2602,49 @@
     };
   }
 
+  function setAutoAimAngle(angle,velocity=0){
+    if(!Number.isFinite(angle))return;
+    const a=norm(angle);
+    prevArmAngle=armAngle;
+    targetAngle=armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a;
+    rawArmVel=armVel=rawAngularVelocity=Number.isFinite(velocity)?velocity:0;
+    aimInput.rawAngle=a; aimInput.unwrappedAngle=a; aimInput.previousSampleAngle=a;
+    aimInput.sampleAngularVelocity=rawAngularVelocity; aimInput.lastSampleDelta=0;
+  }
+
+  function completeAutoNote(n,t){
+    if(!n||n.done||n.missed||t+1e-6<n.hitTime)return;
+    const end=n.hitTime+(n.duration||0);
+    if(n.type==="fx"||n.type.startsWith("slide")){
+      if(t+1e-6<end)return;
+      n.hold=n.duration||0;
+      logAutoProcessing(n);
+      judge(n,"PERFECT",noteColor(n),{source:"auto",reason:"AUTO_JUDGEMENT"});
+      return;
+    }
+    if(n.type.startsWith("trace")){
+      const motion=resolveTraceMotion(n), required=traceRequiredTravel(n);
+      const progress=clamp((t-n.hitTime)/Math.max(n.duration,.001),0,1);
+      const minimumMotionTime=traceMinimumMotionTime(required,n.duration);
+      Object.assign(n,{requiredTravel:required,directedTravel:required*progress,reverseTravel:0,progressRatio:progress,startCaptured:true,traceStartedAt:n.hitTime,startAngleError:0,motionTime:Math.min(n.duration,Math.max(0,t-n.hitTime)),minimumMotionTime,endpointCaptured:progress>=1,endpointCapturedAt:progress>=1?end:null,bestEndpointError:progress>=1?0:Infinity,bestPerfectEndpointTimingError:progress>=1?0:Infinity});
+      if(t+1e-6<end)return;
+      Object.assign(n,{directedTravel:required,progressRatio:1,motionTime:Math.max(minimumMotionTime,n.duration),endpointCaptured:true,endpointCapturedAt:end,bestEndpointError:0,bestPerfectEndpointTimingError:0,completed:true,completionTime:end,failReason:null});
+      setAutoAimAngle(motion.finalAngle,motion.signedSweepAngle/Math.max(n.duration,.001));
+      addWave(motion.finalAngle,COLORS.trace); addRingBurst(COLORS.trace,.42,"END");
+      logAutoProcessing(n);
+      judge(n,"PERFECT",COLORS.trace,{source:"auto",reason:"AUTO_JUDGEMENT"});
+      return;
+    }
+    if(n.type!=="pulse"){
+      let velocity=0;
+      if(n.type.startsWith("swing")) velocity=(n.type==="swingCW"?1:-1)*SCRATCH_FLICK_SPEED*1.5;
+      else if(n.type.startsWith("scratch")) velocity=(n.type==="scratchCW"?1:-1)*SCRATCH_FLICK_SPEED*1.5;
+      setAutoAimAngle(n.angle,velocity);
+    }
+    logAutoProcessing(n);
+    judge(n,"PERFECT",noteColor(n),{source:"auto",reason:"AUTO_JUDGEMENT"});
+  }
+
   function updateAuto(t){
     updateAutoDebug(t);
     if(!isAutoActive())return;
@@ -2605,38 +2652,25 @@
     const activePath=chart.find(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&t>=n.hitTime&&t<=n.hitTime+n.duration+(n.type.startsWith("trace")?traceProfile().endpointGrace:0));
     if(activePath){
       const a=slideAngle(activePath,t);
-      armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=a;
-      targetAngle=a;
-      armVel=slideDelta(activePath)/Math.max(activePath.duration,.001);
+      setAutoAimAngle(a,slideDelta(activePath)/Math.max(activePath.duration,.001));
       if(activePath.type.startsWith("trace")){
         const progress=traceProgress(activePath,t);
         if(activePath.startCaptured){
-          const previousProgress=Number(activePath.autoTraceProgress)||0;
-          const travel=resolveTraceMotion(activePath).signedSweepAngle*Math.max(0,progress-previousProgress);
-          if(travel>0) aimInput.accumulatedCWTravel+=travel;
-          else aimInput.accumulatedCCWTravel+=-travel;
-          activePath.autoTraceProgress=progress;
-        }else{
-          activePath.autoTraceProgress=0;
-        }
+const previousProgress=Number(activePath.autoTraceProgress)||0;
+const travel=resolveTraceMotion(activePath).signedSweepAngle*Math.max(0,progress-previousProgress);
+if(travel>0) aimInput.accumulatedCWTravel+=travel;
+else aimInput.accumulatedCCWTravel+=-travel;
+activePath.autoTraceProgress=progress;
+        }else activePath.autoTraceProgress=0;
       }
     }else{
       const n=nextAimNote(t);
-      if(n)targetAngle=n.angle;
+      if(n)setAutoAimAngle(n.angle,0);
     }
 
-    for(const n of chart){
-      if(n.done||n.missed)continue;
-      if(n.type.startsWith("swing") && Math.abs(t-n.hitTime)<.20){
-        const dir=n.type==="swingCW"?1:-1;
-        armAngle += dir*.08;
-        armVel = dir*SCRATCH_FLICK_SPEED*1.5;
-      }
-      if((n.type==="cut"||n.type==="pulse"||n.type.startsWith("swing"))&&Math.abs(t-n.hitTime)<.030){
-        if(isAutoActive())logAutoProcessing(n);
-        judge(n,"PERFECT",noteColor(n),{source:"auto",reason:"AUTO_JUDGEMENT"});
-      }
-    }
+    // AUTO is a deterministic chart verifier: frame drops may delay processing,
+    // but they must never turn a due note into GREAT or MISS.
+    for(const n of chart)completeAutoNote(n,t);
   }
 
   function resetAimInput(angle=-Math.PI/2){
@@ -2817,7 +2851,7 @@
             console.log(`[Tutorial Trace Swing]\nphase=${phase}\ntracePassed=${tutorialState.successCount>=1}\ntraceCompletedAt=${tutorialState.traceCompletedAt||0}\nswingArmedAt=${n.swingArmedAt||0}\nswingVisible=${tutorialState.swingVisible===true}\nrawArmVel=${rawArmVel.toFixed(3)}\ndirectedTravel=${(n.swingDirectedTravel||0).toFixed(3)}\nfreshInput=${performance.now()>=(n.swingArmedAt||0)}\nresult=${resultState}`);
           }
         }
-        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(isAutoActive()||checkSwing(n))){
+        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&!isAutoActive()&&checkSwing(n)){
           if(isAutoActive())logAutoProcessing(n);
           judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n),{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
         }else if(t>n.hitTime+.26){
@@ -2867,7 +2901,7 @@
       }
 
       if(n.type.startsWith("scratch")){
-        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&(isAutoActive()||checkScratch(n,t))){
+        if(t>=n.hitTime-.16&&t<=n.hitTime+.20&&!isAutoActive()&&checkScratch(n,t)){
           if(isAutoActive())logAutoProcessing(n);
           judge(n,Math.abs(t-n.hitTime)<.075?"PERFECT":"GREAT",noteColor(n),{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"});
         }else if(t>n.hitTime+.26){
@@ -3222,13 +3256,16 @@
   }
 
   function drawCut(n,t){
-    const r=noteR(n,t), color=COLORS.cut;
+    const r=noteR(n,t), color=noteColor(n), pulseSync=isPulseSynchronizedCut(n);
     const k=progress(n,t);
     const half=lerp(Math.PI*.030, Math.PI*.060, k);
     const focus = n===focusNote;
     drawArcNote(n.angle,r,half,color,focus?NOTE_WIDTHS.cut+3:NOTE_WIDTHS.cut,focus?1:.92);
+    if(pulseSync){
+      ctx.save(); ctx.translate(cx,cy); ctx.strokeStyle="rgba(255,255,255,.78)"; ctx.lineWidth=2; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.arc(0,0,r+7,n.angle-half*.92,n.angle+half*.92); ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+    }
     ctx.save(); ctx.translate(cx,cy); ctx.rotate(n.angle); ctx.strokeStyle="rgba(3,7,17,.82)"; ctx.lineWidth=2.4; ctx.beginPath(); ctx.moveTo(r-7,-7); ctx.lineTo(r+7,7); ctx.stroke(); ctx.restore();
-    drawRingLabel("CUT",n.angle,r,focus?"#ffffff":color,focus?12:10);
+    drawRingLabel("CUT",n.angle,r,focus||pulseSync?"#ffffff":color,focus?12:10);
   }
 
   function traceVisualProfile(){
@@ -5804,6 +5841,24 @@ running=${running}`);
         maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
         return window.CircleMixTestApi.state();
       },
+      startAutoAimStressChart:()=>{
+        window.CircleMixTestApi.startDeterministicChart();
+        chart=[make("cut",2,0),make("cut",2,4),make("cut",2,1)];
+        const times=[.50,.58,.66];
+        chart.forEach((n,index)=>{ n.id=`test-auto-aim-${index}`; n.hitTime=times[index]; n.spawnTime=n.hitTime-APPROACH; });
+        chartLastHitEnd=times[times.length-1]; score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; gameState.autoEnabled=false;
+        maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
+        return window.CircleMixTestApi.state();
+      },
+      startPulseSyncVisualTestChart:()=>{
+        window.CircleMixTestApi.startDeterministicChart();
+        chart=[make("pulse",2,0),make("cut",2,3)];
+        chart[0].id="test-pulse-sync"; chart[1].id="test-cut-sync";
+        for(const n of chart){ n.hitTime=.8; n.spawnTime=n.hitTime-APPROACH; }
+        chartLastHitEnd=.8; score=combo=maxCombo=judgedCount=perfectCount=greatCount=missCount=actualHitValue=0; gameState.autoEnabled=false;
+        maxHitValue=chart.reduce((sum,n)=>sum+noteWeight(n),0); feedback=[]; particles=[]; waves=[]; ringBursts=[]; scratchBursts=[];
+        return window.CircleMixTestApi.state();
+      },
       startPulseTestChart:()=>{
         if(raf){ cancelAnimationFrame(raf); raf=0; }
         cleanupPlaySession({stopAudio:true,hideResultOverlay:true,abort:true});
@@ -5872,7 +5927,7 @@ running=${running}`);
       completeTutorial:()=>completeTutorial(),
       markFirstPendingTutorialNoteMissed:()=>{ const n=chart.find(note=>!note.done&&!note.missed); if(n){ miss(n,"TEST_FORCED_MISS"); return true; } return false; },
       clearAndPerfectTutorialChart:()=>{ for(const n of chart){ if(!n.done&&!n.missed) judge(n,"PERFECT",noteColor(n),{source:"pointer",reason:"USER_JUDGEMENT"}); } return window.CircleMixTestApi.state(); },
-      state:()=>({running:!!running, paused:!!paused, tutorialMode:!!tutorialMode, tutorialStepIndex:Number(tutorialStepIndex), tutorialTargetProgress:Number(tutorialSteps[tutorialStepIndex]?._hit||0), tutorialPointerMoved:!!tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince==null?null:Number(tutorialState.exploreInsideSince), tutorialInputEnabledAt:Number(tutorialState.inputEnabledAt), tutorialSuccessCount:Number(tutorialState.successCount), tutorialValidUserInputCount:Number(tutorialState.validUserInputCount), tutorialLastSource:tutorialState.lastSource||null, tutorialCurrentJudgement:tutorialState.currentJudgement||null, tutorialTransitioning:!!tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState||null, pendingTutorialSkipCount:Number(tutorialState.pendingSkipQueue.length), tutorialStepToken:Number(tutorialStepToken), tutorialAttemptId:Number(tutorialAttemptId), tutorialTimerCount:Number(tutorialState.timers.length), tutorialFinalMixRetryScheduled:!!tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:Number(tutorialState.mixRetryCount), tutorialChartFinalizationCount:Number(tutorialState.chartFinalizationCount), tutorialLastChartFinalization:tutorialState.lastChartFinalization||null, tutorialChartSettled:!!tutorialChartSettled(), tutorialCompleteCount:Number(tutorialState.completeCount), tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:Number(tutorialState.rafIds.length+(raf?1:0)), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount:Number(judgedCount), perfectCount:Number(perfectCount), greatCount:Number(greatCount), missCount:Number(missCount), score:Number(score), combo:Number(combo), maxCombo:Number(maxCombo), visibleNoteCount:Number(getVisibleNotes(now()).length), visibleNotes:getVisibleNotes(now()).map(n=>({id:n.id||noteDebugId(n),type:n.type})), focusNote:focusNote?{id:focusNote.id||noteDebugId(focusNote),type:focusNote.type}:null, chartDoneStates:chart.map(n=>({id:n.id||noteDebugId(n),type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,coverage:Number(n.coverageRatio||0),quality:Number(n.traceQuality||0),started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime,angle:Number(n.angle),endAngle:n.endAngle==null?null:Number(n.endAngle),duration:Number(n.duration||0)})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:Number(chart.length), chartEndTime:Number(chartLastHitEnd), gameTime:Number(now()), browserNow:Number(performance.now()), frameCount:Number(testFrameCount), renderCount:Number(testRenderCount), W:Number(W), H:Number(H), lastPointerSource:lastPointerSource||null, pointerActive:!!pointerActive, mouseX:Number(mouseX), mouseY:Number(mouseY), armAngle:Number(armAngle), rawArmVel:Number(rawArmVel), rawAngularVelocity:Number(rawAngularVelocity), sampleAngularVelocity:Number(aimInput.sampleAngularVelocity), cx:Number(cx), cy:Number(cy), hitR:Number(hitR), selectedSongId:selectedSongId||null, selectedDifficultyId:selectedDifficultyId||null, mobileAimPointerId:mobileAimPointerId==null?null:Number(mobileAimPointerId), mobileActionPointerId:mobileActionPointerId==null?null:Number(mobileActionPointerId), mobilePulsePointerId:mobilePulsePointerId==null?null:Number(mobilePulsePointerId), mobileScratchPointerId:mobileScratchPointerId==null?null:Number(mobileScratchPointerId), actionHeld:!!keys.MouseLeft, holdInputActive:!!filterHeld, scratchHeld:!!scratchHeld, mouseDownRight:!!mouseDownRight, pointerLockMode:inputSettings.pcAimMode, effectivePcAimMode:effectivePcAimMode(), pointerLockRequested:!!pointerLockRequested, pointerLockActive:!!pointerLockActive(), lockedVirtualAngle:Number(lockedVirtualAngle), lockedSensitivity:Number(inputSettings.lockedAimSensitivity), lastRelativeMovement:{x:Number(lastRelativeMovement.x),y:Number(lastRelativeMovement.y)}, rawInputAngle:Number(rawInputAngle), judgementAimAngle:Number(judgementAimAngle), visualArmAngle:Number(visualArmAngle), rawJudgementDifference:Number(norm(rawInputAngle-judgementAimAngle)), judgementVisualDifference:Number(norm(judgementAimAngle-visualArmAngle)), resultVisible:!!resultOverlay?.classList.contains('show')}),
+      state:()=>({running:!!running, paused:!!paused, tutorialMode:!!tutorialMode, tutorialStepIndex:Number(tutorialStepIndex), tutorialTargetProgress:Number(tutorialSteps[tutorialStepIndex]?._hit||0), tutorialPointerMoved:!!tutorialState.pointerMoved, tutorialExploreInsideSince:tutorialState.exploreInsideSince==null?null:Number(tutorialState.exploreInsideSince), tutorialInputEnabledAt:Number(tutorialState.inputEnabledAt), tutorialSuccessCount:Number(tutorialState.successCount), tutorialValidUserInputCount:Number(tutorialState.validUserInputCount), tutorialLastSource:tutorialState.lastSource||null, tutorialCurrentJudgement:tutorialState.currentJudgement||null, tutorialTransitioning:!!tutorialState.transitioning, tutorialTransitionState:tutorialState.transitionState||null, pendingTutorialSkipCount:Number(tutorialState.pendingSkipQueue.length), tutorialStepToken:Number(tutorialStepToken), tutorialAttemptId:Number(tutorialAttemptId), tutorialTimerCount:Number(tutorialState.timers.length), tutorialFinalMixRetryScheduled:!!tutorialState.mixRetryScheduled, tutorialFinalMixRetryCount:Number(tutorialState.mixRetryCount), tutorialChartFinalizationCount:Number(tutorialState.chartFinalizationCount), tutorialLastChartFinalization:tutorialState.lastChartFinalization||null, tutorialChartSettled:!!tutorialChartSettled(), tutorialCompleteCount:Number(tutorialState.completeCount), tutorialHudHidden:!!tutorialHud&&tutorialHud.hidden, tutorialRafCount:Number(tutorialState.rafIds.length+(raf?1:0)), currentTutorialKind:tutorialSteps[tutorialStepIndex]?.kind||null, currentTutorialTitle:tutorialSteps[tutorialStepIndex]?.name||null, chartNoteTypes:chart.map(n=>n.type), tutorialCompleteVisible:!!tutorialComplete&&!tutorialComplete.hidden, activeScene:activeSceneName(), traceSwingPhase:tutorialState.traceSwingPhase, consumedNoteIds:[...tutorialState.consumedNoteIds], judgedCount:Number(judgedCount), perfectCount:Number(perfectCount), greatCount:Number(greatCount), missCount:Number(missCount), score:Number(score), combo:Number(combo), maxCombo:Number(maxCombo), visibleNoteCount:Number(getVisibleNotes(now()).length), visibleNotes:getVisibleNotes(now()).map(n=>({id:n.id||noteDebugId(n),type:n.type})), focusNote:focusNote?{id:focusNote.id||noteDebugId(focusNote),type:focusNote.type}:null, chartDoneStates:chart.map(n=>({id:n.id||noteDebugId(n),type:n.type,done:!!n.done,missed:!!n.missed,completed:!!n.completed,hold:n.hold||0,coverage:Number(n.coverageRatio||0),quality:Number(n.traceQuality||0),started:!!n.started,active:!!n.active,failReason:n.failReason||null,hitTime:n.hitTime,angle:Number(n.angle),endAngle:n.endAngle==null?null:Number(n.endAngle),duration:Number(n.duration||0),pulseSync:isPulseSynchronizedCut(n),displayColor:noteColor(n)})), tutorialLastAdvanceReason, tutorialLastAdvanceSource, inputEnabled:performance.now()>=tutorialState.inputEnabledAt, chartLength:Number(chart.length), chartEndTime:Number(chartLastHitEnd), gameTime:Number(now()), browserNow:Number(performance.now()), frameCount:Number(testFrameCount), renderCount:Number(testRenderCount), W:Number(W), H:Number(H), lastPointerSource:lastPointerSource||null, pointerActive:!!pointerActive, mouseX:Number(mouseX), mouseY:Number(mouseY), armAngle:Number(armAngle), rawArmVel:Number(rawArmVel), rawAngularVelocity:Number(rawAngularVelocity), sampleAngularVelocity:Number(aimInput.sampleAngularVelocity), cx:Number(cx), cy:Number(cy), hitR:Number(hitR), selectedSongId:selectedSongId||null, selectedDifficultyId:selectedDifficultyId||null, mobileAimPointerId:mobileAimPointerId==null?null:Number(mobileAimPointerId), mobileActionPointerId:mobileActionPointerId==null?null:Number(mobileActionPointerId), mobilePulsePointerId:mobilePulsePointerId==null?null:Number(mobilePulsePointerId), mobileScratchPointerId:mobileScratchPointerId==null?null:Number(mobileScratchPointerId), actionHeld:!!keys.MouseLeft, holdInputActive:!!filterHeld, scratchHeld:!!scratchHeld, mouseDownRight:!!mouseDownRight, pointerLockMode:inputSettings.pcAimMode, effectivePcAimMode:effectivePcAimMode(), pointerLockRequested:!!pointerLockRequested, pointerLockActive:!!pointerLockActive(), lockedVirtualAngle:Number(lockedVirtualAngle), lockedSensitivity:Number(inputSettings.lockedAimSensitivity), lastRelativeMovement:{x:Number(lastRelativeMovement.x),y:Number(lastRelativeMovement.y)}, rawInputAngle:Number(rawInputAngle), judgementAimAngle:Number(judgementAimAngle), visualArmAngle:Number(visualArmAngle), rawJudgementDifference:Number(norm(rawInputAngle-judgementAimAngle)), judgementVisualDifference:Number(norm(judgementAimAngle-visualArmAngle)), resultVisible:!!resultOverlay?.classList.contains('show')}),
       aimInputState:()=>({rawAngle:aimInput.rawAngle, rawInputAngle, judgementAimAngle, visualArmAngle, unwrappedAngle:aimInput.unwrappedAngle, previousSampleAngle:aimInput.previousSampleAngle, sampleAngularVelocity:aimInput.sampleAngularVelocity, sampleInterval:aimInput.sampleInterval, accumulatedCWTravel:aimInput.accumulatedCWTravel, accumulatedCCWTravel:aimInput.accumulatedCCWTravel, pointerRadius:aimInput.pointerRadius, sampleCount:aimInput.sampleCount, lastSampleTimestamp:aimInput.lastSampleTimestamp, centerDeadzoneActive:aimInput.centerDeadzoneActive, rebasePending:aimInput.rebasePending, magnetTarget:!!magnetTarget, stabilizerProfile:aimStabilizerProfile(), centerDeadzone:centerDeadzoneForProfile(aimStabilizerProfile())}),
       visualArmProfile:()=>visualArmProfile(),
       traceVisualProfile:()=>traceVisualProfile(),
