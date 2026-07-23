@@ -44,7 +44,8 @@ assert.match(signingHelper,/ToBase64String/,'raw rsign or minisign private-key f
 assert.match(signingHelper,/local file path/,'a workstation-only key path must produce an actionable GitHub Actions error');
 assert.match(signingHelper,/public updater key/,'the helper must reject an accidentally supplied public key');
 assert.match(signingHelper,/signer preflight provide the authoritative validation error/,'Tauri must remain the authority for opaque key-content validation');
-assert.match(signingHelper,/TAURI_SIGNING_PRIVATE_KEY_PATH/,'the signing helper must pass a runner-temporary file path to Tauri');
+assert.match(signingHelper,/TAURI_SIGNING_PRIVATE_KEY_PATH=\$keyPath/,'the signing helper must pass a runner-temporary file path to the signer preflight');
+assert.match(signingHelper,/TAURI_SIGNING_PRIVATE_KEY=\$keyPath/,'the signing helper must pass the same runner-temporary file path to the release build');
 assert.match(signingHelper,/UTF8Encoding\]::new\(\$false\)/,'the signing key file must be written without a UTF-8 BOM');
 assert.doesNotMatch(signingHelper,/Write-Host[^\n]*(normalized|secret|decoded|keyMaterial)/i,'the signing helper must never print private key material');
 assert.match(releaseWorkflow,/Verify updater signing key[\s\S]*cargo tauri signer sign --private-key-path \$env:TAURI_SIGNING_PRIVATE_KEY_PATH/,'the workflow must validate signing before the expensive desktop build');
