@@ -28,9 +28,11 @@ test("release metadata loads in both window and service worker contexts", () => 
 
 test("PWA and service worker consume the shared release metadata", () => {
   assert.match(pwaSource, /const RELEASE=window\.CircleMixVersion/);
+  assert.match(pwaSource, /circleMixOfflineReady\.\$\{VERSION\}\.\$\{CACHE_REVISION\}/);
   assert.doesNotMatch(pwaSource, /const VERSION\s*=\s*["'][0-9]/);
   assert.match(serviceWorkerSource, /^importScripts\("\.\/src\/version\.js"\);/);
   assert.match(serviceWorkerSource, /const RELEASE = self\.CircleMixVersion/);
+  assert.match(serviceWorkerSource, /\$\{CACHE_PREFIX\}\$\{VERSION\}-\$\{CACHE_REVISION\}-app/);
   assert.doesNotMatch(serviceWorkerSource, /const VERSION\s*=\s*["'][0-9]/);
   assert.match(serviceWorkerSource, /cacheRevision/);
 });
