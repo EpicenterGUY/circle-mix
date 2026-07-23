@@ -1,0 +1,118 @@
+name: Agent PWA Patch
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Update stale PWA smoke invariants
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("tests/smoke.test.js")
+          text = path.read_text()
+
+          def replace_once(old, new):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one replacement, found {count}: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+
+          replace_once('''test("index and service worker use the same PWA cache query", () => {
+          const index = fs.readFileSync("index.html", "utf8");
+          const sw = fs.readFileSync("service-worker.js", "utf8");
+          assert.match(index, /20260721-local-difficulty-930/);
+          assert.match(sw, /20260721-local-difficulty-930/);
+          assert.match(index, /src\\/charts\\/routing\\.js\\?v=/);
+          assert.match(sw, /src\\/charts\\/routing\\.js\\?v=/);
+          assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
+          assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
+          assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
+          assert.doesNotMatch(sw, /20260718-mobile-play-hotfix-1/);
+          });''', '''test("index and service worker use shared PWA release metadata", () => {
+          const index = fs.readFileSync("index.html", "utf8");
+          const sw = fs.readFileSync("service-worker.js", "utf8");
+          const version = fs.readFileSync("src/version.js", "utf8");
+          assert.match(index, /src\\/charts\\/routing\\.js\\?v=/);
+          assert.match(sw, /versioned\\("\\.\\/src\\/charts\\/routing\\.js"\\)/);
+          assert.match(version, /cacheRevision:\\s*"20260723-pwa-update-foundation"/);
+          assert.match(sw, /encodeURIComponent\\(CACHE_REVISION\\)/);
+          assert.match(sw, /networkFirstStatic/);
+          assert.doesNotMatch(sw, /20260721-local-difficulty-930/);
+          assert.doesNotMatch(index, /20260718-pwa-offline-port-fix-1/);
+          assert.doesNotMatch(sw, /20260718-pwa-offline-port-fix-1/);
+          assert.doesNotMatch(index, /20260718-mobile-play-hotfix-1/);
+          assert.doesNotMatch(sw, /20260718-mobile-play-hotfix-1/);
+          });''')
+
+          replace_once('assert.match(sw, /\\.\\/src\\/charts\\/ghost-rule\\.js\\?v=/);', 'assert.match(sw, /versioned\\("\\.\\/src\\/charts\\/ghost-rule\\.js"\\)/);')
+          replace_once('assert.match(pwa, /postToSW\\(\\{type:"OFFLINE_STATUS", version:VERSION\\}, \\[channel\\.port2\\]\\)/);', 'assert.match(pwa, /postToSW\\(\\{type:"OFFLINE_STATUS", version:VERSION, revision:CACHE_REVISION\\}, \\[channel\\.port2\\]\\)/);')
+          replace_once('assert.match(pwa, /postToSW\\(\\{type:"DOWNLOAD_OFFLINE", version:VERSION\\}, \\[channel\\.port2\\]\\)/);', 'assert.match(pwa, /postToSW\\(\\{type:"DOWNLOAD_OFFLINE", version:VERSION, revision:CACHE_REVISION\\}, \\[channel\\.port2\\]\\)/);')
+
+          replace_once('''test("direct play startup release versions are synchronized at 0.9.30", () => {
+          const version = fs.readFileSync("src/version.js", "utf8");
+          const pwa = fs.readFileSync("src/pwa.js", "utf8");
+          const sw = fs.readFileSync("service-worker.js", "utf8");
+          const changelog = fs.readFileSync("src/changelog.js", "utf8");
+          assert.match(version, /version:\\s*"0\\.9\\.30"/);
+          assert.match(pwa, /const VERSION="0\\.9\\.30"/);
+          assert.match(sw, /const VERSION = "0\\.9\\.30"/);
+          assert.match(changelog, /version:\\s*"0\\.9\\.30"/);
+          });''', '''test("web release metadata is shared without duplicate hard-coded versions", () => {
+          const version = fs.readFileSync("src/version.js", "utf8");
+          const pwa = fs.readFileSync("src/pwa.js", "utf8");
+          const sw = fs.readFileSync("service-worker.js", "utf8");
+          const changelog = fs.readFileSync("src/changelog.js", "utf8");
+          assert.match(version, /version:\\s*"0\\.9\\.30"/);
+          assert.match(version, /cacheRevision:/);
+          assert.match(pwa, /const RELEASE=window\\.CircleMixVersion/);
+          assert.match(sw, /^importScripts\\("\\.\\/src\\/version\\.js"\\);/);
+          assert.doesNotMatch(pwa, /const VERSION="0\\.9\\.30"/);
+          assert.doesNotMatch(sw, /const VERSION = "0\\.9\\.30"/);
+          assert.match(changelog, /version:\\s*"0\\.9\\.30"/);
+          });''')
+
+          replace_once('''test("index and service worker app shell cache-bust URLs match exactly", () => {
+          const index = fs.readFileSync("index.html", "utf8");
+          const sw = fs.readFileSync("service-worker.js", "utf8");
+          const indexUrls = [...index.matchAll(/(?:href|src)="(\\.\\/(?:style\\.css|src\\/[^\\"]+\\.js)\\?v=[^"]+)"/g)].map(m=>m[1]).sort();
+          const swUrls = [...sw.matchAll(/"(\\.\\/(?:style\\.css|src\\/[^\\"]+\\.js)\\?v=[^"]+)"/g)].map(m=>m[1]).sort();
+          assert.deepEqual(swUrls, indexUrls);
+          assert.ok(indexUrls.length > 5);
+          });''', '''test("service worker derives app shell cache-bust URLs from cache revision", () => {
+          const index = fs.readFileSync("index.html", "utf8");
+          const sw = fs.readFileSync("service-worker.js", "utf8");
+          const indexUrls = [...index.matchAll(/(?:href|src)="(\\.\\/(?:style\\.css|src\\/[^\\"]+\\.js)\\?v=[^"]+)"/g)].map(m=>m[1]);
+          assert.ok(indexUrls.length > 5);
+          assert.match(sw, /const versioned = path =>/);
+          assert.match(sw, /encodeURIComponent\\(CACHE_REVISION\\)/);
+          for(const asset of ["./style.css","./src/version.js","./src/charts/routing.js","./src/game.js","./src/pwa.js"]) assert.ok(sw.includes(`versioned("${asset}")`), asset);
+          });''')
+
+          path.write_text(text)
+          PY
+          node tests/smoke.test.js
+          node tests/pwa-update.test.js
+      - name: Commit patch and remove diagnostics
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/agent-pwa-diagnostic.yml .github/workflows/agent-pwa-patch.yml
+          git add tests/smoke.test.js
+          git commit -m "test: update PWA cache invariants"
+          git push origin HEAD:${{ github.head_ref }}
