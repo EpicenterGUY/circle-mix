@@ -1,4 +1,4 @@
-name: Apply AUTO aim visual flow
+name: Apply aim visual flow
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
       - feat/auto-aim-visual-flow
     paths:
       - scripts/apply-auto-aim-visual-flow.js
+      - scripts/apply-mouse-aim-feel.js
 
 permissions:
   contents: write
@@ -23,6 +24,8 @@ jobs:
           cache: npm
       - name: Apply AUTO visual flow
         run: node scripts/apply-auto-aim-visual-flow.js
+      - name: Apply mouse aim feel
+        run: node scripts/apply-mouse-aim-feel.js
       - name: Install dependencies
         run: npm ci
       - name: Run repository tests
@@ -35,6 +38,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No generated changes"
           else
-            git commit -m "feat: smooth AUTO aim visual movement"
+            git commit -m "feat: smooth AUTO and mouse aim movement"
             git push
           fi
