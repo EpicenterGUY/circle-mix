@@ -56,5 +56,44 @@ assert.equal(movingAway(-1.2, -0.1), false);
 `,
   'the stabilizer regression block'
 );
+replaceBlock(
+  'test("keyboard and AUTO aim synchronize the unified rotation state", () => {',
+  'test("playfield readability keeps TRACE visual widths independent of judgement tolerance", () => {',
+  String.raw`test("keyboard and AUTO aim keep judgement unified while AUTO rendering stays independent", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+assert.match(src, /const delta=\(keyD-keyA\)\*9\.5\*dt/);
+assert.match(src, /aimInput\.accumulatedCWTravel\+=delta/);
+assert.match(src, /aimInput\.accumulatedCCWTravel-=delta/);
+const setterStart=src.indexOf('  function setAutoAimAngle(angle,velocity=0){');
+const setterEnd=src.indexOf('\n  function completeAutoNote',setterStart);
+const setter=setterStart>=0&&setterEnd>setterStart?src.slice(setterStart,setterEnd):'';
+assert.ok(setter.includes('targetAngle=armAngle=judgementAimAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a'));
+assert.ok(!setter.includes('visualArmAngle='));
+const armStart=src.indexOf('  function updateArm(dt){');
+const armEnd=src.indexOf('\n  function logAutoProcessing',armStart);
+const armBody=armStart>=0&&armEnd>armStart?src.slice(armStart,armEnd):'';
+assert.ok(armBody.includes('visualArmAngle=autoVisualAimStep'));
+});
+
+`,
+  'the keyboard and AUTO synchronization block'
+);
+replaceBlock(
+  'test("playfield readability only renders a separate judgement marker when needed", () => {',
+  'test("foldable mobile viewports retry landscape safely", () => {',
+  String.raw`test("playfield readability hides AUTO verifier marker and keeps user marker conditional", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+const markerStart=src.indexOf('  function judgementMarkerVisible(){');
+const markerEnd=src.indexOf('\n  function drawArm',markerStart);
+const marker=markerStart>=0&&markerEnd>markerStart?src.slice(markerStart,markerEnd):'';
+assert.ok(marker.includes('return !isAutoActive() && judgementMarkerVisibleFor'));
+assert.match(src, /if\(judgementMarkerVisible\(\)\)\{/);
+assert.match(src, /ctx\.arc\(hitR,0,5\.5,0,TAU\); ctx\.stroke\(\)/);
+assert.doesNotMatch(src, /ctx\.arc\(hitR,0,4\.5,0,TAU\); ctx\.fill\(\)/);
+});
+
+`,
+  'the judgement marker readability block'
+);
 fs.writeFileSync(file,src);
-console.log('Updated aim visual and stabilizer regression contracts.');
+console.log('Updated aim visual, stabilizer, AUTO, and marker regression contracts.');
