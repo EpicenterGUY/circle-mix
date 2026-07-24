@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   diagnose:
@@ -18,36 +20,75 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Syntax checks
+      - id: syntax
+        name: Syntax checks
+        continue-on-error: true
         run: |
           node --check src/pwa.js
           node --check service-worker.js
           node --check src/version.js
           node --check src/changelog.js
-      - name: Smoke test
+      - id: smoke
+        name: Smoke test
+        continue-on-error: true
         run: node tests/smoke.test.js
-      - name: Hit sound test
+      - id: hit_sound
+        name: Hit sound test
+        continue-on-error: true
         run: node tests/hit-sound.test.js
-      - name: Storage and profile tests
+      - id: storage
+        name: Storage and profile tests
+        continue-on-error: true
         run: |
           node tests/song-record.test.js
           node tests/local-library.test.js
           node tests/player-profile.test.js
-      - name: Input tests
+      - id: input
+        name: Input tests
+        continue-on-error: true
         run: |
           node tests/pulse-input.test.js
           node tests/pulse-game-input.test.js
           node tests/local-auto-toggle.test.js
-      - name: CMIX and difficulty tests
+      - id: cmix
+        name: CMIX and difficulty tests
+        continue-on-error: true
         run: |
           node tests/cmix-validator.test.js
           node tests/cmix-importer.test.js
           node tests/cmix-exporter.test.js
           node tests/chart-difficulty.test.js
-      - name: Desktop regression tests
+      - id: desktop
+        name: Desktop regression tests
+        continue-on-error: true
         run: |
           node tests/desktop-installer.test.js
           node tests/desktop-visual-pass.test.js
           node tests/desktop-updater.test.js
-      - name: PWA regression test
+      - id: pwa
+        name: PWA regression test
+        continue-on-error: true
         run: node tests/pwa-update.test.js
+      - name: Report diagnostic outcomes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const rows = [
+              ['syntax', '${{ steps.syntax.outcome }}'],
+              ['smoke', '${{ steps.smoke.outcome }}'],
+              ['hit_sound', '${{ steps.hit_sound.outcome }}'],
+              ['storage', '${{ steps.storage.outcome }}'],
+              ['input', '${{ steps.input.outcome }}'],
+              ['cmix', '${{ steps.cmix.outcome }}'],
+              ['desktop', '${{ steps.desktop.outcome }}'],
+              ['pwa', '${{ steps.pwa.outcome }}']
+            ];
+            const marker = '<!-- mobile-pwa-diagnostic -->';
+            const body = `${marker}\nMobile PWA diagnostic for ${context.sha}:\n\n${rows.map(([name,outcome]) => `- ${name}: **${outcome}**`).join('\n')}`;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner: context.repo.owner, repo: context.repo.repo, issue_number: 138, per_page: 100});
+            const previous = comments.find(comment => comment.body?.includes(marker));
+            if(previous) await github.rest.issues.updateComment({owner: context.repo.owner, repo: context.repo.repo, comment_id: previous.id, body});
+            else await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: 138, body});
+      - name: Fail if a diagnostic group failed
+        if: steps.syntax.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.hit_sound.outcome == 'failure' || steps.storage.outcome == 'failure' || steps.input.outcome == 'failure' || steps.cmix.outcome == 'failure' || steps.desktop.outcome == 'failure' || steps.pwa.outcome == 'failure'
+        run: exit 1
