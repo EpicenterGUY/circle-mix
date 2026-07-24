@@ -315,7 +315,8 @@
   const AIM_SAMPLE_FRESH_MS=120;
   const AIM_SAMPLE_MIN_DT=.0005;
   const AIM_SAMPLE_MAX_DT=.050;
-  const AIM_VISUAL_SNAP_ERROR={FAST:Math.PI*.38,NORMAL:Math.PI*.46,SOFT:Math.PI*.56};
+  // 90°+ mouse jumps must never trail behind the real judgement target, even on SOFT.
+  const AIM_VISUAL_SNAP_ERROR={FAST:Math.PI*.25,NORMAL:Math.PI/3,SOFT:Math.PI*5/12};
   const aimInput={rawAngle:-Math.PI/2, unwrappedAngle:-Math.PI/2, previousSampleAngle:null, sampleAngularVelocity:0, accumulatedCWTravel:0, accumulatedCCWTravel:0, pointerRadius:0, sampleCount:0, lastSampleTimestamp:0, sampleInterval:0, centerDeadzoneActive:false, rebasePending:true, pendingSamples:0, lastSampleDelta:0};
   let rawInputAngle=-Math.PI/2, judgementAimAngle=-Math.PI/2, visualArmAngle=-Math.PI/2;
   let keyA=false, keyD=false, filterHeld=false, scratchHeld=false, mouseDownRight=false;
@@ -2163,10 +2164,10 @@
   function aligned(angle, extra=0){return distAng(judgementAimAngle,angle)<DIAL_ARC_HALF+Math.PI*extra;}
   function isAimMagnetNote(n){ return !!n && (n.type==="cut"||n.type==="fx"||n.type.startsWith("swing")||n.type.startsWith("scratch")); }
   function aimStabilizerProfile(mode=inputSettings.aimStabilizer){
-    // Stabilizer modes are deliberately light.  Their deadzone only protects
-    // atan2 at the exact centre; it must not swallow large-angle mouse jumps.
-    if(mode==="MEDIUM") return {mode, slowTime:.030, slowVel:.85, fastVel:4.4, magnetEnter:5*Math.PI/180, magnetExit:8*Math.PI/180, magnetStrength:.27, disengageVel:4.8, centerEnterRatio:.055, centerExitRatio:.075, centerEnterPx:12, centerExitPx:16, jumpBypass:Math.PI*.40};
-    if(mode==="LOW") return {mode, slowTime:.018, slowVel:.75, fastVel:3.8, magnetEnter:3*Math.PI/180, magnetExit:7*Math.PI/180, magnetStrength:.16, disengageVel:4.4, centerEnterRatio:.040, centerExitRatio:.060, centerEnterPx:8, centerExitPx:12, jumpBypass:Math.PI*.34};
+    // MOUSE_AIM_LARGE_JUMP_FLOW: optional stabilizers keep a small centre guard,
+    // but release early on decisive jumps. OFF remains the raw 1:1 judgement path.
+    if(mode==="MEDIUM") return {mode, slowTime:.030, slowVel:.85, fastVel:4.4, magnetEnter:5*Math.PI/180, magnetExit:8*Math.PI/180, magnetStrength:.27, disengageVel:4.8, centerEnterRatio:.035, centerExitRatio:.050, centerEnterPx:8, centerExitPx:11, jumpBypass:Math.PI*.34};
+    if(mode==="LOW") return {mode, slowTime:.018, slowVel:.75, fastVel:3.8, magnetEnter:3*Math.PI/180, magnetExit:7*Math.PI/180, magnetStrength:.16, disengageVel:4.4, centerEnterRatio:.025, centerExitRatio:.040, centerEnterPx:6, centerExitPx:9, jumpBypass:Math.PI*.28};
     return {mode:"OFF", slowTime:0, slowVel:0, fastVel:0, magnetEnter:0, magnetExit:0, magnetStrength:0, disengageVel:0, centerEnterRatio:0, centerExitRatio:0, centerEnterPx:1, centerExitPx:2, jumpBypass:0};
   }
   function centerDeadzoneForProfile(profile){
@@ -2648,11 +2649,36 @@
     };
   }
 
+  const AUTO_VISUAL_AIM_PATH_RESPONSE=.045;
+  let autoVisualTargetAngle=-Math.PI/2,autoVisualDeadline=null,autoVisualPathActive=false;
+
+  function autoVisualAimStep(current,target,dt,timeToTarget=null){
+    // AUTO_VISUAL_AIM_FLOW: judgement remains frame-perfect, while only the rendered
+    // arm follows the shortest arc. Static jumps use the time until the next hit so
+    // they arrive exactly on beat; moving paths use a short frame-rate-independent lag.
+    if(!Number.isFinite(target))return Number.isFinite(current)?norm(current):0;
+    const normalizedTarget=norm(target);
+    if(!Number.isFinite(current))return normalizedTarget;
+    const safeDt=clamp(Number(dt)||0,0,.1);
+    if(safeDt<=0)return norm(current);
+    const hasDeadline=timeToTarget!==null&&timeToTarget!==undefined&&Number.isFinite(Number(timeToTarget));
+    if(hasDeadline){
+      const remaining=Number(timeToTarget);
+      if(remaining<=safeDt)return normalizedTarget;
+      return norm(current+norm(normalizedTarget-current)*clamp(safeDt/remaining,0,1));
+    }
+    const error=Math.abs(norm(normalizedTarget-current));
+    const tau=lerp(.07,.022,clamp(error/Math.PI,0,1));
+    return norm(current+norm(normalizedTarget-current)*(1-Math.exp(-safeDt/Math.max(tau,.001))));
+  }
+
   function setAutoAimAngle(angle,velocity=0){
     if(!Number.isFinite(angle))return;
     const a=norm(angle);
     prevArmAngle=armAngle;
-    targetAngle=armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a;
+    // Keep the deterministic verifier target immediate. visualArmAngle is advanced
+    // separately in updateArm so AUTO no longer teleports between note angles.
+    targetAngle=armAngle=judgementAimAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a;
     rawArmVel=armVel=rawAngularVelocity=Number.isFinite(velocity)?velocity:0;
     aimInput.rawAngle=a; aimInput.unwrappedAngle=a; aimInput.previousSampleAngle=a;
     aimInput.sampleAngularVelocity=rawAngularVelocity; aimInput.lastSampleDelta=0;
@@ -2698,6 +2724,7 @@
     const activePath=chart.find(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&t>=n.hitTime&&t<=n.hitTime+n.duration+(n.type.startsWith("trace")?traceProfile().endpointGrace:0));
     if(activePath){
       const a=slideAngle(activePath,t);
+      autoVisualTargetAngle=norm(a); autoVisualDeadline=null; autoVisualPathActive=true;
       setAutoAimAngle(a,slideDelta(activePath)/Math.max(activePath.duration,.001));
       if(activePath.type.startsWith("trace")){
         const progress=traceProgress(activePath,t);
@@ -2711,7 +2738,9 @@ activePath.autoTraceProgress=progress;
       }
     }else{
       const n=nextAimNote(t);
-      if(n)setAutoAimAngle(n.angle,0);
+      autoVisualPathActive=false;
+      if(n){ autoVisualTargetAngle=norm(n.angle); autoVisualDeadline=n.hitTime; setAutoAimAngle(n.angle,0); }
+      else autoVisualDeadline=null;
     }
 
     // AUTO is a deterministic chart verifier: frame drops may delay processing,
@@ -2722,17 +2751,26 @@ activePath.autoTraceProgress=progress;
   function resetAimInput(angle=-Math.PI/2){
     Object.assign(aimInput,{rawAngle:angle,unwrappedAngle:angle,previousSampleAngle:null,sampleAngularVelocity:0,accumulatedCWTravel:0,accumulatedCCWTravel:0,pointerRadius:0,sampleCount:0,lastSampleTimestamp:0,sampleInterval:0,centerDeadzoneActive:false,rebasePending:true,pendingSamples:0,lastSampleDelta:0});
     rawInputAngle=judgementAimAngle=visualArmAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=angle; rawAngularVelocity=0; centerDeadzoneActive=false; magnetTarget=null; magnetAngleError=0;
+    autoVisualTargetAngle=angle; autoVisualDeadline=null; autoVisualPathActive=false;
   }
-  function visualSnapThreshold(){ return AIM_VISUAL_SNAP_ERROR[inputSettings.aimVisualResponse] || AIM_VISUAL_SNAP_ERROR.FAST; }
-  function shouldSnapVisualAim(visualTarget){ return Math.abs(norm(visualTarget-visualArmAngle))>=visualSnapThreshold(); }
-  function updateVisualArmAngle(visualTarget,dt){
-    if(inputSettings.aimVisual==="DIRECT" || lastPointerSource==="touch" || shouldSnapVisualAim(visualTarget)){ visualArmAngle=visualTarget; return; }
-    const response={FAST:{base:.016,min:.0035},NORMAL:{base:.032,min:.007},SOFT:{base:.055,min:.012}}[inputSettings.aimVisualResponse] || {base:.016,min:.0035};
-    const error=Math.abs(norm(visualTarget-visualArmAngle));
-    const velocity=Math.abs(aimInput.sampleAngularVelocity)||0;
-    const urgency=Math.max(1-Math.exp(-velocity/3.6),1-Math.exp(-error/(Math.PI/6)));
+  function visualSnapThreshold(responseMode=inputSettings.aimVisualResponse){ return AIM_VISUAL_SNAP_ERROR[responseMode] || AIM_VISUAL_SNAP_ERROR.FAST; }
+  function shouldSnapVisualAim(visualTarget,responseMode=inputSettings.aimVisualResponse,currentAngle=visualArmAngle){ return Math.abs(norm(visualTarget-currentAngle))>=visualSnapThreshold(responseMode); }
+  function mouseVisualAimStep(currentAngle,visualTarget,dt,responseMode=inputSettings.aimVisualResponse,angularVelocity=aimInput.sampleAngularVelocity){
+    if(!Number.isFinite(visualTarget))return Number.isFinite(currentAngle)?norm(currentAngle):0;
+    const target=norm(visualTarget);
+    if(!Number.isFinite(currentAngle)||shouldSnapVisualAim(target,responseMode,currentAngle))return target;
+    const response={FAST:{base:.014,min:.003},NORMAL:{base:.028,min:.006},SOFT:{base:.048,min:.010}}[responseMode] || {base:.014,min:.003};
+    const safeDt=clamp(Number(dt)||0,0,.1);
+    if(safeDt<=0)return norm(currentAngle);
+    const error=Math.abs(norm(target-currentAngle));
+    const velocity=Math.abs(Number(angularVelocity)||0);
+    const urgency=Math.max(1-Math.exp(-velocity/3.4),1-Math.exp(-error/(Math.PI/7)));
     const tau=response.base+(response.min-response.base)*urgency;
-    visualArmAngle=norm(visualArmAngle+norm(visualTarget-visualArmAngle)*(1-Math.exp(-dt/Math.max(tau,.001))));
+    return norm(currentAngle+norm(target-currentAngle)*(1-Math.exp(-safeDt/Math.max(tau,.001))));
+  }
+  function updateVisualArmAngle(visualTarget,dt){
+    if(inputSettings.aimVisual==="DIRECT" || lastPointerSource==="touch"){ visualArmAngle=visualTarget; return; }
+    visualArmAngle=mouseVisualAimStep(visualArmAngle,visualTarget,dt,inputSettings.aimVisualResponse,aimInput.sampleAngularVelocity);
   }
   function normalizedAimTimestamp(timestamp){
     let value=Number(timestamp);
@@ -2795,15 +2833,21 @@ activePath.autoTraceProgress=progress;
   }
   function updateArm(dt){
     const tNow=now(); prevArmAngle=armAngle;
-    if(isAutoActive() && chart.some(n=>!n.done&&!n.missed&&(n.type.startsWith("slide")||n.type.startsWith("trace"))&&tNow>=n.hitTime&&tNow<=n.hitTime+n.duration)) return;
-    if(isAutoActive()||keyA||keyD){
-      if(keyA||keyD){
-        const delta=(keyD-keyA)*9.5*dt;
-        targetAngle+=delta; rawInputAngle=rawTargetAngle=norm(targetAngle);
-        aimInput.unwrappedAngle+=delta; aimInput.lastSampleDelta=delta; aimInput.sampleInterval=dt; aimInput.sampleAngularVelocity=delta/Math.max(dt,.001);
-        if(delta>0) aimInput.accumulatedCWTravel+=delta; else aimInput.accumulatedCCWTravel-=delta;
-        aimInput.sampleCount++; aimInput.lastSampleTimestamp=performance.now(); magnetTarget=null;
-      }
+    if(isAutoActive()){
+      // Deterministic AUTO judgement remains immediate; only drawArm's visual angle flows.
+      armAngle=judgementAimAngle;
+      const timeToTarget=autoVisualPathActive?AUTO_VISUAL_AIM_PATH_RESPONSE:(Number.isFinite(autoVisualDeadline)?autoVisualDeadline-tNow:null);
+      visualArmAngle=autoVisualAimStep(visualArmAngle,autoVisualTargetAngle,dt,timeToTarget);
+      rawArmVel=rawAngularVelocity=aimInput.sampleAngularVelocity;
+      armVel=norm(armAngle-prevArmAngle)/Math.max(dt,.001);
+      return;
+    }
+    if(keyA||keyD){
+      const delta=(keyD-keyA)*9.5*dt;
+      targetAngle+=delta; rawInputAngle=rawTargetAngle=norm(targetAngle);
+      aimInput.unwrappedAngle+=delta; aimInput.lastSampleDelta=delta; aimInput.sampleInterval=dt; aimInput.sampleAngularVelocity=delta/Math.max(dt,.001);
+      if(delta>0) aimInput.accumulatedCWTravel+=delta; else aimInput.accumulatedCCWTravel-=delta;
+      aimInput.sampleCount++; aimInput.lastSampleTimestamp=performance.now(); magnetTarget=null;
       const diff=norm(targetAngle-armAngle); armAngle=norm(armAngle+diff*clamp(1-Math.pow(.0001,dt),0,1));
       judgementAimAngle=rawInputAngle=rawTargetAngle=armAngle; visualArmAngle=armAngle; rawArmVel=armVel=aimInput.sampleAngularVelocity||norm(armAngle-prevArmAngle)/Math.max(dt,.001); return;
     }
@@ -3035,7 +3079,9 @@ activePath.autoTraceProgress=progress;
   }
 
   function judgementMarkerVisible(){
-    return judgementMarkerVisibleFor(visualArmAngle,judgementAimAngle,magnetTarget);
+    // AUTO uses a deliberately smoothed display arm while its deterministic judgement
+    // target stays immediate. Do not render that hidden verifier target as a second cursor.
+    return !isAutoActive() && judgementMarkerVisibleFor(visualArmAngle,judgementAimAngle,magnetTarget);
   }
 
   function drawArm(){

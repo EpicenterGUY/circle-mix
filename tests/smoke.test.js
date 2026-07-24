@@ -18,7 +18,7 @@ setAttribute(){}, removeAttribute(){}, focus(){}, blur(){}, getBoundingClientRec
 }
 function loadGameExports(){
 const src = fs.readFileSync("src/game.js", "utf8");
-const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n SLIDE_JUDGEMENT_PROFILE, PULSE_SYNC_EPSILON, COLORS, isPulseSynchronizedCut, noteColor, nextAimNotesAfterPulse, nextAimNoteAfterPulse, PULSE_AIM_GUIDE_LINGER, PULSE_AIM_GUIDE_LOOKAHEAD, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
+const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n SLIDE_JUDGEMENT_PROFILE, PULSE_SYNC_EPSILON, COLORS, isPulseSynchronizedCut, noteColor, nextAimNotesAfterPulse, nextAimNoteAfterPulse, PULSE_AIM_GUIDE_LINGER, PULSE_AIM_GUIDE_LOOKAHEAD, AUTO_VISUAL_AIM_PATH_RESPONSE, autoVisualAimStep, AIM_VISUAL_SNAP_ERROR, aimStabilizerProfile, mouseVisualAimStep, effectivePcAimMode, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
 const patched = src.replace(/\r?\n\s*updateModeButtons\(\);\r?\n\s*updateButtons\(\);\r?\n\}\)\(\);\s*$/, `${exportPatch}\n updateModeButtons();\n updateButtons();\n})();`);
 const elements = new Map();
 const document = {
@@ -159,6 +159,56 @@ test("SLIDE judgement profile keeps sustained tracking humanly achievable", () =
   assert.ok(src.includes("aligned(a,SLIDE_JUDGEMENT_PROFILE.angleExtra)"));
   assert.ok(src.includes("ratio>=SLIDE_JUDGEMENT_PROFILE.greatHoldRatio"));
   assert.ok(src.includes("ratio>=SLIDE_JUDGEMENT_PROFILE.perfectHoldRatio"));
+});
+
+test("AUTO visual aim flows between targets without changing verifier timing", () => {
+  const angularDistance=(a,b)=>Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)));
+  const target=2.4;
+  const first=api.autoVisualAimStep(0,target,1/60,.5);
+  assert.ok(first>0 && first<target*.2,"a distant AUTO target must start moving without teleporting");
+  let angle=0;
+  for(let frame=0;frame<60;frame++) angle=api.autoVisualAimStep(angle,target,1/60,(60-frame)/60);
+  assert.ok(angularDistance(angle,target)<1e-9,"deadline interpolation must arrive on the hit frame");
+  const wrapped=api.autoVisualAimStep(-2.9,2.9,1/60,.5);
+  assert.ok(angularDistance(wrapped,2.9)<angularDistance(-2.9,2.9),"AUTO visual flow must use the shortest circular route");
+  const pathStep=api.autoVisualAimStep(0,1.5,1/60,api.AUTO_VISUAL_AIM_PATH_RESPONSE);
+  assert.ok(pathStep>0 && pathStep<1.5,"moving SLIDE/TRACE targets must keep a short visual lag instead of snapping");
+  const source=fs.readFileSync("src/game.js","utf8");
+  const setterStart=source.indexOf("  function setAutoAimAngle(angle,velocity=0){");
+  const setterEnd=source.indexOf("\n  function completeAutoNote",setterStart);
+  const setter=setterStart>=0&&setterEnd>setterStart?source.slice(setterStart,setterEnd):"";
+  assert.ok(setter,"AUTO aim setter missing");
+  assert.ok(!setter.includes("visualArmAngle="),"AUTO verifier setter must not teleport the rendered arm");
+  assert.ok(source.includes("AUTO_VISUAL_AIM_FLOW"));
+  assert.ok(source.includes("autoVisualDeadline=n.hitTime"));
+  assert.ok(source.includes("autoVisualPathActive?AUTO_VISUAL_AIM_PATH_RESPONSE"));
+  assert.ok(source.includes("return !isAutoActive() && judgementMarkerVisibleFor"));
+});
+
+test("mouse aim keeps raw judgement while improving large-angle visual response", () => {
+  const angularDistance=(a,b)=>Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)));
+  assert.equal(api.effectivePcAimMode(),"ABSOLUTE","PC AIM AUTO must remain an ABSOLUTE fallback, never implicit pointer lock");
+  assert.ok(api.AIM_VISUAL_SNAP_ERROR.FAST<api.AIM_VISUAL_SNAP_ERROR.NORMAL);
+  assert.ok(api.AIM_VISUAL_SNAP_ERROR.NORMAL<api.AIM_VISUAL_SNAP_ERROR.SOFT);
+  for(const mode of ["FAST","NORMAL","SOFT"]){
+    const jump=api.mouseVisualAimStep(0,Math.PI/2,1/60,mode,0);
+    assert.ok(angularDistance(jump,Math.PI/2)<1e-12,mode+" must immediately display a 90 degree jump");
+  }
+  const small=api.mouseVisualAimStep(0,.12,1/60,"SOFT",0);
+  assert.ok(small>0 && small<.12,"small SMOOTH movement should remain visually softened");
+  const wrapped=api.mouseVisualAimStep(3.05,-3.05,1/60,"SOFT",0);
+  assert.ok(angularDistance(wrapped,-3.05)<angularDistance(3.05,-3.05),"mouse visual smoothing must use the shortest circular path");
+  const off=api.aimStabilizerProfile("OFF"), low=api.aimStabilizerProfile("LOW"), medium=api.aimStabilizerProfile("MEDIUM");
+  assert.equal(off.centerEnterPx,1); assert.equal(off.centerExitPx,2); assert.equal(off.jumpBypass,0);
+  assert.ok(low.centerEnterPx<=6 && low.centerExitPx<=9 && low.jumpBypass<=Math.PI*.28+.000001);
+  assert.ok(medium.centerEnterPx<=8 && medium.centerExitPx<=11 && medium.jumpBypass<=Math.PI*.34+.000001);
+  const source=fs.readFileSync("src/game.js","utf8");
+  assert.ok(source.includes("MOUSE_AIM_LARGE_JUMP_FLOW"));
+  assert.ok(source.includes('if(profile.mode==="OFF" || source==="touch"){'));
+  assert.ok(source.includes('stabilizedTargetAngle=angle; judgementAimAngle=armAngle=angle;'));
+  assert.ok(source.includes('function effectivePcAimMode(){ return inputSettings.pcAimMode==="LOCKED" ? "LOCKED" : "ABSOLUTE"; }'));
+  const autoModeLine=source.split("\n").find(line=>line.includes('pcAimMode==="AUTO"'))||"";
+  assert.ok(!autoModeLine.includes("LOCKED")&&!autoModeLine.includes("requestPointerLock"));
 });
 
 test("PULSE-synchronized CUT uses the shared orange readability language", () => {
@@ -500,13 +550,17 @@ assert.match(src, /PC AIM " \+ inputSettings\.pcAimMode \+ \(inputSettings\.pcAi
 
 test("aim visual response is visual-only with deterministic large-error catch-up", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /const AIM_VISUAL_RESPONSE_MODES = \["FAST","NORMAL","SOFT"\]/);
-assert.match(src, /aimVisualResponse:AIM_VISUAL_RESPONSE_MODES\.includes\(saved\.aimVisualResponse\)\?saved\.aimVisualResponse:"FAST"/);
-assert.match(src, /const AIM_VISUAL_SNAP_ERROR=\{FAST:Math\.PI\*\.38,NORMAL:Math\.PI\*\.46,SOFT:Math\.PI\*\.56\}/);
-assert.match(src, /function shouldSnapVisualAim\(visualTarget\)/);
-assert.match(src, /if\(inputSettings\.aimVisual==="DIRECT" \|\| lastPointerSource==="touch" \|\| shouldSnapVisualAim\(visualTarget\)\)/);
-assert.match(src, /const urgency=Math\.max\(1-Math\.exp\(-velocity\/3\.6\),1-Math\.exp\(-error\/\(Math\.PI\/6\)\)\)/);
-assert.doesNotMatch(src.match(/function updateVisualArmAngle\(visualTarget,dt\)\{[\s\S]*?\n  \}/)?.[0] || "", /velocity\s*[><=]+\s*\d[^;]*visualArmAngle/);
+assert.ok(src.includes('const AIM_VISUAL_RESPONSE_MODES = ["FAST","NORMAL","SOFT"]'));
+assert.ok(src.includes('aimVisualResponse:AIM_VISUAL_RESPONSE_MODES.includes(saved.aimVisualResponse)?saved.aimVisualResponse:"FAST"'));
+assert.ok(src.includes('const AIM_VISUAL_SNAP_ERROR={FAST:Math.PI*.25,NORMAL:Math.PI/3,SOFT:Math.PI*5/12}'));
+assert.ok(src.includes('function shouldSnapVisualAim(visualTarget,responseMode=inputSettings.aimVisualResponse,currentAngle=visualArmAngle)'));
+assert.ok(src.includes('function mouseVisualAimStep(currentAngle,visualTarget,dt,responseMode=inputSettings.aimVisualResponse,angularVelocity=aimInput.sampleAngularVelocity)'));
+const visualUpdateStart=src.indexOf('  function updateVisualArmAngle(visualTarget,dt){');
+const visualUpdateEnd=src.indexOf('\n  function normalizedAimTimestamp',visualUpdateStart);
+const visualUpdate=visualUpdateStart>=0&&visualUpdateEnd>visualUpdateStart?src.slice(visualUpdateStart,visualUpdateEnd):'';
+assert.ok(visualUpdate.includes('inputSettings.aimVisual==="DIRECT" || lastPointerSource==="touch"'));
+assert.ok(visualUpdate.includes('mouseVisualAimStep(visualArmAngle,visualTarget,dt'));
+assert.ok(!visualUpdate.includes('judgementAimAngle='));
 assert.match(fs.readFileSync("index.html", "utf8"), /VISUAL RESPONSE FAST/);
 });
 
@@ -545,8 +599,10 @@ assert.match(src, /e\.pointerType==="pen"\?"pen":"pointer"/);
 
 test("LOW/MEDIUM use a small center guard and symmetric magnet disengage", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /if\(mode==="MEDIUM"\) return \{mode, slowTime:\.030[\s\S]*centerEnterRatio:\.055[\s\S]*jumpBypass:Math\.PI\*\.40\}/);
-assert.match(src, /if\(mode==="LOW"\) return \{mode, slowTime:\.018[\s\S]*centerEnterRatio:\.040[\s\S]*jumpBypass:Math\.PI\*\.34\}/);
+assert.ok(src.includes('if(mode==="MEDIUM") return {mode, slowTime:.030'));
+assert.ok(src.includes('centerEnterRatio:.035, centerExitRatio:.050, centerEnterPx:8, centerExitPx:11, jumpBypass:Math.PI*.34'));
+assert.ok(src.includes('if(mode==="LOW") return {mode, slowTime:.018'));
+assert.ok(src.includes('centerEnterRatio:.025, centerExitRatio:.040, centerEnterPx:6, centerExitPx:9, jumpBypass:Math.PI*.28'));
 assert.match(src, /function centerDeadzoneForProfile\(profile\)/);
 assert.match(src, /speed>=profile\.disengageVel/);
 assert.match(src, /const movingAway=velocity\*err<0 && speed>1\.15/);
@@ -599,15 +655,21 @@ assert.match(src, /aimInput\.unwrappedAngle\+=delta; aimInput\.lastSampleDelta=d
 assert.match(src, /aimInput\.unwrappedAngle\+=delta; aimInput\.lastSampleDelta=delta; aimInput\.sampleInterval=dt; aimInput\.sampleAngularVelocity=delta\/Math\.max\(dt/);
 });
 
-test("keyboard and AUTO aim synchronize the unified rotation state", () => {
+test("keyboard and AUTO aim keep judgement unified while AUTO rendering stays independent", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
 assert.match(src, /const delta=\(keyD-keyA\)\*9\.5\*dt/);
 assert.match(src, /aimInput\.accumulatedCWTravel\+=delta/);
 assert.match(src, /aimInput\.accumulatedCCWTravel-=delta/);
-assert.match(src, /function setAutoAimAngle\(angle,velocity=0\)/);
-assert.match(src, /targetAngle=armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a/);
+const setterStart=src.indexOf('  function setAutoAimAngle(angle,velocity=0){');
+const setterEnd=src.indexOf('\n  function completeAutoNote',setterStart);
+const setter=setterStart>=0&&setterEnd>setterStart?src.slice(setterStart,setterEnd):'';
+assert.ok(setter.includes('targetAngle=armAngle=judgementAimAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a'));
+assert.ok(!setter.includes('visualArmAngle='));
+const armStart=src.indexOf('  function updateArm(dt){');
+const armEnd=src.indexOf('\n  function logAutoProcessing',armStart);
+const armBody=armStart>=0&&armEnd>armStart?src.slice(armStart,armEnd):'';
+assert.ok(armBody.includes('visualArmAngle=autoVisualAimStep'));
 });
-
 
 test("playfield readability keeps TRACE visual widths independent of judgement tolerance", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
@@ -622,14 +684,16 @@ assert.match(traceBody, /const visual=traceVisualProfile\(\)/);
 assert.match(src, /function getTraceJudgementRegion\(n,t,profile=traceProfile\(\)\)/);
 });
 
-test("playfield readability only renders a separate judgement marker when needed", () => {
+test("playfield readability hides AUTO verifier marker and keeps user marker conditional", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /function judgementMarkerVisible\(\)\{\s*return judgementMarkerVisibleFor\(visualArmAngle,judgementAimAngle,magnetTarget\);/);
+const markerStart=src.indexOf('  function judgementMarkerVisible(){');
+const markerEnd=src.indexOf('\n  function drawArm',markerStart);
+const marker=markerStart>=0&&markerEnd>markerStart?src.slice(markerStart,markerEnd):'';
+assert.ok(marker.includes('return !isAutoActive() && judgementMarkerVisibleFor'));
 assert.match(src, /if\(judgementMarkerVisible\(\)\)\{/);
 assert.match(src, /ctx\.arc\(hitR,0,5\.5,0,TAU\); ctx\.stroke\(\)/);
 assert.doesNotMatch(src, /ctx\.arc\(hitR,0,4\.5,0,TAU\); ctx\.fill\(\)/);
 });
-
 
 test("foldable mobile viewports retry landscape safely", () => {
   const src=fs.readFileSync("src/game.js","utf8");
