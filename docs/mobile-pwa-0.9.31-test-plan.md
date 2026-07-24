@@ -15,3 +15,5 @@
 4. While playing, install a waiting PWA update and confirm the button reads `UPDATE AFTER PLAY` and cannot interrupt the chart.
 5. Return to a non-playing scene, apply the update, and confirm the app reloads once into web version 0.9.31.
 6. Confirm LOCAL songs, linked audio, records, settings, and installed `.cmix` packages remain available.
+
+Automated regression coverage mirrors the folded landscape, unfolded landscape, and unfolded portrait transitions above.
