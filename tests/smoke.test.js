@@ -599,8 +599,10 @@ assert.match(src, /e\.pointerType==="pen"\?"pen":"pointer"/);
 
 test("LOW/MEDIUM use a small center guard and symmetric magnet disengage", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /if\(mode==="MEDIUM"\) return \{mode, slowTime:\.030[\s\S]*centerEnterRatio:\.055[\s\S]*jumpBypass:Math\.PI\*\.40\}/);
-assert.match(src, /if\(mode==="LOW"\) return \{mode, slowTime:\.018[\s\S]*centerEnterRatio:\.040[\s\S]*jumpBypass:Math\.PI\*\.34\}/);
+assert.ok(src.includes('if(mode==="MEDIUM") return {mode, slowTime:.030'));
+assert.ok(src.includes('centerEnterRatio:.035, centerExitRatio:.050, centerEnterPx:8, centerExitPx:11, jumpBypass:Math.PI*.34'));
+assert.ok(src.includes('if(mode==="LOW") return {mode, slowTime:.018'));
+assert.ok(src.includes('centerEnterRatio:.025, centerExitRatio:.040, centerEnterPx:6, centerExitPx:9, jumpBypass:Math.PI*.28'));
 assert.match(src, /function centerDeadzoneForProfile\(profile\)/);
 assert.match(src, /speed>=profile\.disengageVel/);
 assert.match(src, /const movingAway=velocity\*err<0 && speed>1\.15/);

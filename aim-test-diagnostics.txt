@@ -22,9 +22,9 @@
   '  const mobileInputTestSteps = document.getElementById("mobileInputTestSteps");\n' +
   '  const'... 355500 more characters
 
-    at /home/runner/work/circle-mix/circle-mix/tests/smoke.test.js:602:8
+    at /home/runner/work/circle-mix/circle-mix/tests/smoke.test.js:664:8
     at test (/home/runner/work/circle-mix/circle-mix/tests/smoke.test.js:5:6)
-    at Object.<anonymous> (/home/runner/work/circle-mix/circle-mix/tests/smoke.test.js:600:1)
+    at Object.<anonymous> (/home/runner/work/circle-mix/circle-mix/tests/smoke.test.js:658:1)
     at Module._compile (node:internal/modules/cjs/loader:1781:14)
     at Object..js (node:internal/modules/cjs/loader:1913:10)
     at Module.load (node:internal/modules/cjs/loader:1505:32)
@@ -152,7 +152,7 @@
     '  const mobileInputTestStats = document.getElementById("mobileInputTestStats");\n' +
     '  const mobileInputTestSteps = document.getElementById("mobileInputTestSteps");\n' +
     '  const'... 355500 more characters,
-  expected: /if\(mode==="MEDIUM"\) return \{mode, slowTime:\.030[\s\S]*centerEnterRatio:\.055[\s\S]*jumpBypass:Math\.PI\*\.40\}/,
+  expected: /targetAngle=armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a/,
   operator: 'match',
   diff: 'simple'
 }
