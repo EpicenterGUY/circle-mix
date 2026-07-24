@@ -1,0 +1,37 @@
+name: Apply hit sound source pass
+
+on:
+  push:
+    branches:
+      - feat/punchier-hit-sounds
+    paths:
+      - scripts/apply-hit-sound-pass.js
+      - .github/workflows/apply-hit-sound-pass.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/punchier-hit-sounds
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply layered hit-sound source pass
+        run: node scripts/apply-hit-sound-pass.js
+      - name: Commit transformed game source
+        shell: bash
+        run: |
+          if git diff --quiet -- src/game.js; then
+            echo "No source transformation was needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/game.js
+          git commit -m "feat: synthesize layered gameplay hit sounds"
+          git push origin HEAD:feat/punchier-hit-sounds
