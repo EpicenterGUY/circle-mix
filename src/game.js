@@ -2568,15 +2568,16 @@
   const PULSE_AIM_GUIDE_LINGER=.22;
   const PULSE_AIM_GUIDE_LOOKAHEAD=APPROACH+.45;
 
+  function nextAimNotesAfterPulse(pulse,notes=chart){
+    if(!pulse)return [];
+    const candidates=notes.filter(n=>n&&n!==pulse&&!n.done&&!n.missed&&n.type!=="pulse"&&Number.isFinite(n.hitTime)&&Number.isFinite(n.angle)&&n.hitTime>=pulse.hitTime-PULSE_SYNC_EPSILON).sort((a,b)=>a.hitTime-b.hitTime);
+    if(!candidates.length)return [];
+    const earliest=candidates[0].hitTime;
+    return candidates.filter(n=>Math.abs(n.hitTime-earliest)<=PULSE_SYNC_EPSILON);
+  }
+
   function nextAimNoteAfterPulse(pulse,notes=chart){
-    if(!pulse)return null;
-    let best=null;
-    for(const n of notes){
-      if(!n||n===pulse||n.done||n.missed||n.type==="pulse")continue;
-      if(!Number.isFinite(n.hitTime)||n.hitTime<pulse.hitTime-PULSE_SYNC_EPSILON)continue;
-      if(!best||n.hitTime<best.hitTime)best=n;
-    }
-    return best;
+    return nextAimNotesAfterPulse(pulse,notes)[0]||null;
   }
 
   function pulseAimGuideState(t){
@@ -2589,15 +2590,17 @@
       if(distance<bestDistance){pulse=n;bestDistance=distance;}
     }
     if(!pulse)return null;
-    const target=nextAimNoteAfterPulse(pulse);
-    if(!target||!Number.isFinite(target.angle))return null;
-    const timeToTarget=target.hitTime-t;
+    const targets=nextAimNotesAfterPulse(pulse);
+    if(!targets.length)return null;
+    const target=targets[0];
+    const targetTime=Math.min(...targets.map(n=>n.hitTime));
+    const timeToTarget=targetTime-t;
     if(timeToTarget>PULSE_AIM_GUIDE_LOOKAHEAD||timeToTarget<-.05)return null;
     const pulseApproach=pulseInput.approachProgress(t,pulse.hitTime,APPROACH);
     const proximity=clamp(1-timeToTarget/Math.max(APPROACH,.001),0,1);
     const linger=t<=pulse.hitTime?1:clamp(1-(t-pulse.hitTime)/PULSE_AIM_GUIDE_LINGER,0,1);
     const visibility=clamp((.16+.68*Math.max(pulseApproach*.72,proximity))*linger,0,1);
-    return {pulse,target,angle:target.angle,proximity,visibility};
+    return {pulse,target,targets,angle:target.angle,angles:targets.map(n=>n.angle),count:targets.length,proximity,visibility};
   }
 
   function noteDebugId(n){
@@ -3683,31 +3686,54 @@ activePath.autoTraceProgress=progress;
   }
 
   function drawPulseAimGuide(t){
+    // PULSE_AIM_MULTI_TARGET_GUIDE: show up to two distinct directions and a compact
+    // count badge when a chord contains more actions than can stay readable at center.
     const guide=pulseAimGuideState(t);
     if(!guide||guide.visibility<=.01)return;
     const compact=isMobileViewport();
+    const targets=Array.isArray(guide.targets)?guide.targets:[guide.target].filter(Boolean);
+    const arrowTargets=[];
+    for(const target of targets){
+      if(!Number.isFinite(target?.angle))continue;
+      if(arrowTargets.some(existing=>distAng(existing.angle,target.angle)<Math.PI/90))continue;
+      arrowTargets.push(target);
+      if(arrowTargets.length>=2)break;
+    }
     const innerR=baseR*(compact?.18:.20);
     const length=lerp(compact?18:20,compact?28:32,guide.proximity);
     const halfWidth=lerp(compact?6:7,compact?10:11,guide.proximity);
     const tip=innerR+length;
     const neck=innerR+length*.45;
-    ctx.save();ctx.translate(cx,cy);ctx.rotate(guide.angle);
-    ctx.globalAlpha=guide.visibility;
-    ctx.shadowColor=COLORS.pulse;
-    ctx.shadowBlur=(5+9*guide.proximity)*visualScale("effect");
-    ctx.fillStyle="rgba(255,255,255,.96)";
-    ctx.strokeStyle=COLORS.pulse;
-    ctx.lineWidth=2;
-    ctx.beginPath();
-    ctx.moveTo(tip,0);
-    ctx.lineTo(neck,-halfWidth);
-    ctx.lineTo(neck,-halfWidth*.38);
-    ctx.lineTo(innerR,-halfWidth*.38);
-    ctx.lineTo(innerR,halfWidth*.38);
-    ctx.lineTo(neck,halfWidth*.38);
-    ctx.lineTo(neck,halfWidth);
-    ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.restore();
+    for(const target of arrowTargets){
+      ctx.save();ctx.translate(cx,cy);ctx.rotate(target.angle);
+      ctx.globalAlpha=guide.visibility;
+      ctx.shadowColor=COLORS.pulse;
+      ctx.shadowBlur=(5+9*guide.proximity)*visualScale("effect");
+      ctx.fillStyle="rgba(255,255,255,.96)";
+      ctx.strokeStyle=COLORS.pulse;
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(tip,0);
+      ctx.lineTo(neck,-halfWidth);
+      ctx.lineTo(neck,-halfWidth*.38);
+      ctx.lineTo(innerR,-halfWidth*.38);
+      ctx.lineTo(innerR,halfWidth*.38);
+      ctx.lineTo(neck,halfWidth*.38);
+      ctx.lineTo(neck,halfWidth);
+      ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.restore();
+    }
+    const showCount=targets.length>2||targets.length>arrowTargets.length;
+    if(showCount){
+      ctx.save();ctx.translate(cx,cy+baseR*(compact?.11:.12));
+      ctx.globalAlpha=guide.visibility;
+      const countText="×"+targets.length;
+      ctx.font="900 "+(compact?11:12)+"px system-ui";
+      ctx.textAlign="center";ctx.textBaseline="middle";
+      ctx.lineWidth=4;ctx.strokeStyle="rgba(2,7,18,.88)";ctx.strokeText(countText,0,0);
+      ctx.fillStyle=COLORS.pulse;ctx.fillText(countText,0,0);
+      ctx.restore();
+    }
   }
 
   function drawPulse(n,t){

@@ -155,10 +155,11 @@ game=replaceOrVerify(game,
     if(showCount){
       ctx.save();ctx.translate(cx,cy+baseR*(compact?.11:.12));
       ctx.globalAlpha=guide.visibility;
-      ctx.font=`900 ${compact?11:12}px system-ui`;
+      const countText="×"+targets.length;
+      ctx.font="900 "+(compact?11:12)+"px system-ui";
       ctx.textAlign="center";ctx.textBaseline="middle";
-      ctx.lineWidth=4;ctx.strokeStyle="rgba(2,7,18,.88)";ctx.strokeText(`×${targets.length}`,0,0);
-      ctx.fillStyle=COLORS.pulse;ctx.fillText(`×${targets.length}`,0,0);
+      ctx.lineWidth=4;ctx.strokeStyle="rgba(2,7,18,.88)";ctx.strokeText(countText,0,0);
+      ctx.fillStyle=COLORS.pulse;ctx.fillText(countText,0,0);
       ctx.restore();
     }
   }
