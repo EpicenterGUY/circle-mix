@@ -34,7 +34,7 @@ if(!color('pulse')||!color('swingCCW')||color('pulse')===color('swingCCW'))throw
 if(!desktopGame.includes('PULSE_VISUAL_SINGLE_RING')||!desktopGame.includes('PULSE_HIT_SINGLE_RING'))throw new Error('PULSE single-ring visual pass is missing');
 if(!desktopGame.includes('SWING_VISUAL_DIRECTIONAL_ARC')||!desktopGame.includes('SWING_HIT_LOCAL_ONLY'))throw new Error('SWING directional visual pass is missing');
 if(desktopGame.includes('addRingBurst(color,label==="PERFECT"?1.22:1.0,label)'))throw new Error('SWING still emits a full-ring judgement burst');
-for(const needle of ['HIT_SOUND_CHORD_WINDOW','createDynamicsCompressor','function hitSoundRecipe','function addHitTone','function addHitNoise','function addPerfectSparkle'])if(!desktopGame.includes(needle))throw new Error(`desktop punchier hit-sound pass is missing: ${needle}`);
+for(const needle of ['HIT_SOUND_CHORD_WINDOW','createDynamicsCompressor','function hitSoundHeadroom','function ensureHitNoiseBuffer','function scheduleHitTone','function scheduleHitNoise','family==="pulse"','quality==="PERFECT"'])if(!desktopGame.includes(needle))throw new Error(`desktop punchier hit-sound pass is missing: ${needle}`);
 const desktopIndex=fs.readFileSync(path.join(out,'index.html'),'utf8');
 if(!desktopIndex.includes('./src/desktop-release.js')||!desktopIndex.includes('./src/desktop-updater.js'))throw new Error('desktop release or updater script is not loaded by index.html');
 console.log(`Desktop distribution audit passed: ${all.length} files, ${all.reduce((n,p)=>n+fs.statSync(p).size,0)} bytes.`);
