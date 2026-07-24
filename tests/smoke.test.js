@@ -655,15 +655,21 @@ assert.match(src, /aimInput\.unwrappedAngle\+=delta; aimInput\.lastSampleDelta=d
 assert.match(src, /aimInput\.unwrappedAngle\+=delta; aimInput\.lastSampleDelta=delta; aimInput\.sampleInterval=dt; aimInput\.sampleAngularVelocity=delta\/Math\.max\(dt/);
 });
 
-test("keyboard and AUTO aim synchronize the unified rotation state", () => {
+test("keyboard and AUTO aim keep judgement unified while AUTO rendering stays independent", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
 assert.match(src, /const delta=\(keyD-keyA\)\*9\.5\*dt/);
 assert.match(src, /aimInput\.accumulatedCWTravel\+=delta/);
 assert.match(src, /aimInput\.accumulatedCCWTravel-=delta/);
-assert.match(src, /function setAutoAimAngle\(angle,velocity=0\)/);
-assert.match(src, /targetAngle=armAngle=judgementAimAngle=visualArmAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a/);
+const setterStart=src.indexOf('  function setAutoAimAngle(angle,velocity=0){');
+const setterEnd=src.indexOf('\n  function completeAutoNote',setterStart);
+const setter=setterStart>=0&&setterEnd>setterStart?src.slice(setterStart,setterEnd):'';
+assert.ok(setter.includes('targetAngle=armAngle=judgementAimAngle=rawInputAngle=rawTargetAngle=stabilizedTargetAngle=lastValidTargetAngle=a'));
+assert.ok(!setter.includes('visualArmAngle='));
+const armStart=src.indexOf('  function updateArm(dt){');
+const armEnd=src.indexOf('\n  function logAutoProcessing',armStart);
+const armBody=armStart>=0&&armEnd>armStart?src.slice(armStart,armEnd):'';
+assert.ok(armBody.includes('visualArmAngle=autoVisualAimStep'));
 });
-
 
 test("playfield readability keeps TRACE visual widths independent of judgement tolerance", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
@@ -678,14 +684,16 @@ assert.match(traceBody, /const visual=traceVisualProfile\(\)/);
 assert.match(src, /function getTraceJudgementRegion\(n,t,profile=traceProfile\(\)\)/);
 });
 
-test("playfield readability only renders a separate judgement marker when needed", () => {
+test("playfield readability hides AUTO verifier marker and keeps user marker conditional", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /function judgementMarkerVisible\(\)\{\s*return judgementMarkerVisibleFor\(visualArmAngle,judgementAimAngle,magnetTarget\);/);
+const markerStart=src.indexOf('  function judgementMarkerVisible(){');
+const markerEnd=src.indexOf('\n  function drawArm',markerStart);
+const marker=markerStart>=0&&markerEnd>markerStart?src.slice(markerStart,markerEnd):'';
+assert.ok(marker.includes('return !isAutoActive() && judgementMarkerVisibleFor'));
 assert.match(src, /if\(judgementMarkerVisible\(\)\)\{/);
 assert.match(src, /ctx\.arc\(hitR,0,5\.5,0,TAU\); ctx\.stroke\(\)/);
 assert.doesNotMatch(src, /ctx\.arc\(hitR,0,4\.5,0,TAU\); ctx\.fill\(\)/);
 });
-
 
 test("foldable mobile viewports retry landscape safely", () => {
   const src=fs.readFileSync("src/game.js","utf8");
