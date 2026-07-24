@@ -25,6 +25,9 @@ assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must nor
 assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must retain the dedicated visual pass');
 assert.match(prepare,/PUNCHIER HIT SOUNDS/,'desktop changelog must announce the 0.9.38 sound release');
 assert.match(prepare,/desktop-updater\.js/,'desktop build must inject the updater UI');
+assert.match(prepare,/DESKTOP_UPDATE_LOG_RETRY/,'desktop release metadata must retry the update log after title startup');
+assert.match(prepare,/circleMixLastSeenVersion/,'desktop update-log retry must respect the shared last-seen version key');
+assert.match(prepare,/safeUpdateLogBtn/,'desktop update-log retry must reuse the existing release-log button');
 assert.match(visualPass,/readPaletteColor\(game,'pulse'\)/,'desktop visual pass must retain the shared PULSE color');
 assert.match(visualPass,/pulseColor===swingCcwColor/,'desktop visual pass must verify PULSE and SWING CCW remain distinct');
 assert.match(visualPass,/PULSE_VISUAL_SINGLE_RING/,'PULSE must use the single-ring approach visual');
@@ -37,6 +40,7 @@ assert.match(prepare,/remove the SCRATCH tutorial step/,'desktop build must reti
 assert.match(prepare,/function checkScratch/,'desktop build must retain legacy SCRATCH playback compatibility');
 assert.match(prepare,/DESKTOP · READY/,'desktop offline data must report ready instead of using the web service worker flow');
 assert.match(audit,/desktop updater bridge audit failed/,'desktop audit must verify updater command packaging');
+assert.match(audit,/desktop update-log retry is missing/,'desktop audit must verify post-title release-log recovery');
 assert.match(audit,/PULSE color was not separated from SWING CCW/,'desktop audit must verify PULSE color separation');
 assert.match(audit,/PULSE single-ring visual pass is missing/,'desktop audit must verify PULSE simplification');
 assert.match(audit,/SWING directional visual pass is missing/,'desktop audit must verify SWING simplification');
