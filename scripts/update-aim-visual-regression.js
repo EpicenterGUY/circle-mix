@@ -3,12 +3,16 @@ const fs=require('fs');
 const path=require('path');
 const file=path.resolve(__dirname,'../tests/smoke.test.js');
 let src=fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n');
-const startMarker='test("aim visual response is visual-only with deterministic large-error catch-up", () => {';
-const endMarker='test("PC input runtime has no broad updateArm exception suppression", () => {';
-const start=src.indexOf(startMarker);
-const end=src.indexOf(endMarker,start);
-if(start<0||end<0||end<=start) throw new Error('Unable to locate the legacy aim visual regression block.');
-const replacement=String.raw`test("aim visual response is visual-only with deterministic large-error catch-up", () => {
+function replaceBlock(startMarker,endMarker,replacement,label){
+  const start=src.indexOf(startMarker);
+  const end=src.indexOf(endMarker,start);
+  if(start<0||end<0||end<=start) throw new Error(`Unable to locate ${label}.`);
+  src=src.slice(0,start)+replacement+src.slice(end);
+}
+replaceBlock(
+  'test("aim visual response is visual-only with deterministic large-error catch-up", () => {',
+  'test("PC input runtime has no broad updateArm exception suppression", () => {',
+  String.raw`test("aim visual response is visual-only with deterministic large-error catch-up", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
 assert.ok(src.includes('const AIM_VISUAL_RESPONSE_MODES = ["FAST","NORMAL","SOFT"]'));
 assert.ok(src.includes('aimVisualResponse:AIM_VISUAL_RESPONSE_MODES.includes(saved.aimVisualResponse)?saved.aimVisualResponse:"FAST"'));
@@ -24,7 +28,33 @@ assert.ok(!visualUpdate.includes('judgementAimAngle='));
 assert.match(fs.readFileSync("index.html", "utf8"), /VISUAL RESPONSE FAST/);
 });
 
-`;
-src=src.slice(0,start)+replacement+src.slice(end);
+`,
+  'the aim visual regression block'
+);
+replaceBlock(
+  'test("LOW/MEDIUM use a small center guard and symmetric magnet disengage", () => {',
+  'test("PC pointermove aim tracking is separate from click blocking over UI", () => {',
+  String.raw`test("LOW/MEDIUM use a small center guard and symmetric magnet disengage", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+assert.ok(src.includes('if(mode==="MEDIUM") return {mode, slowTime:.030'));
+assert.ok(src.includes('centerEnterRatio:.035, centerExitRatio:.050, centerEnterPx:8, centerExitPx:11, jumpBypass:Math.PI*.34'));
+assert.ok(src.includes('if(mode==="LOW") return {mode, slowTime:.018'));
+assert.ok(src.includes('centerEnterRatio:.025, centerExitRatio:.040, centerEnterPx:6, centerExitPx:9, jumpBypass:Math.PI*.28'));
+assert.match(src, /function centerDeadzoneForProfile\(profile\)/);
+assert.match(src, /speed>=profile\.disengageVel/);
+assert.match(src, /const movingAway=velocity\*err<0 && speed>1\.15/);
+const disengageVel = 4.4;
+assert.equal(Math.abs(5.1) >= disengageVel, true);
+assert.equal(Math.abs(-5.1) >= disengageVel, true);
+const movingAway = (velocity, err) => velocity * err < 0 && Math.abs(velocity) > 1.15;
+assert.equal(movingAway(1.2, -0.1), true);
+assert.equal(movingAway(-1.2, 0.1), true);
+assert.equal(movingAway(1.2, 0.1), false);
+assert.equal(movingAway(-1.2, -0.1), false);
+});
+
+`,
+  'the stabilizer regression block'
+);
 fs.writeFileSync(file,src);
-console.log('Updated the aim visual regression contract.');
+console.log('Updated aim visual and stabilizer regression contracts.');
