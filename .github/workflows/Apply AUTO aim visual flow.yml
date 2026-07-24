@@ -8,6 +8,7 @@ on:
       - scripts/apply-auto-aim-visual-flow.js
       - scripts/apply-mouse-aim-feel.js
       - scripts/patch-mouse-aim-transform.js
+      - scripts/finalize-aim-smoke-tests.js
       - .github/workflows/Apply AUTO aim visual flow.yml
   pull_request:
     branches:
@@ -16,6 +17,7 @@ on:
       - scripts/apply-auto-aim-visual-flow.js
       - scripts/apply-mouse-aim-feel.js
       - scripts/patch-mouse-aim-transform.js
+      - scripts/finalize-aim-smoke-tests.js
       - .github/workflows/Apply AUTO aim visual flow.yml
 
 permissions:
@@ -39,6 +41,8 @@ jobs:
         run: node scripts/apply-auto-aim-visual-flow.js
       - name: Apply mouse aim feel
         run: node scripts/apply-mouse-aim-feel.js
+      - name: Finalize aim smoke tests
+        run: node scripts/finalize-aim-smoke-tests.js
       - name: Commit generated changes
         run: |
           git config user.name "github-actions[bot]"
