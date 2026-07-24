@@ -1,0 +1,53 @@
+name: Mobile PWA diagnostic
+
+on:
+  push:
+    branches:
+      - feat/mobile-pwa-stability
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Syntax checks
+        run: |
+          node --check src/pwa.js
+          node --check service-worker.js
+          node --check src/version.js
+          node --check src/changelog.js
+      - name: Smoke test
+        run: node tests/smoke.test.js
+      - name: Hit sound test
+        run: node tests/hit-sound.test.js
+      - name: Storage and profile tests
+        run: |
+          node tests/song-record.test.js
+          node tests/local-library.test.js
+          node tests/player-profile.test.js
+      - name: Input tests
+        run: |
+          node tests/pulse-input.test.js
+          node tests/pulse-game-input.test.js
+          node tests/local-auto-toggle.test.js
+      - name: CMIX and difficulty tests
+        run: |
+          node tests/cmix-validator.test.js
+          node tests/cmix-importer.test.js
+          node tests/cmix-exporter.test.js
+          node tests/chart-difficulty.test.js
+      - name: Desktop regression tests
+        run: |
+          node tests/desktop-installer.test.js
+          node tests/desktop-visual-pass.test.js
+          node tests/desktop-updater.test.js
+      - name: PWA regression test
+        run: node tests/pwa-update.test.js
