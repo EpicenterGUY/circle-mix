@@ -2229,120 +2229,128 @@
     }catch(e){}
   }
 
-  function playHitSound(type="cut", quality="PERFECT"){
-    const effectiveSfxVolume = sfxEnabled ? clamp(sfxVolume, 0, 4) : 0;
-    if(effectiveSfxVolume <= 0.001) return;
+  const HIT_SOUND_CHORD_WINDOW=.036;
+  let hitSoundBus=null, hitSoundLimiter=null, hitNoiseBuffer=null, recentHitTimes=[];
+
+  function ensureHitSoundBus(){
     ensureAudioCtx();
-    if(!audioCtx) return;
+    if(!audioCtx)return null;
+    if(hitSoundBus)return hitSoundBus;
+    hitSoundBus=audioCtx.createGain();
+    hitSoundBus.gain.value=.92;
+    if(typeof audioCtx.createDynamicsCompressor==="function"){
+      hitSoundLimiter=audioCtx.createDynamicsCompressor();
+      hitSoundLimiter.threshold.value=-12;
+      hitSoundLimiter.knee.value=10;
+      hitSoundLimiter.ratio.value=10;
+      hitSoundLimiter.attack.value=.002;
+      hitSoundLimiter.release.value=.09;
+      hitSoundBus.connect(hitSoundLimiter);
+      hitSoundLimiter.connect(audioCtx.destination);
+    }else hitSoundBus.connect(audioCtx.destination);
+    return hitSoundBus;
+  }
 
-    const t=audioCtx.currentTime;
-    const gain=audioCtx.createGain();
-    gain.connect(audioCtx.destination);
+  function hitSoundHeadroom(t){
+    recentHitTimes=recentHitTimes.filter(time=>t-time<=HIT_SOUND_CHORD_WINDOW);
+    recentHitTimes.push(t);
+    return clamp(1/Math.sqrt(recentHitTimes.length),.56,1);
+  }
 
-    let freq=680;
-    let dur=.045;
-    let vol=.075;
-    let wave="square";
+  function ensureHitNoiseBuffer(){
+    if(!audioCtx)return null;
+    if(hitNoiseBuffer&&hitNoiseBuffer.sampleRate===audioCtx.sampleRate)return hitNoiseBuffer;
+    const duration=.24;
+    hitNoiseBuffer=audioCtx.createBuffer(1,Math.ceil(audioCtx.sampleRate*duration),audioCtx.sampleRate);
+    const data=hitNoiseBuffer.getChannelData(0);
+    for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
+    return hitNoiseBuffer;
+  }
 
-    if(type.startsWith("swing")){
-      freq=quality==="PERFECT"?420:360;
-      dur=.085;
-      vol=.120;
-      wave="sawtooth";
-    }else if(type.startsWith("slide")){
-      freq=880;
-      dur=.060;
-      vol=.085;
-      wave="triangle";
-    }else if(type==="fx"){
-      freq=240;
-      dur=.090;
-      vol=.090;
-      wave="sawtooth";
-    }else if(type.startsWith("scratch")){
-      freq=210;
-      dur=.135;
-      vol=.145;
-      wave="sawtooth";
-    }else{
-      freq=quality==="PERFECT"?760:620;
-      dur=.042;
-      vol=.095;
-      wave="square";
-    }
-
-    const osc=audioCtx.createOscillator();
+  function scheduleHitTone(bus,t,{wave="sine",from=440,to=220,duration=.06,volume=.05,delay=0,attack=.003,filter=0,q=.7}){
+    const start=t+delay, stop=start+duration;
+    const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
     osc.type=wave;
-    osc.frequency.setValueAtTime(freq,t);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(80,freq*.55),t+dur);
+    osc.frequency.setValueAtTime(Math.max(20,from),start);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20,to),stop);
+    gain.gain.setValueAtTime(.0001,start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(.0001,volume),start+Math.min(attack,duration*.45));
+    gain.gain.exponentialRampToValueAtTime(.0001,stop);
+    if(filter&&typeof audioCtx.createBiquadFilter==="function"){
+      const node=audioCtx.createBiquadFilter();
+      node.type="lowpass";node.frequency.value=filter;node.Q.value=q;
+      osc.connect(node);node.connect(gain);
+    }else osc.connect(gain);
+    gain.connect(bus);osc.start(start);osc.stop(stop+.015);
+  }
 
-    const finalVol = clamp(vol * effectiveSfxVolume, 0.001, .55);
-    gain.gain.setValueAtTime(0.0001,t);
-    gain.gain.exponentialRampToValueAtTime(finalVol,t+.006);
-    gain.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  function scheduleHitNoise(bus,t,{duration=.04,volume=.04,delay=0,type="highpass",frequency=1800,q=.8}){
+    const buffer=ensureHitNoiseBuffer();
+    if(!buffer)return;
+    const start=t+delay, stop=start+duration;
+    const source=audioCtx.createBufferSource(), gain=audioCtx.createGain();
+    source.buffer=buffer;
+    gain.gain.setValueAtTime(Math.max(.0001,volume),start);
+    gain.gain.exponentialRampToValueAtTime(.0001,stop);
+    if(typeof audioCtx.createBiquadFilter==="function"){
+      const filter=audioCtx.createBiquadFilter();
+      filter.type=type;filter.frequency.value=frequency;filter.Q.value=q;
+      source.connect(filter);filter.connect(gain);
+    }else source.connect(gain);
+    gain.connect(bus);
+    const maxOffset=Math.max(0,buffer.duration-duration-.001);
+    source.start(start,Math.random()*maxOffset,duration);
+    source.stop(stop+.01);
+  }
 
-    osc.connect(gain);
-    osc.start(t);
-    osc.stop(t+dur+.02);
+  function playHitSound(type="cut", quality="PERFECT"){
+    const effectiveSfxVolume=sfxEnabled?clamp(sfxVolume,0,4):0;
+    if(effectiveSfxVolume<=.001)return;
+    const bus=ensureHitSoundBus();
+    if(!bus)return;
+    const t=audioCtx.currentTime;
+    const family=type==="pulse"?"pulse":type.startsWith("trace")?"trace":type.startsWith("slide")?"slide":type.startsWith("swing")?"swing":type==="fx"?"hold":type.startsWith("scratch")?"scratch":"cut";
+    const direction=type.endsWith("CCW")?-1:(type.endsWith("CW")?1:0);
+    const qualityPitch=quality==="PERFECT"?1:.88;
+    const amount=clamp(effectiveSfxVolume*hitSoundHeadroom(t),.02,2.35);
+    const tone=(options)=>scheduleHitTone(bus,t,{...options,from:options.from*qualityPitch,to:options.to*qualityPitch,volume:clamp(options.volume*amount,.0001,.42)});
+    const noise=(options)=>scheduleHitNoise(bus,t,{...options,volume:clamp(options.volume*amount,.0001,.32)});
 
-    if(type.startsWith("swing")){
-      // 스윙 전용 레이어: 긁히는 듯한 상승/하강 사운드
-      const g2=audioCtx.createGain();
-      g2.connect(audioCtx.destination);
-      g2.gain.setValueAtTime(0.0001,t);
-      g2.gain.exponentialRampToValueAtTime(clamp(0.080 * effectiveSfxVolume, 0.001, .28),t+.010);
-      g2.gain.exponentialRampToValueAtTime(0.0001,t+.12);
-
-      const osc2=audioCtx.createOscillator();
-      osc2.type="triangle";
-      if(type==="swingCW"){
-        osc2.frequency.setValueAtTime(300,t);
-        osc2.frequency.exponentialRampToValueAtTime(920,t+.11);
-      }else{
-        osc2.frequency.setValueAtTime(900,t);
-        osc2.frequency.exponentialRampToValueAtTime(260,t+.11);
-      }
-      osc2.connect(g2);
-      osc2.start(t);
-      osc2.stop(t+.14);
-
-      const nDur=.050;
-      const nBuf=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*nDur),audioCtx.sampleRate);
-      const nd=nBuf.getChannelData(0);
-      for(let i=0;i<nd.length;i++){
-        const fall=1-i/nd.length;
-        nd[i]=(Math.random()*2-1)*fall*.75;
-      }
-      const nb=audioCtx.createBufferSource();
-      nb.buffer=nBuf;
-      const ng2=audioCtx.createGain();
-      const bp=audioCtx.createBiquadFilter();
-      bp.type="bandpass";
-      bp.frequency.setValueAtTime(type==="swingCW"?1800:1400,t);
-      bp.Q.value=2.8;
-      ng2.gain.setValueAtTime(clamp(0.040*effectiveSfxVolume,0.001,.12),t);
-      ng2.gain.exponentialRampToValueAtTime(0.0001,t+nDur);
-      nb.connect(bp); bp.connect(ng2); ng2.connect(audioCtx.destination);
-      nb.start(t);
-      nb.stop(t+nDur+.01);
+    if(family==="cut"){
+      tone({wave:"square",from:1080,to:520,duration:.036,volume:.050,attack:.0015});
+      tone({wave:"sine",from:168,to:78,duration:.062,volume:.092,attack:.002});
+      noise({duration:.026,volume:.056,type:"highpass",frequency:2200,q:.65});
+    }else if(family==="pulse"){
+      tone({wave:"sine",from:112,to:48,duration:.132,volume:.150,attack:.002});
+      tone({wave:"triangle",from:540,to:255,duration:.105,volume:.058,attack:.004});
+      tone({wave:"sine",from:760,to:610,duration:.115,volume:.030,delay:.018,attack:.008});
+      noise({duration:.072,volume:.060,type:"bandpass",frequency:920,q:.9});
+    }else if(family==="swing"){
+      tone({wave:"sawtooth",from:direction<0?1120:250,to:direction<0?235:1120,duration:.132,volume:.068,attack:.005,filter:3200});
+      tone({wave:"sine",from:138,to:72,duration:.074,volume:.060,attack:.002});
+      noise({duration:.098,volume:.078,type:"bandpass",frequency:direction<0?1320:1760,q:2.1});
+    }else if(family==="slide"){
+      tone({wave:"triangle",from:direction<0?1320:560,to:direction<0?540:1340,duration:.112,volume:.058,attack:.004});
+      tone({wave:"sine",from:190,to:104,duration:.066,volume:.056,attack:.002});
+      noise({duration:.064,volume:.046,type:"bandpass",frequency:2050,q:1.4});
+    }else if(family==="trace"){
+      tone({wave:"sine",from:direction<0?980:710,to:direction<0?690:990,duration:.105,volume:.043,attack:.006});
+      tone({wave:"triangle",from:1190,to:720,duration:.092,volume:.036,delay:.008,attack:.006});
+      noise({duration:.044,volume:.032,type:"highpass",frequency:2450,q:.75});
+    }else if(family==="hold"){
+      tone({wave:"sine",from:154,to:54,duration:.128,volume:.118,attack:.003});
+      tone({wave:"square",from:345,to:176,duration:.052,volume:.036,attack:.002,filter:1500});
+      noise({duration:.060,volume:.052,type:"lowpass",frequency:720,q:.7});
+    }else{
+      tone({wave:"sawtooth",from:direction<0?470:180,to:direction<0?170:490,duration:.142,volume:.092,attack:.004,filter:2800});
+      tone({wave:"sine",from:94,to:52,duration:.086,volume:.062,attack:.002});
+      noise({duration:.132,volume:.108,type:"bandpass",frequency:1220,q:1.9});
     }
 
-    // 아주 짧은 노이즈 클릭 레이어: 타격감
-    const noiseDur=.028;
-    const buffer=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*noiseDur),audioCtx.sampleRate);
-    const data=buffer.getChannelData(0);
-    for(let i=0;i<data.length;i++){
-      data[i]=(Math.random()*2-1)*(1-i/data.length);
+    if(quality==="PERFECT"){
+      const sparkFrom=family==="pulse"?1320:(family==="hold"?980:1880);
+      tone({wave:"triangle",from:sparkFrom,to:sparkFrom*1.32,duration:.038,volume:family==="pulse"?.024:.020,delay:.006,attack:.003});
     }
-    const noise=audioCtx.createBufferSource();
-    const ng=audioCtx.createGain();
-    noise.buffer=buffer;
-    ng.gain.setValueAtTime((type==="cut"?.040:.026) * effectiveSfxVolume,t);
-    ng.gain.exponentialRampToValueAtTime(0.0001,t+noiseDur);
-    noise.connect(ng);
-    ng.connect(audioCtx.destination);
-    noise.start(t);
-    noise.stop(t+noiseDur);
   }
 
   function judge(n,label,color,event={}){
