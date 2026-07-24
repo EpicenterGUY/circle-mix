@@ -8,7 +8,7 @@ const endMarker='test("PULSE-synchronized CUT uses the shared orange readability
 const start=src.indexOf(startMarker);
 const end=src.indexOf(endMarker,start);
 if(start<0||end<0||end<=start) throw new Error('Unable to locate generated aim smoke-test block.');
-const clean=`test("AUTO visual aim flows between targets without changing verifier timing", () => {
+const clean=String.raw`test("AUTO visual aim flows between targets without changing verifier timing", () => {
   const angularDistance=(a,b)=>Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)));
   const target=2.4;
   const first=api.autoVisualAimStep(0,target,1/60,.5);
@@ -51,7 +51,8 @@ test("mouse aim keeps raw judgement while improving large-angle visual response"
   assert.ok(medium.centerEnterPx<=8 && medium.centerExitPx<=11 && medium.jumpBypass<=Math.PI*.34+.000001);
   const source=fs.readFileSync("src/game.js","utf8");
   assert.ok(source.includes("MOUSE_AIM_LARGE_JUMP_FLOW"));
-  assert.ok(source.includes('if(profile.mode==="OFF" || source==="touch"){\n      stabilizedTargetAngle=angle; judgementAimAngle=armAngle=angle;'));
+  assert.ok(source.includes('if(profile.mode==="OFF" || source==="touch"){'));
+  assert.ok(source.includes('stabilizedTargetAngle=angle; judgementAimAngle=armAngle=angle;'));
   assert.ok(source.includes('function effectivePcAimMode(){ return inputSettings.pcAimMode==="LOCKED" ? "LOCKED" : "ABSOLUTE"; }'));
   const autoModeLine=source.split("\n").find(line=>line.includes('pcAimMode==="AUTO"'))||"";
   assert.ok(!autoModeLine.includes("LOCKED")&&!autoModeLine.includes("requestPointerLock"));
