@@ -7,6 +7,7 @@ on:
     paths:
       - scripts/apply-auto-aim-visual-flow.js
       - scripts/apply-mouse-aim-feel.js
+      - scripts/patch-mouse-aim-transform.js
       - .github/workflows/Apply AUTO aim visual flow.yml
   pull_request:
     branches:
@@ -14,6 +15,7 @@ on:
     paths:
       - scripts/apply-auto-aim-visual-flow.js
       - scripts/apply-mouse-aim-feel.js
+      - scripts/patch-mouse-aim-transform.js
       - .github/workflows/Apply AUTO aim visual flow.yml
 
 permissions:
@@ -31,6 +33,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Repair mouse transform
+        run: node scripts/patch-mouse-aim-transform.js
       - name: Apply AUTO visual flow
         run: node scripts/apply-auto-aim-visual-flow.js
       - name: Apply mouse aim feel
