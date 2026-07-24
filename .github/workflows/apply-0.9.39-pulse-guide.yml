@@ -6,11 +6,13 @@ on:
       - release/0.9.39-pulse-multi-guide
     paths:
       - scripts/apply-0.9.39-pulse-guide.js
+      - scripts/patch-0.9.39-transform.js
   pull_request:
     branches:
       - main
     paths:
       - scripts/apply-0.9.39-pulse-guide.js
+      - scripts/patch-0.9.39-transform.js
 
 permissions:
   contents: write
@@ -27,6 +29,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Repair release transform
+        run: node scripts/patch-0.9.39-transform.js
       - name: Apply release transform
         run: node scripts/apply-0.9.39-pulse-guide.js
       - name: Install dependencies
@@ -37,7 +41,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/game.js tests/smoke.test.js package.json package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json scripts/prepare-desktop.js scripts/audit-desktop-dist.js tests/desktop-installer.test.js tests/desktop-updater.test.js
+          git add scripts/apply-0.9.39-pulse-guide.js src/game.js tests/smoke.test.js package.json package-lock.json src-tauri/Cargo.toml src-tauri/tauri.conf.json scripts/prepare-desktop.js scripts/audit-desktop-dist.js tests/desktop-installer.test.js tests/desktop-updater.test.js
           if git diff --cached --quiet; then
             echo "No generated changes"
           else
