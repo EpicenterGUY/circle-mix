@@ -2,7 +2,7 @@
 'use strict';
 const fs=require('fs'), path=require('path');
 const root=path.resolve(__dirname,'..'), out=path.join(root,'desktop-dist');
-const DESKTOP_VERSION='0.9.37';
+const DESKTOP_VERSION='0.9.38';
 const DESKTOP_BUILD_DATE='2026-07-24';
 const files=['style.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
@@ -61,10 +61,11 @@ songs=songs.replaceAll('CircleMixGhostRuleBundle','ExcludedBundle').replaceAll('
 fs.writeFileSync(desktopSongs,songs);
 const desktopRelease=`(function(){
   "use strict";
-  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"SIGNED UPDATER TEST",summary:"0.9.36 설치판에서 새 서명키 기반 자동 업데이트를 실제로 검증하는 소규모 릴리스입니다.",changes:[
-    {category:"UPDATER",text:"0.9.36에서 0.9.37을 자동으로 확인·다운로드·설치하는 서명 업데이트 경로를 검증합니다."},
-    {category:"STABILITY",text:"게임플레이와 로컬 채보 데이터 구조는 변경하지 않아 업데이트 시험의 위험을 최소화했습니다."},
-    {category:"NEXT",text:"다음 작업은 CUT·PULSE·SWING·SLIDE·TRACE 타격음과 효과음을 더 찰지게 개편하는 것입니다."}
+  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"PUNCHIER HIT SOUNDS",summary:"CUT·PULSE·SWING·SLIDE·TRACE 등 노트별 타격음을 더 선명하고 찰지게 다듬은 사운드 업데이트입니다.",changes:[
+    {category:"SOUND",text:"노트 종류마다 서로 다른 레이어드 WebAudio 타격음을 적용해 입력 감각과 패턴 구분을 강화했습니다."},
+    {category:"DIRECTION",text:"SWING·SLIDE의 CW와 CCW에 반대 방향 피치 스윕을 적용해 움직임을 귀로도 구분할 수 있습니다."},
+    {category:"MIX",text:"동시치기 헤드룸과 공용 컴프레서를 추가해 여러 노트가 겹쳐도 찢어지거나 과도하게 커지지 않도록 조정했습니다."},
+    {category:"JUDGEMENT",text:"PERFECT에는 짧은 고역 스파크를 더하고 GREAT는 조금 낮은 음정으로 구분했습니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
   const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];
