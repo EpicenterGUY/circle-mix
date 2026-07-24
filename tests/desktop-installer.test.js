@@ -19,11 +19,11 @@ assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop bu
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
 assert.equal(pkg.version,tauri.version,'npm and desktop versions must match for updater releases');
-assert.equal(tauri.version,'0.9.38','Windows installer must publish the punchier hit-sound version');
-assert.match(prepare,/DESKTOP_VERSION='0\.9\.38'/,'desktop distribution must expose version 0.9.38');
+assert.equal(tauri.version,'0.9.39','Windows installer must publish the PULSE multi-aim guidance version');
+assert.match(prepare,/DESKTOP_VERSION='0\.9\.39'/,'desktop distribution must expose version 0.9.39');
 assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must normalize Windows CRLF line endings');
 assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must retain the dedicated visual pass');
-assert.match(prepare,/PUNCHIER HIT SOUNDS/,'desktop changelog must announce the 0.9.38 sound release');
+assert.match(prepare,/PULSE MULTI-AIM GUIDANCE/,'desktop changelog must announce the 0.9.39 sound release');
 assert.match(prepare,/desktop-updater\.js/,'desktop build must inject the updater UI');
 assert.match(prepare,/DESKTOP_UPDATE_LOG_RETRY/,'desktop release metadata must retry the update log after title startup');
 assert.match(prepare,/circleMixLastSeenVersion/,'desktop update-log retry must respect the shared last-seen version key');
@@ -43,6 +43,7 @@ assert.match(audit,/desktop updater bridge audit failed/,'desktop audit must ver
 assert.match(audit,/desktop update-log retry is missing/,'desktop audit must verify post-title release-log recovery');
 assert.match(audit,/PULSE color was not separated from SWING CCW/,'desktop audit must verify PULSE color separation');
 assert.match(audit,/PULSE single-ring visual pass is missing/,'desktop audit must verify PULSE simplification');
+assert.match(audit,/desktop PULSE multi-aim guide is missing/,'desktop audit must verify simultaneous PULSE aim guidance');
 assert.match(audit,/SWING directional visual pass is missing/,'desktop audit must verify SWING simplification');
 assert.match(audit,/punchier hit-sound pass is missing/,'desktop audit must verify the layered hit-sound pass');
 assert.match(audit,/tutorial TRACE finalization still ignores endpoint grace/,'desktop audit must verify TRACE endpoint grace');

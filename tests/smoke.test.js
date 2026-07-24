@@ -18,7 +18,7 @@ setAttribute(){}, removeAttribute(){}, focus(){}, blur(){}, getBoundingClientRec
 }
 function loadGameExports(){
 const src = fs.readFileSync("src/game.js", "utf8");
-const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n SLIDE_JUDGEMENT_PROFILE, PULSE_SYNC_EPSILON, COLORS, isPulseSynchronizedCut, noteColor, nextAimNoteAfterPulse, PULSE_AIM_GUIDE_LINGER, PULSE_AIM_GUIDE_LOOKAHEAD, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
+const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n SLIDE_JUDGEMENT_PROFILE, PULSE_SYNC_EPSILON, COLORS, isPulseSynchronizedCut, noteColor, nextAimNotesAfterPulse, nextAimNoteAfterPulse, PULSE_AIM_GUIDE_LINGER, PULSE_AIM_GUIDE_LOOKAHEAD, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
 const patched = src.replace(/\r?\n\s*updateModeButtons\(\);\r?\n\s*updateButtons\(\);\r?\n\}\)\(\);\s*$/, `${exportPatch}\n updateModeButtons();\n updateButtons();\n})();`);
 const elements = new Map();
 const document = {
@@ -171,26 +171,38 @@ test("PULSE-synchronized CUT uses the shared orange readability language", () =>
   assert.equal(api.noteColor(cut,[cut]),api.COLORS.cut);
 });
 
-test("PULSE aim guide skips PULSE chains and points to the next aim note", () => {
+test("PULSE aim guide groups simultaneous aim chords without clutter", () => {
   const first={type:"pulse",hitTime:1,spawnTime:0};
   const second={type:"pulse",hitTime:1.08,spawnTime:0};
   const simultaneousCut={type:"cut",hitTime:1,angle:.5};
+  const simultaneousSwing={type:"swingCW",hitTime:1,angle:2.4};
+  const simultaneousHold={type:"fx",hitTime:1+api.PULSE_SYNC_EPSILON*.5,angle:1.1};
   const laterTrace={type:"traceCW",hitTime:1.25,angle:1.7};
   const oldCut={type:"cut",hitTime:.75,angle:2.4};
-  assert.equal(api.nextAimNoteAfterPulse(first,[oldCut,first,second,laterTrace,simultaneousCut]),simultaneousCut);
-  simultaneousCut.done=true;
-  assert.equal(api.nextAimNoteAfterPulse(first,[oldCut,first,second,laterTrace,simultaneousCut]),laterTrace);
-  assert.equal(api.nextAimNoteAfterPulse(first,[first,second]),null);
+  const notes=[oldCut,first,second,laterTrace,simultaneousCut,simultaneousSwing,simultaneousHold];
+  const chord=api.nextAimNotesAfterPulse(first,notes);
+  assert.equal(chord.length,3);
+  assert.ok(chord.includes(simultaneousCut));
+  assert.ok(chord.includes(simultaneousSwing));
+  assert.ok(chord.includes(simultaneousHold));
+  assert.equal(api.nextAimNoteAfterPulse(first,notes),simultaneousCut);
+  simultaneousCut.done=simultaneousSwing.done=simultaneousHold.done=true;
+  assert.equal(api.nextAimNoteAfterPulse(first,notes),laterTrace);
+  assert.equal(api.nextAimNotesAfterPulse(first,[first,second]).length,0);
   assert.equal(api.PULSE_AIM_GUIDE_LINGER,.22);
   assert.ok(api.PULSE_AIM_GUIDE_LOOKAHEAD>0);
   const src=fs.readFileSync("src/game.js","utf8");
+  assert.match(src,/function nextAimNotesAfterPulse\(pulse,notes=chart\)/);
   assert.match(src,/function pulseAimGuideState\(t\)/);
   assert.match(src,/if\(tutorialMode\)return null;/);
-  assert.match(src,/n\.type==="pulse"/);
-  assert.match(src,/n\.hitTime<pulse\.hitTime-PULSE_SYNC_EPSILON/);
+  assert.match(src,/n\.type!=="pulse"/);
+  assert.match(src,/n\.hitTime>=pulse\.hitTime-PULSE_SYNC_EPSILON/);
   const renderer=src.match(/  function drawPulseAimGuide\(t\)\{[\s\S]*?\n  \}/)?.[0]||"";
   assert.ok(renderer,"PULSE next-aim renderer missing");
+  assert.match(renderer,/PULSE_AIM_MULTI_TARGET_GUIDE/);
   assert.match(renderer,/const innerR=baseR\*\(compact\?\.18:\.20\)/);
+  assert.match(renderer,/arrowTargets\.length>=2/);
+  assert.match(renderer,/targets\.length>arrowTargets\.length/);
   assert.doesNotMatch(renderer,/drawDirectedArcSegments|hitR/);
   assert.match(src,/drawArm\(\);\s*drawPulseAimGuide\(t\);\s*drawEffects\(dt\);/);
 });
