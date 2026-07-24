@@ -5,6 +5,7 @@ on:
     branches:
       - feat/auto-aim-visual-flow
     paths:
+      - scripts/update-aim-visual-regression.js
       - .github/workflows/Aim test diagnostics.yml
 
 permissions:
@@ -21,8 +22,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Update aim visual regression
+        run: node scripts/update-aim-visual-regression.js
       - run: npm ci
-      - name: Capture failing test output
+      - name: Capture test output
         shell: bash
         run: |
           set +e
@@ -32,10 +35,14 @@ jobs:
           echo "exit_code=$status" >> aim-test-diagnostics.txt
           rm aim-test-diagnostics.full.txt
           exit 0
-      - name: Commit diagnostics
+      - name: Commit regression and diagnostics
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add aim-test-diagnostics.txt
-          git commit -m "chore: capture aim test failure"
-          git push
+          git add tests/smoke.test.js aim-test-diagnostics.txt
+          if git diff --cached --quiet; then
+            echo "No diagnostic changes"
+          else
+            git commit -m "test: update aim visual regression"
+            git push
+          fi
