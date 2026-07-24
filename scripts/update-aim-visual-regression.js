@@ -1,0 +1,30 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const file=path.resolve(__dirname,'../tests/smoke.test.js');
+let src=fs.readFileSync(file,'utf8').replace(/\r\n/g,'\n');
+const startMarker='test("aim visual response is visual-only with deterministic large-error catch-up", () => {';
+const endMarker='test("PC input runtime has no broad updateArm exception suppression", () => {';
+const start=src.indexOf(startMarker);
+const end=src.indexOf(endMarker,start);
+if(start<0||end<0||end<=start) throw new Error('Unable to locate the legacy aim visual regression block.');
+const replacement=String.raw`test("aim visual response is visual-only with deterministic large-error catch-up", () => {
+const src = fs.readFileSync("src/game.js", "utf8");
+assert.ok(src.includes('const AIM_VISUAL_RESPONSE_MODES = ["FAST","NORMAL","SOFT"]'));
+assert.ok(src.includes('aimVisualResponse:AIM_VISUAL_RESPONSE_MODES.includes(saved.aimVisualResponse)?saved.aimVisualResponse:"FAST"'));
+assert.ok(src.includes('const AIM_VISUAL_SNAP_ERROR={FAST:Math.PI*.25,NORMAL:Math.PI/3,SOFT:Math.PI*5/12}'));
+assert.ok(src.includes('function shouldSnapVisualAim(visualTarget,responseMode=inputSettings.aimVisualResponse,currentAngle=visualArmAngle)'));
+assert.ok(src.includes('function mouseVisualAimStep(currentAngle,visualTarget,dt,responseMode=inputSettings.aimVisualResponse,angularVelocity=aimInput.sampleAngularVelocity)'));
+const visualUpdateStart=src.indexOf('  function updateVisualArmAngle(visualTarget,dt){');
+const visualUpdateEnd=src.indexOf('\n  function normalizedAimTimestamp',visualUpdateStart);
+const visualUpdate=visualUpdateStart>=0&&visualUpdateEnd>visualUpdateStart?src.slice(visualUpdateStart,visualUpdateEnd):'';
+assert.ok(visualUpdate.includes('inputSettings.aimVisual==="DIRECT" || lastPointerSource==="touch"'));
+assert.ok(visualUpdate.includes('mouseVisualAimStep(visualArmAngle,visualTarget,dt'));
+assert.ok(!visualUpdate.includes('judgementAimAngle='));
+assert.match(fs.readFileSync("index.html", "utf8"), /VISUAL RESPONSE FAST/);
+});
+
+`;
+src=src.slice(0,start)+replacement+src.slice(end);
+fs.writeFileSync(file,src);
+console.log('Updated the aim visual regression contract.');
