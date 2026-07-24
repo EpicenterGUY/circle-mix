@@ -2565,6 +2565,41 @@
     return best;
   }
 
+  const PULSE_AIM_GUIDE_LINGER=.22;
+  const PULSE_AIM_GUIDE_LOOKAHEAD=APPROACH+.45;
+
+  function nextAimNoteAfterPulse(pulse,notes=chart){
+    if(!pulse)return null;
+    let best=null;
+    for(const n of notes){
+      if(!n||n===pulse||n.done||n.missed||n.type==="pulse")continue;
+      if(!Number.isFinite(n.hitTime)||n.hitTime<pulse.hitTime-PULSE_SYNC_EPSILON)continue;
+      if(!best||n.hitTime<best.hitTime)best=n;
+    }
+    return best;
+  }
+
+  function pulseAimGuideState(t){
+    if(tutorialMode)return null;
+    let pulse=null,bestDistance=Infinity;
+    for(const n of chart){
+      if(!n||n.type!=="pulse"||n.missed)continue;
+      if(t<n.spawnTime||t>n.hitTime+PULSE_AIM_GUIDE_LINGER)continue;
+      const distance=Math.abs(n.hitTime-t);
+      if(distance<bestDistance){pulse=n;bestDistance=distance;}
+    }
+    if(!pulse)return null;
+    const target=nextAimNoteAfterPulse(pulse);
+    if(!target||!Number.isFinite(target.angle))return null;
+    const timeToTarget=target.hitTime-t;
+    if(timeToTarget>PULSE_AIM_GUIDE_LOOKAHEAD||timeToTarget<-.05)return null;
+    const pulseApproach=pulseInput.approachProgress(t,pulse.hitTime,APPROACH);
+    const proximity=clamp(1-timeToTarget/Math.max(APPROACH,.001),0,1);
+    const linger=t<=pulse.hitTime?1:clamp(1-(t-pulse.hitTime)/PULSE_AIM_GUIDE_LINGER,0,1);
+    const visibility=clamp((.16+.68*Math.max(pulseApproach*.72,proximity))*linger,0,1);
+    return {pulse,target,angle:target.angle,proximity,visibility};
+  }
+
   function noteDebugId(n){
     if(!n)return "-";
     const idx=chart.indexOf(n);
@@ -3647,6 +3682,34 @@ activePath.autoTraceProgress=progress;
     }
   }
 
+  function drawPulseAimGuide(t){
+    const guide=pulseAimGuideState(t);
+    if(!guide||guide.visibility<=.01)return;
+    const compact=isMobileViewport();
+    const innerR=baseR*(compact?.18:.20);
+    const length=lerp(compact?18:20,compact?28:32,guide.proximity);
+    const halfWidth=lerp(compact?6:7,compact?10:11,guide.proximity);
+    const tip=innerR+length;
+    const neck=innerR+length*.45;
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(guide.angle);
+    ctx.globalAlpha=guide.visibility;
+    ctx.shadowColor=COLORS.pulse;
+    ctx.shadowBlur=(5+9*guide.proximity)*visualScale("effect");
+    ctx.fillStyle="rgba(255,255,255,.96)";
+    ctx.strokeStyle=COLORS.pulse;
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(tip,0);
+    ctx.lineTo(neck,-halfWidth);
+    ctx.lineTo(neck,-halfWidth*.38);
+    ctx.lineTo(innerR,-halfWidth*.38);
+    ctx.lineTo(innerR,halfWidth*.38);
+    ctx.lineTo(neck,halfWidth*.38);
+    ctx.lineTo(neck,halfWidth);
+    ctx.closePath();ctx.fill();ctx.stroke();
+    ctx.restore();
+  }
+
   function drawPulse(n,t){
     const p=pulseInput.approachProgress(t,n.hitTime,APPROACH);
     const r=lerp(Math.max(20,baseR*.10),hitR,p);
@@ -4578,6 +4641,7 @@ activePath.autoTraceProgress=progress;
     for(let i=0;i<visibleNotes.length;i++){ const n=visibleNotes[i]; if(n.type!=="pulse"&&!n.type.startsWith("trace"))drawNote(n,t); }
     if(!tutorialMode)drawFocusHalo(focusNote,t);
     drawArm();
+    drawPulseAimGuide(t);
     drawEffects(dt);
     updateDebugOverlay(t);
 
