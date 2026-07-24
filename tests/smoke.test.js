@@ -550,13 +550,17 @@ assert.match(src, /PC AIM " \+ inputSettings\.pcAimMode \+ \(inputSettings\.pcAi
 
 test("aim visual response is visual-only with deterministic large-error catch-up", () => {
 const src = fs.readFileSync("src/game.js", "utf8");
-assert.match(src, /const AIM_VISUAL_RESPONSE_MODES = \["FAST","NORMAL","SOFT"\]/);
-assert.match(src, /aimVisualResponse:AIM_VISUAL_RESPONSE_MODES\.includes\(saved\.aimVisualResponse\)\?saved\.aimVisualResponse:"FAST"/);
-assert.match(src, /const AIM_VISUAL_SNAP_ERROR=\{FAST:Math\.PI\*\.38,NORMAL:Math\.PI\*\.46,SOFT:Math\.PI\*\.56\}/);
-assert.match(src, /function shouldSnapVisualAim\(visualTarget\)/);
-assert.match(src, /if\(inputSettings\.aimVisual==="DIRECT" \|\| lastPointerSource==="touch" \|\| shouldSnapVisualAim\(visualTarget\)\)/);
-assert.match(src, /const urgency=Math\.max\(1-Math\.exp\(-velocity\/3\.6\),1-Math\.exp\(-error\/\(Math\.PI\/6\)\)\)/);
-assert.doesNotMatch(src.match(/function updateVisualArmAngle\(visualTarget,dt\)\{[\s\S]*?\n  \}/)?.[0] || "", /velocity\s*[><=]+\s*\d[^;]*visualArmAngle/);
+assert.ok(src.includes('const AIM_VISUAL_RESPONSE_MODES = ["FAST","NORMAL","SOFT"]'));
+assert.ok(src.includes('aimVisualResponse:AIM_VISUAL_RESPONSE_MODES.includes(saved.aimVisualResponse)?saved.aimVisualResponse:"FAST"'));
+assert.ok(src.includes('const AIM_VISUAL_SNAP_ERROR={FAST:Math.PI*.25,NORMAL:Math.PI/3,SOFT:Math.PI*5/12}'));
+assert.ok(src.includes('function shouldSnapVisualAim(visualTarget,responseMode=inputSettings.aimVisualResponse,currentAngle=visualArmAngle)'));
+assert.ok(src.includes('function mouseVisualAimStep(currentAngle,visualTarget,dt,responseMode=inputSettings.aimVisualResponse,angularVelocity=aimInput.sampleAngularVelocity)'));
+const visualUpdateStart=src.indexOf('  function updateVisualArmAngle(visualTarget,dt){');
+const visualUpdateEnd=src.indexOf('\n  function normalizedAimTimestamp',visualUpdateStart);
+const visualUpdate=visualUpdateStart>=0&&visualUpdateEnd>visualUpdateStart?src.slice(visualUpdateStart,visualUpdateEnd):'';
+assert.ok(visualUpdate.includes('inputSettings.aimVisual==="DIRECT" || lastPointerSource==="touch"'));
+assert.ok(visualUpdate.includes('mouseVisualAimStep(visualArmAngle,visualTarget,dt'));
+assert.ok(!visualUpdate.includes('judgementAimAngle='));
 assert.match(fs.readFileSync("index.html", "utf8"), /VISUAL RESPONSE FAST/);
 });
 
