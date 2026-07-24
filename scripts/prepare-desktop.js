@@ -70,6 +70,25 @@ const desktopRelease=`(function(){
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
   const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];
   window.CircleMixChangelog=[release,...previous.filter(entry=>entry?.version!==release.version)];
+  // DESKTOP_UPDATE_LOG_RETRY: game startup initializes the update-log check before
+  // the title scene is finalized. Retry once after DOM/title startup so an updated
+  // installed app cannot silently skip its release notes.
+  function showDesktopReleaseLogAfterTitle(){
+    if(typeof document==="undefined")return;
+    let lastSeen="";
+    try{lastSeen=window.localStorage?.getItem("circleMixLastSeenVersion")||"";}catch(_){}
+    if(lastSeen===release.version)return;
+    setTimeout(()=>{
+      const overlay=document.getElementById("updateLogOverlay");
+      if(overlay&&!overlay.hidden&&overlay.classList?.contains("show"))return;
+      const button=document.getElementById("safeUpdateLogBtn");
+      if(button&&!button.hidden&&typeof button.click==="function")button.click();
+    },320);
+  }
+  if(typeof document!=="undefined"){
+    if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",showDesktopReleaseLogAfterTitle,{once:true});
+    else showDesktopReleaseLogAfterTitle();
+  }
 })();
 `;
 fs.writeFileSync(path.join(out,'src/desktop-release.js'),desktopRelease);
