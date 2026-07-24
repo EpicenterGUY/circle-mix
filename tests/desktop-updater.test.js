@@ -14,7 +14,7 @@ const releaseConfig=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.r
 const releaseWorkflow=fs.readFileSync(path.join(root,'.github/workflows/windows-updater-release.yml'),'utf8').replace(/\r\n/g,'\n');
 const signingHelper=fs.readFileSync(path.join(root,'scripts/prepare-updater-signing-key.ps1'),'utf8').replace(/\r\n/g,'\n');
 
-assert.equal(tauri.version,'0.9.37');
+assert.equal(tauri.version,'0.9.38');
 assert.equal(tauri.app?.withGlobalTauri,true,'desktop updater UI needs the global Tauri core bridge');
 assert.equal(tauri.bundle?.createUpdaterArtifacts,false,'normal PR installers must not require the private signing key');
 assert.equal(releaseConfig.bundle?.createUpdaterArtifacts,true,'release builds must create signed updater artifacts');
