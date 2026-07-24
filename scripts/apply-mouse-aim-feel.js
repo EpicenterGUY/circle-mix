@@ -81,7 +81,7 @@ const mouseTest=`test("mouse aim keeps raw judgement while improving large-angle
   assert.ok(api.AIM_VISUAL_SNAP_ERROR.NORMAL<api.AIM_VISUAL_SNAP_ERROR.SOFT);
   for(const mode of ["FAST","NORMAL","SOFT"]){
     const jump=api.mouseVisualAimStep(0,Math.PI/2,1/60,mode,0);
-    assert.ok(angularDistance(jump,Math.PI/2)<1e-12,`${mode} must immediately display a 90 degree jump`);
+    assert.ok(angularDistance(jump,Math.PI/2)<1e-12,\`${mode} must immediately display a 90 degree jump\`);
   }
   const small=api.mouseVisualAimStep(0,.12,1/60,"SOFT",0);
   assert.ok(small>0 && small<.12,"small SMOOTH movement should remain visually softened");
