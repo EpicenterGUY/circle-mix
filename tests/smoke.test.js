@@ -175,8 +175,7 @@ test("AUTO visual aim flows between targets without changing verifier timing", (
   assert.ok(pathStep>0 && pathStep<1.5,"moving SLIDE/TRACE targets must keep a short visual lag instead of snapping");
   const source=fs.readFileSync("src/game.js","utf8");
   const setterStart=source.indexOf("  function setAutoAimAngle(angle,velocity=0){");
-  const setterEnd=source.indexOf("
-  function completeAutoNote",setterStart);
+  const setterEnd=source.indexOf("\n  function completeAutoNote",setterStart);
   const setter=setterStart>=0&&setterEnd>setterStart?source.slice(setterStart,setterEnd):"";
   assert.ok(setter,"AUTO aim setter missing");
   assert.ok(!setter.includes("visualArmAngle="),"AUTO verifier setter must not teleport the rendered arm");
@@ -205,11 +204,10 @@ test("mouse aim keeps raw judgement while improving large-angle visual response"
   assert.ok(medium.centerEnterPx<=8 && medium.centerExitPx<=11 && medium.jumpBypass<=Math.PI*.34+.000001);
   const source=fs.readFileSync("src/game.js","utf8");
   assert.ok(source.includes("MOUSE_AIM_LARGE_JUMP_FLOW"));
-  assert.ok(source.includes('if(profile.mode==="OFF" || source==="touch"){
-      stabilizedTargetAngle=angle; judgementAimAngle=armAngle=angle;'));
+  assert.ok(source.includes('if(profile.mode==="OFF" || source==="touch"){'));
+  assert.ok(source.includes('stabilizedTargetAngle=angle; judgementAimAngle=armAngle=angle;'));
   assert.ok(source.includes('function effectivePcAimMode(){ return inputSettings.pcAimMode==="LOCKED" ? "LOCKED" : "ABSOLUTE"; }'));
-  const autoModeLine=source.split("
-").find(line=>line.includes('pcAimMode==="AUTO"'))||"";
+  const autoModeLine=source.split("\n").find(line=>line.includes('pcAimMode==="AUTO"'))||"";
   assert.ok(!autoModeLine.includes("LOCKED")&&!autoModeLine.includes("requestPointerLock"));
 });
 
