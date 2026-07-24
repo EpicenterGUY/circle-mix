@@ -15,7 +15,7 @@ test("release metadata loads in both window and service worker contexts", () => 
   const browser = {window:{}};
   vm.createContext(browser);
   vm.runInContext(versionSource, browser, {filename:"src/version.js"});
-  assert.equal(browser.window.CircleMixVersion.version, "0.9.30");
+  assert.equal(browser.window.CircleMixVersion.version, "0.9.31");
   assert.ok(browser.window.CircleMixVersion.cacheRevision);
   assert.equal(Object.isFrozen(browser.window.CircleMixVersion), true);
 
@@ -51,4 +51,16 @@ test("installed PWA explicitly checks for service worker updates", () => {
   assert.match(pwaSource, /window\.addEventListener\("focus",\(\)=>checkForUpdate\(\)\)/);
   assert.match(pwaSource, /String\(result\.version\)!==VERSION/);
   assert.match(pwaSource, /String\(result\.revision\|\|result\.version\)!==CACHE_REVISION/);
+});
+
+
+test("mobile viewport and guarded update flow are present", () => {
+  assert.match(pwaSource, /window\.visualViewport\?\.addEventListener\("resize"/);
+  assert.match(pwaSource, /--app-height/);
+  assert.match(pwaSource, /mobileShortLandscape/);
+  assert.match(pwaSource, /function canApplyUpdate\(\)/);
+  assert.match(pwaSource, /UPDATE AFTER PLAY/);
+  assert.match(pwaSource, /RELOAD_GUARD_KEY/);
+  assert.match(serviceWorkerSource, /async function announceRelease\(\)/);
+  assert.match(serviceWorkerSource, /type:"RELEASE_ACTIVE"/);
 });

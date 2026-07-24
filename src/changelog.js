@@ -6,6 +6,12 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.31", date: "2026-07-24", title: "MOBILE PWA STABILITY", summary: "폴더블·가로 화면 전환과 PWA 업데이트 적용 흐름을 안정화했습니다.", changes: [
+    { category: "MOBILE", text: "visualViewport 기반 화면 크기·위치 동기화로 폴드/펼침, 주소창 변화와 가로모드에서 메뉴·HUD·터치 버튼 배치를 즉시 갱신" },
+    { category: "LOCAL", text: "짧은 가로 화면에서도 LOCAL 탭, .cmix 가져오기와 PLAY 영역이 화면 안에서 스크롤 가능하고 접근 가능하도록 정리" },
+    { category: "PWA", text: "대기 중 업데이트가 플레이·오프라인 다운로드 중임을 명확히 표시하고 안전한 시점에 적용한 뒤 한 번만 새로고침" },
+    { category: "CACHE", text: "새 서비스워커 활성 버전을 열린 앱에 통지하고 0.9.31 앱 셸 캐시로 확실히 전환" }
+  ] },
   { version: "0.9.30", date: "2026-07-21", title: "LOCAL DIFFICULTY CALIBRATION", summary: "LOCAL chart stars now use one shared automatic difficulty estimator.", changes: [{ category: "LOCAL", text: "Fast slides, full rotations, aim speed, overlaps, and sustained strain are reflected." },{ category: "LOCAL", text: "Package-declared stars no longer override runtime LOCAL difficulty." }] },
   { version: "0.9.29", date: "2026-07-21", title: "Windows .cmix Drag and Drop", summary: "Windows desktop에서 .cmix 파일 드래그앤드롭 가져오기를 복구했습니다.", changes: [
     { category: "DESKTOP", text: "WebView2 file drags now open the existing HTML5 .cmix import flow." }

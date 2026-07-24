@@ -112,7 +112,11 @@ async function networkFirstStatic(request){
   }
 }
 self.addEventListener("install", event=>{ event.waitUntil(cacheRequired().catch(()=>{})); });
-self.addEventListener("activate", event=>{ event.waitUntil((async()=>{ const keys=await caches.keys(); await Promise.all(keys.filter(k=>k.startsWith(CACHE_PREFIX) && ![APP_CACHE,MEDIA_CACHE].includes(k)).map(k=>caches.delete(k))); await self.clients.claim(); })()); });
+async function announceRelease(){
+  const windows=await self.clients.matchAll({type:"window",includeUncontrolled:true});
+  for(const client of windows) client.postMessage({type:"RELEASE_ACTIVE",version:VERSION,revision:CACHE_REVISION});
+}
+self.addEventListener("activate", event=>{ event.waitUntil((async()=>{ const keys=await caches.keys(); await Promise.all(keys.filter(k=>k.startsWith(CACHE_PREFIX) && ![APP_CACHE,MEDIA_CACHE].includes(k)).map(k=>caches.delete(k))); await self.clients.claim(); await announceRelease(); })()); });
 function safePost(port, message){ try{ port?.postMessage(message); }catch(error){ console.warn("Offline response postMessage failed", error); } }
 function missingPortStatus(type){ return {type:"OFFLINE_FAILED", failures:[{status:"missing-message-port", requestType:type}], status:{ready:false, version:VERSION, revision:CACHE_REVISION, requiredCount:REQUIRED_OFFLINE_URLS.length, cachedCount:0, missing:REQUIRED_OFFLINE_URLS.slice(), appCache:APP_CACHE, mediaCache:MEDIA_CACHE, error:"missing-message-port"}}; }
 self.addEventListener("message", event=>{
