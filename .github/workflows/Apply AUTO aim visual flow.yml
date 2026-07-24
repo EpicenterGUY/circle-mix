@@ -39,10 +39,6 @@ jobs:
         run: node scripts/apply-auto-aim-visual-flow.js
       - name: Apply mouse aim feel
         run: node scripts/apply-mouse-aim-feel.js
-      - name: Install dependencies
-        run: npm ci
-      - name: Run repository tests
-        run: npm test
       - name: Commit generated changes
         run: |
           git config user.name "github-actions[bot]"
@@ -54,3 +50,7 @@ jobs:
             git commit -m "feat: smooth AUTO and mouse aim movement"
             git push origin HEAD:${{ github.head_ref || github.ref_name }}
           fi
+      - name: Install dependencies
+        run: npm ci
+      - name: Run repository tests
+        run: npm test
