@@ -1,0 +1,38 @@
+name: Apply mobile PWA stability patch
+
+on:
+  push:
+    branches:
+      - feat/mobile-pwa-stability
+    paths:
+      - scripts/apply-mobile-pwa-stability.js
+      - .github/workflows/mobile-pwa-stability-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/mobile-pwa-stability
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Apply focused mobile PWA patch
+        run: node scripts/apply-mobile-pwa-stability.js
+      - name: Commit generated changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/version.js src/changelog.js src/pwa.js service-worker.js tests/pwa-update.test.js tests/mobile-viewport-browser.test.js package.json
+          git commit -m "feat: ship mobile PWA stability update"
+          git push origin HEAD:feat/mobile-pwa-stability
