@@ -1,4 +1,4 @@
-name: Mobile PWA diagnostic
+name: Finalize mobile PWA diagnostic repair
 
 on:
   push:
@@ -6,93 +6,31 @@ on:
       - feat/mobile-pwa-stability
 
 permissions:
-  contents: read
-  issues: write
-  pull-requests: write
+  contents: write
 
 jobs:
-  diagnose:
+  finalize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - id: syntax
-        name: Syntax checks
-        continue-on-error: true
+          ref: feat/mobile-pwa-stability
+      - name: Update stale web version expectations and remove diagnostic workflow
+        shell: bash
         run: |
-          node --check src/pwa.js
-          node --check service-worker.js
-          node --check src/version.js
-          node --check src/changelog.js
-      - id: smoke
-        name: Smoke test
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          node tests/smoke.test.js 2>&1 | tee smoke-diagnostic.log
-      - id: hit_sound
-        name: Hit sound test
-        continue-on-error: true
-        run: node tests/hit-sound.test.js
-      - id: storage
-        name: Storage and profile tests
-        continue-on-error: true
-        run: |
-          node tests/song-record.test.js
-          node tests/local-library.test.js
-          node tests/player-profile.test.js
-      - id: input
-        name: Input tests
-        continue-on-error: true
-        run: |
-          node tests/pulse-input.test.js
-          node tests/pulse-game-input.test.js
-          node tests/local-auto-toggle.test.js
-      - id: cmix
-        name: CMIX and difficulty tests
-        continue-on-error: true
-        run: |
-          node tests/cmix-validator.test.js
-          node tests/cmix-importer.test.js
-          node tests/cmix-exporter.test.js
-          node tests/chart-difficulty.test.js
-      - id: desktop
-        name: Desktop regression tests
-        continue-on-error: true
-        run: |
-          node tests/desktop-installer.test.js
-          node tests/desktop-visual-pass.test.js
-          node tests/desktop-updater.test.js
-      - id: pwa
-        name: PWA regression test
-        continue-on-error: true
-        run: node tests/pwa-update.test.js
-      - name: Report diagnostic outcomes
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const rows = [
-              ['syntax', '${{ steps.syntax.outcome }}'],
-              ['smoke', '${{ steps.smoke.outcome }}'],
-              ['hit_sound', '${{ steps.hit_sound.outcome }}'],
-              ['storage', '${{ steps.storage.outcome }}'],
-              ['input', '${{ steps.input.outcome }}'],
-              ['cmix', '${{ steps.cmix.outcome }}'],
-              ['desktop', '${{ steps.desktop.outcome }}'],
-              ['pwa', '${{ steps.pwa.outcome }}']
-            ];
-            const smoke = fs.existsSync('smoke-diagnostic.log') ? fs.readFileSync('smoke-diagnostic.log','utf8').slice(-5000) : '(no smoke log)';
-            const marker = '<!-- mobile-pwa-diagnostic -->';
-            const body = `${marker}\nMobile PWA diagnostic for ${context.sha}:\n\n${rows.map(([name,outcome]) => `- ${name}: **${outcome}**`).join('\n')}\n\n<details><summary>Smoke test tail</summary>\n\n\`\`\`text\n${smoke}\n\`\`\`\n</details>`;
-            const comments = await github.paginate(github.rest.issues.listComments, {owner: context.repo.owner, repo: context.repo.repo, issue_number: 138, per_page: 100});
-            const previous = comments.find(comment => comment.body?.includes(marker));
-            if(previous) await github.rest.issues.updateComment({owner: context.repo.owner, repo: context.repo.repo, comment_id: previous.id, body});
-            else await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: 138, body});
-      - name: Fail if a diagnostic group failed
-        if: steps.syntax.outcome == 'failure' || steps.smoke.outcome == 'failure' || steps.hit_sound.outcome == 'failure' || steps.storage.outcome == 'failure' || steps.input.outcome == 'failure' || steps.cmix.outcome == 'failure' || steps.desktop.outcome == 'failure' || steps.pwa.outcome == 'failure'
-        run: exit 1
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tests/smoke.test.js')
+          text=p.read_text(encoding='utf-8')
+          old='''assert.match(version, /version:\\s*"0\\.9\\.30"/);\nassert.match(version, /cacheRevision:/);\nassert.match(pwa, /const RELEASE=window\\.CircleMixVersion/);\nassert.match(sw, /^importScripts\\("\\.\\/src\\/version\\.js"\\);/);\nassert.doesNotMatch(pwa, /const VERSION="0\\.9\\.30"/);\nassert.doesNotMatch(sw, /const VERSION = "0\\.9\\.30"/);\nassert.match(changelog, /version:\\s*"0\\.9\\.30"/);'''
+          new='''assert.match(version, /version:\\s*"0\\.9\\.31"/);\nassert.match(version, /cacheRevision:/);\nassert.match(pwa, /const RELEASE=window\\.CircleMixVersion/);\nassert.match(sw, /^importScripts\\("\\.\\/src\\/version\\.js"\\);/);\nassert.doesNotMatch(pwa, /const VERSION="0\\.9\\.31"/);\nassert.doesNotMatch(sw, /const VERSION = "0\\.9\\.31"/);\nassert.match(changelog, /version:\\s*"0\\.9\\.31"/);'''
+          if old not in text:
+              raise SystemExit('stale 0.9.30 smoke expectation block not found')
+          p.write_text(text.replace(old,new),encoding='utf-8')
+          PY
+          rm .github/workflows/mobile-pwa-diagnostic.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tests/smoke.test.js .github/workflows/mobile-pwa-diagnostic.yml
+          git commit -m "test: expect web PWA version 0.9.31"
+          git push origin HEAD:feat/mobile-pwa-stability
