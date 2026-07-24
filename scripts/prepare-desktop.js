@@ -2,8 +2,8 @@
 'use strict';
 const fs=require('fs'), path=require('path');
 const root=path.resolve(__dirname,'..'), out=path.join(root,'desktop-dist');
-const DESKTOP_VERSION='0.9.36';
-const DESKTOP_BUILD_DATE='2026-07-23';
+const DESKTOP_VERSION='0.9.37';
+const DESKTOP_BUILD_DATE='2026-07-24';
 const files=['style.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
 fs.rmSync(out,{recursive:true,force:true});
@@ -61,12 +61,10 @@ songs=songs.replaceAll('CircleMixGhostRuleBundle','ExcludedBundle').replaceAll('
 fs.writeFileSync(desktopSongs,songs);
 const desktopRelease=`(function(){
   "use strict";
-  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"MOBILE LANDSCAPE + WINDOWS FIX",summary:"폴더블과 모바일 가로화면 대응을 강화하고 Windows 설치판의 빌드 및 업데이트 경로를 안정화했습니다.",changes:[
-    {category:"FOLD",text:"접힌 화면과 펼친 화면의 크기 변화를 감지해 캔버스와 모바일 조작 UI를 다시 배치합니다."},
-    {category:"LANDSCAPE",text:"PWA와 전체화면에서 가로 고정을 다시 시도하며, 차단될 때는 한 번 눌러 전환하는 버튼을 표시합니다."},
-    {category:"VISUAL",text:"PULSE와 CUT의 공통 주황색 가독성을 유지하면서 SWING CCW와의 색상 구분을 검증합니다."},
-    {category:"WINDOWS",text:"데스크톱 시각 변환을 반복 실행 가능하게 만들고 Windows 줄바꿈 환경의 회귀 테스트를 보강했습니다."},
-    {category:"UPDATER",text:"서명된 Windows 업데이트로 0.9.35 설치판에서 0.9.36을 직접 내려받아 설치할 수 있습니다."}
+  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"SIGNED UPDATER TEST",summary:"0.9.36 설치판에서 새 서명키 기반 자동 업데이트를 실제로 검증하는 소규모 릴리스입니다.",changes:[
+    {category:"UPDATER",text:"0.9.36에서 0.9.37을 자동으로 확인·다운로드·설치하는 서명 업데이트 경로를 검증합니다."},
+    {category:"STABILITY",text:"게임플레이와 로컬 채보 데이터 구조는 변경하지 않아 업데이트 시험의 위험을 최소화했습니다."},
+    {category:"NEXT",text:"다음 작업은 CUT·PULSE·SWING·SLIDE·TRACE 타격음과 효과음을 더 찰지게 개편하는 것입니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
   const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];
