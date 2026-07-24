@@ -1,0 +1,41 @@
+name: Aim test diagnostics
+
+on:
+  push:
+    branches:
+      - feat/auto-aim-visual-flow
+    paths:
+      - .github/workflows/Aim test diagnostics.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/auto-aim-visual-flow
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Capture failing test output
+        shell: bash
+        run: |
+          set +e
+          npm test > aim-test-diagnostics.full.txt 2>&1
+          status=$?
+          tail -n 160 aim-test-diagnostics.full.txt > aim-test-diagnostics.txt
+          echo "exit_code=$status" >> aim-test-diagnostics.txt
+          rm aim-test-diagnostics.full.txt
+          exit 0
+      - name: Commit diagnostics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add aim-test-diagnostics.txt
+          git commit -m "chore: capture aim test failure"
+          git push
