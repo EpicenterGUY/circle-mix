@@ -38,6 +38,15 @@ assert.equal(analyzer.signedSweep({type:'traceCW',sweepAngle:1}),1,'authored swe
   assert.ok(['orange','red'].includes(result.issues.find(x=>x.code==='RAPID_REVERSAL')?.severity));
 }
 {
+  const result=analyzer.analyze(chart([{type:'fx',beat:0,angle:45,durationBeat:2},{type:'slideCW',beat:2,angle:45,durationBeat:1,sweepAngle:90}],120));
+  assert.equal(codes(result).includes('SUSTAINED_HANDOFF_AIM'),false,'same-angle HOLD to SLIDE handoff is a valid BLOOM connection');
+  assert.equal(result.summary.red,0);
+}
+{
+  const result=analyzer.analyze(chart([{type:'fx',beat:0,angle:0,durationBeat:2},{type:'slideCW',beat:2,angle:120,durationBeat:1,sweepAngle:90}],120));
+  assert.equal(result.issues.find(x=>x.code==='SUSTAINED_HANDOFF_AIM')?.severity,'red','off-angle zero-gap handoffs must remain physically invalid');
+}
+{
   const result=analyzer.analyze(chart([{type:'cut',beat:0,angle:0},{type:'traceCW',beat:.16,angle:100,durationBeat:1,sweepAngle:90},{type:'cut',beat:.32,angle:0}],120));
   assert.equal(codes(result).includes('RAPID_REVERSAL'),false,'sustained path starts must not create instant-reversal warnings');
 }

@@ -2304,13 +2304,14 @@
     source.stop(stop+.01);
   }
 
-  function playHitSound(type="cut", quality="PERFECT"){
+  function playHitSound(type="cut", quality="PERFECT", options={}){
     const effectiveSfxVolume=sfxEnabled?clamp(sfxVolume,0,4):0;
     if(effectiveSfxVolume<=.001)return;
     const bus=ensureHitSoundBus();
     if(!bus)return;
     const t=audioCtx.currentTime;
     const family=type==="pulse"?"pulse":type.startsWith("trace")?"trace":type.startsWith("slide")?"slide":type.startsWith("swing")?"swing":type==="fx"?"hold":type.startsWith("scratch")?"scratch":"cut";
+    const completion=options.completion===true;
     const direction=type.endsWith("CCW")?-1:(type.endsWith("CW")?1:0);
     const qualityPitch=quality==="PERFECT"?1:.88;
     const amount=clamp(effectiveSfxVolume*hitSoundHeadroom(t),.02,2.35);
@@ -2348,17 +2349,59 @@
       noise({duration:.132,volume:.108,type:"bandpass",frequency:1220,q:1.9});
     }
 
+    if(completion&&family==="hold"){
+      tone({wave:"triangle",from:520,to:910,duration:.078,volume:.030,delay:.014,attack:.006});
+      noise({duration:.036,volume:.026,delay:.010,type:"highpass",frequency:1650,q:.8});
+    }else if(completion&&family==="slide"){
+      tone({wave:"sine",from:direction<0?1420:920,to:direction<0?940:1480,duration:.082,volume:.032,delay:.012,attack:.006});
+      tone({wave:"triangle",from:1820,to:2240,duration:.050,volume:.018,delay:.032,attack:.004});
+    }else if(completion&&family==="trace"){
+      tone({wave:"sine",from:1480,to:2280,duration:.110,volume:.030,delay:.010,attack:.008});
+      tone({wave:"triangle",from:2320,to:1760,duration:.086,volume:.020,delay:.028,attack:.006});
+    }
+
     if(quality==="PERFECT"){
       const sparkFrom=family==="pulse"?1320:(family==="hold"?980:1880);
       tone({wave:"triangle",from:sparkFrom,to:sparkFrom*1.32,duration:.038,volume:family==="pulse"?.024:.020,delay:.006,attack:.003});
     }
   }
 
+  function sustainCompletionFamily(type=""){
+    if(type==="fx")return "hold";
+    if(type.startsWith("slide"))return "slide";
+    if(type.startsWith("trace"))return "trace";
+    return null;
+  }
+
+  function sustainCompletionAngle(n){
+    if(n.type?.startsWith("trace"))return resolveTraceMotion(n).finalAngle;
+    if(n.type?.startsWith("slide"))return n.endAngle ?? n.visualEndAngle ?? (n.angle+slideDelta(n));
+    return n.angle;
+  }
+
+  function addSustainCompletionEffect(n,label,color){
+    const family=sustainCompletionFamily(n.type);
+    if(!family)return;
+    const a=sustainCompletionAngle(n);
+    const p={x:cx+Math.cos(a)*hitR,y:cy+Math.sin(a)*hitR};
+    const petalCount=family==="hold"?6:(family==="slide"?8:10);
+    const petalRadius=label==="PERFECT"?14:10;
+    for(let i=0;i<petalCount;i++){
+      const petalAngle=a+i*TAU/petalCount;
+      addParticles(p.x+Math.cos(petalAngle)*petalRadius,p.y+Math.sin(petalAngle)*petalRadius,color,1,label==="PERFECT"?.48:.34);
+    }
+    if(label==="PERFECT"){addWave(a-.04,color);addWave(a+.04,color);}
+    if(family==="trace")addRingBurst(color,label==="PERFECT"?.48:.38,"TRACE END");
+    const text=family==="hold"?"HOLD END":(family==="slide"?"SLIDE END":"TRACE END");
+    addFeedback(text,p.x,p.y+20,color);
+  }
+
   function judge(n,label,color,event={}){
     if(n.done||n.missed)return;
     const judgeEvent={source:event.source||tutorialState.activeInput||"system", judgement:label, noteId:noteDebugId(n), noteType:n.type, reason:event.reason||"USER_JUDGEMENT", stepToken:tutorialStepToken, sessionId:tutorialSessionId};
     n.done=true;
-    playHitSound(n.type,label);
+    const sustainFamily=sustainCompletionFamily(n.type);
+    playHitSound(n.type,label,{completion:!!sustainFamily});
     actualHitValue += noteWeight(n) * judgeValue(label);
     judgedCount++;
     if(label==="PERFECT") perfectCount++; else greatCount++;
@@ -2374,7 +2417,9 @@
 
     let a=n.angle;
     if(n.type.startsWith("slide") || n.type.startsWith("scratch")){
-      a = n.endAngle ?? n.visualEndAngle ?? a;
+      a = n.endAngle ?? n.visualEndAngle ?? (n.angle+slideDelta(n));
+    }else if(n.type.startsWith("trace")){
+      a = resolveTraceMotion(n).finalAngle;
     }
 
     const isScratch=n.type&&n.type.startsWith("scratch");
@@ -2385,6 +2430,7 @@
     mobileHaptic(label);
     addParticles(p.x,p.y,color,isScratch?16:(isSwing?22:14),isScratch?.85:(isSwing?1.35:1));
     addWave((isScratch||isSwing)?a:a,color);
+    if(sustainFamily)addSustainCompletionEffect(n,label,color);
 
     if(isScratch){
       const d=slideDelta(n);
@@ -2917,7 +2963,7 @@ activePath.autoTraceProgress=progress;
           const onTime=endpointJudgement.onTime;
           const passed=n.startCaptured && greatTravel && greatReverse && greatEndpoint && n.motionTime>=n.minimumMotionTime;
           n.completed=passed; n.failReason=passed?null:traceFailureReason(n,profile);
-          if(passed){ const perfect=perfectTravel&&perfectReverse&&perfectEndpoint&&onTime; n.completionTime=Number.isFinite(n.endpointCapturedAt)?n.endpointCapturedAt:t; addWave(motion.finalAngle,COLORS.trace); addRingBurst(COLORS.trace,.42,"END"); judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"}); }
+          if(passed){ const perfect=perfectTravel&&perfectReverse&&perfectEndpoint&&onTime; n.completionTime=Number.isFinite(n.endpointCapturedAt)?n.endpointCapturedAt:t; judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"}); }
           else miss(n,n.failReason);
         }
         continue;

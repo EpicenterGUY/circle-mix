@@ -30,5 +30,12 @@ assert.match(sound, /family==="slide"[\s\S]*from:direction<0\?1320:560/, 'SLIDE 
 assert.match(sound, /family==="trace"[\s\S]*frequency:2450/, 'TRACE needs a clean endpoint shimmer');
 assert.match(sound, /family==="hold"[\s\S]*type:"lowpass"/, 'HOLD completion needs a low thump');
 
-assert.match(game, /playHitSound\(n\.type,label\);/, 'judgement must route the note type and quality into the sound engine');
+assert.match(sound, /const completion=options\.completion===true/, 'sustain completion must be an explicit sound phase');
+assert.match(sound, /completion&&family==="hold"[\s\S]*from:520,to:910/, 'HOLD must release with a light endpoint lift');
+assert.match(sound, /completion&&family==="slide"[\s\S]*from:1820,to:2240/, 'SLIDE must land with a directional endpoint snap');
+assert.match(sound, /completion&&family==="trace"[\s\S]*from:1480,to:2280/, 'TRACE must resolve with a clear endpoint shimmer');
+assert.match(game, /playHitSound\(n\.type,label,\{completion:!!sustainFamily\}\);/, 'judgement must mark sustained note sounds as completion cues');
+assert.match(game, /function addSustainCompletionEffect\(n,label,color\)/, 'sustained notes need a dedicated endpoint visual effect');
+assert.match(game, /HOLD END[\s\S]*SLIDE END[\s\S]*TRACE END/, 'each sustained family needs an endpoint label');
+assert.match(game, /else if\(n\.type\.startsWith\("trace"\)\)[\s\S]*resolveTraceMotion\(n\)\.finalAngle/, 'TRACE feedback must appear at the authored endpoint');
 console.log('layered gameplay hit-sound tests passed');
