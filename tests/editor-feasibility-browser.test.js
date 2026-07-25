@@ -38,10 +38,18 @@ function startServer(root){
     await page.waitForFunction(()=>window.CircleMixChartFeasibility&&window.CircleMixEditorFeasibilityUI,{timeout:10000});
     await page.locator('#preview').click({position:{x:280,y:40}});
     await page.locator('#preview').click({position:{x:280,y:520}});
-    await page.waitForFunction(()=>document.querySelectorAll('.noteRow').length===2,{timeout:3000});
+    await page.waitForFunction(()=>document.querySelectorAll('.noteRow').length===2,{timeout:5000});
+    await page.waitForFunction(async()=>{
+      const id=document.getElementById('songId')?.value||'custom-song';
+      const db=await new Promise(resolve=>{const request=indexedDB.open('circle-mix-editor',1);request.onsuccess=()=>resolve(request.result);request.onerror=()=>resolve(null);});
+      if(!db)return false;
+      const project=await new Promise(resolve=>{const request=db.transaction('projects').objectStore('projects').get(id);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>resolve(null);});
+      db.close();
+      return Array.isArray(project?.notes)&&project.notes.length===2;
+    },null,{timeout:15000});
     await page.locator('#physicalCheckBtn').click();
     const redIssue=page.locator('.feasibilityIssue.severity-red').first();
-    await redIssue.waitFor({state:'visible',timeout:5000});
+    await redIssue.waitFor({state:'visible',timeout:15000});
     assert.match(await redIssue.textContent(),/동시에 2개의 서로 다른 에임 위치/);
     assert.equal(await page.locator('.feasibilitySummary .severity-red').textContent(),'RED 1');
     assert.equal(await page.locator('.noteRow.severity-red').count(),2);
@@ -53,6 +61,7 @@ function startServer(root){
     await context.close();
   }finally{
     if(browser)await browser.close();
+    server.closeAllConnections?.();
     await new Promise(resolve=>server.close(resolve));
   }
 })().catch(error=>{console.error(error);process.exitCode=1;});
