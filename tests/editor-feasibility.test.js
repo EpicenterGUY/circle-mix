@@ -1,0 +1,21 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const html=fs.readFileSync('editor.html','utf8');
+const editor=fs.readFileSync('src/editor.js','utf8');
+const css=fs.readFileSync('src/editor.css','utf8');
+const songs=fs.readFileSync('src/songs.js','utf8');
+const sw=fs.readFileSync('service-worker.js','utf8');
+
+assert.match(html,/src\/chart-feasibility\.js/,'editor must load the shared feasibility analyzer');
+assert.ok(html.indexOf('src/chart-feasibility.js')<html.indexOf('src/songs.js'),'feasibility analyzer must load before chart tools');
+assert.ok(html.indexOf('src/chart-feasibility.js')<html.indexOf('src/editor.js'),'feasibility analyzer must load before editor runtime');
+assert.match(editor,/feasibility:\{issues:\[\],summary:/,'editor state must retain feasibility results');
+assert.match(editor,/function refreshFeasibility\(\)/,'editor must recompute physical warnings after edits');
+assert.match(editor,/data-feasibility-i/,'physical warning rows must be clickable');
+assert.match(editor,/issueSeverityForNote/,'timeline and event list must expose per-note severity');
+assert.match(css,/\.feasibilityIssue\.severity-red/);
+assert.match(css,/\.noteRow\.severity-orange/);
+assert.match(songs,/physical:physical/,'shared chart validation must expose the physical analysis result');
+assert.match(sw,/versioned\("\.\/src\/chart-feasibility\.js"\)/,'offline app shell must include the analyzer');
+console.log('editor feasibility integration tests passed');
