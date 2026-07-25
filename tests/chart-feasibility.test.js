@@ -4,6 +4,8 @@ const analyzer=require('../src/chart-feasibility.js');
 const chart=(notes,bpm=120)=>({bpm,notes});
 const codes=result=>result.issues.map(issue=>issue.code);
 
+assert.equal(analyzer.signedSweep({type:'traceCW',sweepAngle:1}),1,'authored sweepAngle values are degrees');
+
 {
   const notes=[{type:'pulse',beat:1},{type:'cut',beat:1,angle:90}];
   const snapshot=JSON.stringify(notes),result=analyzer.analyze(chart(notes));
@@ -34,6 +36,10 @@ const codes=result=>result.issues.map(issue=>issue.code);
 {
   const result=analyzer.analyze(chart([{type:'cut',beat:0,angle:0},{type:'cut',beat:.16,angle:100},{type:'cut',beat:.32,angle:0}],120));
   assert.ok(['orange','red'].includes(result.issues.find(x=>x.code==='RAPID_REVERSAL')?.severity));
+}
+{
+  const result=analyzer.analyze(chart([{type:'cut',beat:0,angle:0},{type:'traceCW',beat:.16,angle:100,durationBeat:1,sweepAngle:90},{type:'cut',beat:.32,angle:0}],120));
+  assert.equal(codes(result).includes('RAPID_REVERSAL'),false,'sustained path starts must not create instant-reversal warnings');
 }
 {
   const result=analyzer.analyze(chart([{type:'cut',beat:0,angle:0},{type:'cut',beat:0,angle:180},{type:'traceCW',beat:1,angle:0,durationBeat:.5,sweepAngle:720}],120));
