@@ -22,10 +22,10 @@
   const aimed=note=>family(note)!=='pulse';
   const noteAngle=note=>normalizeAngle(note?.angle!==undefined?note.angle:Number(note?.directionIndex??note?.lane??0)*45);
   const directionSign=note=>String(note?.direction||note?.type||'').toUpperCase().includes('CCW')?-1:1;
-  function degrees(value,preferRadians=false){const number=Number(value);if(!Number.isFinite(number))return null;return (preferRadians||Math.abs(number)>0&&Math.abs(number)<=Math.PI*4.2)?number*180/Math.PI:number;}
+  function radiansToDegrees(value){const number=Number(value);return Number.isFinite(number)?number*180/Math.PI:null;}
   function signedSweep(note){
-    for(const key of ['signedSweepAngle','sweepAngle']) if(Number.isFinite(Number(note?.[key]))) return degrees(note[key]);
-    for(const key of ['slideAmount','amount']) if(Number.isFinite(Number(note?.[key]))&&Number(note[key])!==0) return degrees(note[key],true);
+    for(const key of ['signedSweepAngle','sweepAngle']) if(Number.isFinite(Number(note?.[key]))) return Number(note[key]);
+    for(const key of ['slideAmount','amount']) if(Number.isFinite(Number(note?.[key]))&&Number(note[key])!==0) return radiansToDegrees(note[key]);
     if(Number.isFinite(Number(note?.turns))&&Number(note.turns)!==0) return directionSign(note)*Math.abs(Number(note.turns))*360;
     if(note?.endAngle===undefined&&note?.endLane===undefined&&note?.endDirectionIndex===undefined)return 0;
     const end=normalizeAngle(note.endAngle!==undefined?note.endAngle:Number(note.endDirectionIndex??note.endLane??0)*45);
@@ -121,8 +121,9 @@
       if(severity)add(severity,'AIM_TRAVEL',`${Math.round(travel)}° 에임 이동을 ${(gap*1000).toFixed(0)}ms 안에 요구합니다.`,[previous,next],{travelDeg:Number(travel.toFixed(1)),gapSeconds:Number(gap.toFixed(4)),rateDegPerSecond:Math.round(rate)});
     }
 
-    for(let index=2;index<aimNotes.length;index++){
-      const a=aimNotes[index-2],b=aimNotes[index-1],c=aimNotes[index];
+    const instantAimNotes=aimNotes.filter(item=>!['hold','slide','trace'].includes(item.type));
+    for(let index=2;index<instantAimNotes.length;index++){
+      const a=instantAimNotes[index-2],b=instantAimNotes[index-1],c=instantAimNotes[index];
       if(b.time-a.time<=settings.simultaneousWindowSeconds||c.time-b.time<=settings.simultaneousWindowSeconds)continue;
       const first=signedAngleDelta(a.angle,b.angle),second=signedAngleDelta(b.angle,c.angle),window=c.time-a.time;
       if(Math.sign(first)===Math.sign(second)||Math.abs(first)<45||Math.abs(second)<45||window>.32)continue;
