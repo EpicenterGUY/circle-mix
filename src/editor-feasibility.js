@@ -8,7 +8,17 @@
   const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
   function openDb(){return new Promise(resolve=>{const request=indexedDB.open('circle-mix-editor',1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains('projects'))request.result.createObjectStore('projects',{keyPath:'id'});};request.onsuccess=()=>resolve(request.result);request.onerror=()=>resolve(null);});}
   async function readProject(id){const db=await openDb();if(!db)return null;return new Promise(resolve=>{const request=db.transaction('projects').objectStore('projects').get(id);request.onsuccess=()=>{const value=request.result||null;db.close();resolve(value);};request.onerror=()=>{db.close();resolve(null);};});}
-  async function currentProject(save){if(save)$('saveProject')?.click();await delay(save?60:25);const id=$('songId')?.value||'custom-song';return readProject(id);}
+  async function currentProject(save){
+    if(save)$('saveProject')?.click();
+    const id=$('songId')?.value||'custom-song',expectedCount=document.querySelectorAll('.noteRow').length,attempts=save?30:5;
+    let project=null;
+    for(let attempt=0;attempt<attempts;attempt++){
+      await delay(attempt===0?(save?40:20):35);
+      project=await readProject(id);
+      if(project&&Array.isArray(project.notes)&&project.notes.length===expectedCount)return project;
+    }
+    return project;
+  }
   function chartFromProject(project){return {schema:'angle-v1',bpm:Number($('bpm')?.value)||Number(project?.meta?.bpm)||120,offset:Number($('offset')?.value)||Number(project?.meta?.offset)||0,notes:Array.isArray(project?.notes)?project.notes:[]};}
   function highestForNote(index){return state.result?.highestByNote?.[index]||'';}
   function issueBlock(){const result=state.result,summary=result?.summary||{yellow:0,orange:0,red:0,total:0};const header=`<div class="feasibilitySummary"><strong>PHYSICAL CHECK</strong><span class="severity-yellow">YELLOW ${summary.yellow||0}</span><span class="severity-orange">ORANGE ${summary.orange||0}</span><span class="severity-red">RED ${summary.red||0}</span><small>경고는 내보내기를 막지 않습니다.</small></div>`;if(!result?.issues?.length)return `<section class="feasibilityBlock">${header}<div class="feasibilityOk">물리 가능성 경고가 없습니다.</div></section>`;return `<section class="feasibilityBlock">${header}${result.issues.map((issue,index)=>`<button type="button" class="feasibilityIssue severity-${issue.severity}" data-feasibility-i="${index}"><b>${escapeHtml(issue.severity.toUpperCase())}</b><span>${escapeHtml(issue.message)}</span><small>${escapeHtml(issue.code)} · NOTE ${issue.noteIndices.map(i=>`#${i}`).join(', ')}</small></button>`).join('')}</section>`;}
