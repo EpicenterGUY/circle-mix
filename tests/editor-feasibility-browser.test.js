@@ -23,15 +23,31 @@ function startServer(root){
   });
   return new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',()=>resolve(server));});
 }
+async function writeDiagnostics(page,error){
+  const dir=process.env.BROWSER_ARTIFACTS_DIR||'artifacts/browser-regression';
+  fs.mkdirSync(dir,{recursive:true});
+  let state=null;
+  try{
+    state=await page.evaluate(async()=>{
+      const id=document.getElementById('songId')?.value||'custom-song';
+      const db=await new Promise(resolve=>{const request=indexedDB.open('circle-mix-editor',1);request.onsuccess=()=>resolve(request.result);request.onerror=()=>resolve(null);});
+      let project=null;
+      if(db){project=await new Promise(resolve=>{const request=db.transaction('projects').objectStore('projects').get(id);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>resolve(null);});db.close();}
+      return {project,rows:[...document.querySelectorAll('.noteRow')].map(row=>({className:row.className,text:row.textContent})),validation:document.getElementById('validation')?.innerHTML||'',result:window.CircleMixEditorFeasibilityUI?.result||null};
+    });
+    await page.screenshot({path:path.join(dir,'editor-feasibility-failure.png'),fullPage:true});
+  }catch(diagnosticError){state={diagnosticError:diagnosticError.stack};}
+  fs.writeFileSync(path.join(dir,'editor-feasibility-failure.json'),JSON.stringify({error:error.stack,state},null,2));
+}
 
 (async()=>{
   const server=await startServer(process.cwd());
   const port=server.address().port;
-  let browser;
+  let browser,context,page;
   try{
     browser=await chromium.launch({headless:true});
-    const context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});
-    const page=await context.newPage();
+    context=await browser.newContext({viewport:{width:1440,height:1000},serviceWorkers:'block'});
+    page=await context.newPage();
     const pageErrors=[];
     page.on('pageerror',error=>pageErrors.push(error.message));
     await page.goto(`http://127.0.0.1:${port}/editor.html`,{waitUntil:'domcontentloaded'});
@@ -58,9 +74,12 @@ function startServer(root){
     assert.equal(await page.locator('.noteRow.on').count(),1,'clicking a warning must select the first affected note');
     assert.deepEqual(pageErrors,[],'editor physical-check page errors');
     console.log('editor feasibility browser test passed');
-    await context.close();
+  }catch(error){
+    if(page)await writeDiagnostics(page,error);
+    throw error;
   }finally{
-    if(browser)await browser.close();
+    if(context)await context.close().catch(()=>{});
+    if(browser)await browser.close().catch(()=>{});
     server.closeAllConnections?.();
     await new Promise(resolve=>server.close(resolve));
   }
