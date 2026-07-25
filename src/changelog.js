@@ -6,6 +6,12 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.32", date: "2026-07-25", title: "AIM FLOW & PULSE GUIDANCE", summary: "PULSE 다음 에임 안내와 AUTO·큰 각도 마우스 이동의 시각 흐름을 개선했습니다.", changes: [
+    { category: "PULSE", text: "PULSE 뒤 가장 이른 동시치기 에임을 최대 두 방향 화살표와 ×N 표시로 안내" },
+    { category: "AUTO", text: "판정은 즉시 PERFECT를 유지하면서 화면의 AUTO 에임 팔만 최단 원형 경로로 자연스럽게 이동" },
+    { category: "AIM", text: "SMOOTH는 작은 이동만 완화하고 90도 이상의 큰 점프는 즉시 실제 판정 위치를 표시" },
+    { category: "CACHE", text: "새 0.9.32 캐시 리비전으로 설치형 PWA의 game.js와 앱 셸을 확실히 갱신" }
+  ] },
   { version: "0.9.31", date: "2026-07-24", title: "MOBILE PWA STABILITY", summary: "폴더블·가로 화면 전환과 PWA 업데이트 적용 흐름을 안정화했습니다.", changes: [
     { category: "MOBILE", text: "visualViewport 기반 화면 크기·위치 동기화로 폴드/펼침, 주소창 변화와 가로모드에서 메뉴·HUD·터치 버튼 배치를 즉시 갱신" },
     { category: "LOCAL", text: "짧은 가로 화면에서도 LOCAL 탭, .cmix 가져오기와 PLAY 영역이 화면 안에서 스크롤 가능하고 접근 가능하도록 정리" },
