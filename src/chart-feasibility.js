@@ -1,9 +1,11 @@
 /* Shared, data-only chart physical-feasibility analyzer. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;if(root)root.CircleMixChartFeasibility=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){'use strict';
-  const VERSION='feasibility-v1';
+  const VERSION='feasibility-v2';
   const SEVERITY_ORDER=Object.freeze({yellow:1,orange:2,red:3});
   const DEFAULTS=Object.freeze({
     simultaneousWindowSeconds:.018,
+    handoffWindowSeconds:.036,
+    handoffAngleToleranceDeg:14,
     sameAngleToleranceDeg:12,
     overlapAngleOrangeDeg:30,
     overlapAngleRedDeg:70,
@@ -109,11 +111,20 @@
     for(let index=1;index<aimNotes.length;index++){
       const previous=aimNotes[index-1],next=aimNotes[index];
       if(next.time-previous.time<=settings.simultaneousWindowSeconds)continue;
-      const anchorTime=['hold','slide','trace'].includes(previous.type)?previous.endTime:previous.time;
-      const anchorAngle=['hold','slide','trace'].includes(previous.type)?previous.endAngle:previous.angle;
+      const previousSustained=['hold','slide','trace'].includes(previous.type);
+      const anchorTime=previousSustained?previous.endTime:previous.time;
+      const anchorAngle=previousSustained?previous.endAngle:previous.angle;
       const gap=next.time-anchorTime;
+      const travel=angleDistance(anchorAngle,next.angle);
+      const isHandoff=previousSustained&&Math.abs(gap)<=settings.handoffWindowSeconds;
+      if(isHandoff){
+        if(travel<=settings.handoffAngleToleranceDeg)continue;
+        const severity=travel>=settings.overlapAngleRedDeg?'red':(travel>=settings.overlapAngleOrangeDeg?'orange':'yellow');
+        add(severity,'SUSTAINED_HANDOFF_AIM',`${previous.type.toUpperCase()} 종료 직후 ${Math.round(travel)}° 떨어진 위치에서 다음 노트가 시작합니다.`,[previous,next],{travelDeg:Number(travel.toFixed(1)),gapSeconds:Number(gap.toFixed(4)),handoffWindowSeconds:settings.handoffWindowSeconds});
+        continue;
+      }
       if(gap<=.001)continue;
-      const travel=angleDistance(anchorAngle,next.angle),rate=travel/gap;
+      const rate=travel/gap;
       let severity=null;
       if((gap<=.055&&travel>=100)||rate>=settings.travelRedDegPerSecond)severity='red';
       else if((gap<=.09&&travel>=100)||rate>=settings.travelOrangeDegPerSecond)severity='orange';
