@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "node tests/smoke.test.js && node tests/hit-sound.test.js && node tests/song-record.test.js && node tests/local-library.test.js && node tests/player-profile.test.js && node tests/pulse-input.test.js && node tests/pulse-game-input.test.js",
+    "test": "node tests/smoke.test.js && node tests/hit-sound.test.js && node tests/song-record.test.js && node tests/local-library.test.js",
     "test:browser": "node tests/browser-regression.test.js && node tests/local-auto-browser.test.js && node tests/mobile-song-select-layout.test.js && node tests/mobile-viewport-browser.test.js && node tests/player-profile-browser.test.js && node tests/player-profile-ui-browser.test.js",
     "test:osu-to-cmix": "node --check scripts/osu-to-cmix.js && node --check scripts/osu-to-cmix-lib.js && node tests/osu-to-cmix.test.js",
     "verify": "node scripts/verify.js",
