@@ -5,9 +5,6 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   syntax-and-smoke:
     runs-on: ubuntu-latest
@@ -15,105 +12,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-      - name: Finalize release smoke metadata
-        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'agent/release-0.9.40-aim-flow' }}
-        shell: bash
-        run: |
-          python <<'PY'
-          from pathlib import Path
-
-          smoke_path = Path('tests/smoke.test.js')
-          smoke = smoke_path.read_text(encoding='utf-8')
-          replacements = {
-              'assert.match(version, /version:\\s*"0\\.9\\.31"/);': 'assert.match(version, /version:\\s*"0\\.9\\.32"/);',
-              'assert.doesNotMatch(pwa, /const VERSION="0\\.9\\.31"/);': 'assert.doesNotMatch(pwa, /const VERSION="0\\.9\\.32"/);',
-              'assert.doesNotMatch(sw, /const VERSION = "0\\.9\\.31"/);': 'assert.doesNotMatch(sw, /const VERSION = "0\\.9\\.32"/);',
-              'assert.match(changelog, /version:\\s*"0\\.9\\.31"/);': 'assert.match(changelog, /version:\\s*"0\\.9\\.32"/);',
-          }
-          for old, new in replacements.items():
-              if smoke.count(old) != 1:
-                  raise SystemExit(f'smoke expectation missing or duplicated: {old}')
-              smoke = smoke.replace(old, new, 1)
-          smoke_path.write_text(smoke, encoding='utf-8')
-
-          Path('package.json').write_text(r'''{
-            "scripts": {
-              "test": "node --check src/chart-difficulty.js && node --check src/build-config.js && node --check src/song-record.js && node --check src/song-package-adapter.js && node --check src/local-library.js && node --check src/player-profile.js && node --check src/player-profile-ui.js && node --check src/input.js && node --check src/game.js && node --check src/version.js && node --check src/changelog.js && node --check src/pwa.js && node --check src/desktop-updater.js && node --check src/cmix-validator.js && node --check src/cmix-zip.js && node --check src/cmix-audio.js && node --check src/cmix-exporter.js && node --check src/cmix-importer.js && node --check src/cmix-import-ui.js && node --check src/cmix-local-install.js && node --check src/editor.js && node --check service-worker.js && node tests/smoke.test.js && node tests/hit-sound.test.js && node tests/song-record.test.js && node tests/local-library.test.js && node tests/player-profile.test.js && node tests/pulse-input.test.js && node tests/pulse-game-input.test.js && node tests/cmix-validator.test.js && node tests/cmix-importer.test.js && node tests/cmix-exporter.test.js && node tests/chart-difficulty.test.js && node tests/local-auto-toggle.test.js && node tests/desktop-installer.test.js && node tests/desktop-visual-pass.test.js && node tests/desktop-updater.test.js && node tests/pwa-update.test.js",
-              "test:browser": "node tests/browser-regression.test.js && node tests/local-auto-browser.test.js && node tests/mobile-song-select-layout.test.js && node tests/mobile-viewport-browser.test.js && node tests/player-profile-browser.test.js && node tests/player-profile-ui-browser.test.js",
-              "test:osu-to-cmix": "node --check scripts/osu-to-cmix.js && node --check scripts/osu-to-cmix-lib.js && node tests/osu-to-cmix.test.js",
-              "verify": "node scripts/verify.js",
-              "desktop:prepare": "node scripts/prepare-desktop.js",
-              "desktop:audit": "node scripts/audit-desktop-dist.js",
-              "desktop:check": "npm run desktop:prepare && npm run desktop:audit",
-              "desktop:dev": "npm run desktop:icons && cargo tauri dev",
-              "desktop:build": "npm run desktop:icons && cargo tauri build",
-              "desktop:release-build": "npm run desktop:icons && cargo tauri build --config src-tauri/tauri.release.conf.json",
-              "desktop:icons": "cargo tauri icon src-tauri/app-icon.svg -o src-tauri/icons"
-            },
-            "devDependencies": {
-              "playwright": "^1.54.0"
-            },
-            "version": "0.9.40"
-          }
-          '''.replace('          ', ''), encoding='utf-8')
-
-          Path('.github/workflows/ci.yml').write_text('''name: CI Safety Net
-
-          on:
-            pull_request:
-            push:
-              branches: [main]
-
-          jobs:
-            syntax-and-smoke:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                  with:
-                    ref: ${{ github.event.pull_request.head.sha || github.sha }}
-                - uses: actions/setup-node@v4
-                  with:
-                    node-version: 24
-                    cache: npm
-                - name: Install dependencies
-                  run: npm ci
-                - name: Syntax, smoke, repository, and release metadata checks
-                  run: npm test && git diff --check && node scripts/check-release-metadata.js
-
-            browser-regression:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                  with:
-                    ref: ${{ github.event.pull_request.head.sha || github.sha }}
-                - uses: actions/setup-node@v4
-                  with:
-                    node-version: 24
-                    cache: npm
-                - name: Install dependencies
-                  run: npm ci
-                - name: Install Chromium
-                  run: npx playwright install --with-deps chromium
-                - name: Run browser regression tests
-                  run: npm run test:browser
-                  env:
-                    BROWSER_ARTIFACTS_DIR: artifacts/browser-regression
-                - name: Upload browser failure diagnostics
-                  if: ${{ always() }}
-                  uses: actions/upload-artifact@v4
-                  with:
-                    name: browser-regression-diagnostics-${{ github.run_attempt }}
-                    path: artifacts/browser-regression
-                    if-no-files-found: warn
-                    retention-days: 14
-          '''.replace('          ', ''), encoding='utf-8')
-          PY
-          git config user.name "circle-mix-release-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add package.json tests/smoke.test.js .github/workflows/ci.yml
-          git commit -m "test: align smoke release metadata expectations"
-          git push origin HEAD:agent/release-0.9.40-aim-flow
       - uses: actions/setup-node@v4
         with:
           node-version: 24
