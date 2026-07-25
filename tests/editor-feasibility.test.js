@@ -1,17 +1,23 @@
 'use strict';
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
+const vm=require('node:vm');
 const html=fs.readFileSync('editor.html','utf8');
 const ui=fs.readFileSync('src/editor-feasibility.js','utf8');
 const css=fs.readFileSync('src/editor.css','utf8');
 const songs=fs.readFileSync('src/songs.js','utf8');
 const sw=fs.readFileSync('service-worker.js','utf8');
+const versionSource=fs.readFileSync('src/version.js','utf8');
+const context={window:{}};vm.createContext(context);vm.runInContext(versionSource,context);
+const revision=context.window.CircleMixVersion.cacheRevision;
 
 assert.match(html,/id="physicalCheckBtn"/,'editor must expose a physical-check action');
 assert.match(html,/src\/chart-feasibility\.js/,'editor must load the shared feasibility analyzer');
 assert.match(html,/src\/editor-feasibility\.js/,'editor must load the feasibility UI bridge');
 assert.ok(html.indexOf('src/chart-feasibility.js')<html.indexOf('src/songs.js'),'feasibility analyzer must load before chart tools');
 assert.ok(html.indexOf('src/editor.js')<html.indexOf('src/editor-feasibility.js'),'editor runtime must initialize before the UI bridge');
+assert.doesNotMatch(html,/20260721-local-difficulty-930/,'editor must not request obsolete cache-bust assets');
+for(const asset of ['editor.css','chart-feasibility.js','editor.js','editor-feasibility.js'])assert.ok(html.includes(`${asset}?v=${revision}`),`${asset} must use the active PWA cache revision`);
 assert.match(ui,/data-feasibility-i/,'physical warning rows must be clickable');
 assert.match(ui,/feasibilityTimelineMarker/,'timeline must expose per-note severity markers');
 assert.match(ui,/MutationObserver\(decorateRows\)/,'event rows must retain severity after editor rerenders');
