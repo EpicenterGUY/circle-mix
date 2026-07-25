@@ -10,13 +10,14 @@ function test(name, fn){
 const versionSource = fs.readFileSync("src/version.js", "utf8");
 const pwaSource = fs.readFileSync("src/pwa.js", "utf8");
 const serviceWorkerSource = fs.readFileSync("service-worker.js", "utf8");
+const changelogSource = fs.readFileSync("src/changelog.js", "utf8");
 
 test("release metadata loads in both window and service worker contexts", () => {
   const browser = {window:{}};
   vm.createContext(browser);
   vm.runInContext(versionSource, browser, {filename:"src/version.js"});
-  assert.equal(browser.window.CircleMixVersion.version, "0.9.31");
-  assert.ok(browser.window.CircleMixVersion.cacheRevision);
+  assert.equal(browser.window.CircleMixVersion.version, "0.9.32");
+  assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260725-aim-flow-pulse-guide-v1");
   assert.equal(Object.isFrozen(browser.window.CircleMixVersion), true);
 
   const worker = {self:{}};
@@ -36,6 +37,9 @@ test("PWA and service worker consume the shared release metadata", () => {
   assert.match(serviceWorkerSource, /return \{ready:missing\.length===0, version:VERSION, revision:CACHE_REVISION/);
   assert.doesNotMatch(serviceWorkerSource, /const VERSION\s*=\s*["'][0-9]/);
   assert.match(serviceWorkerSource, /cacheRevision/);
+  assert.match(serviceWorkerSource, /versioned\("\.\/src\/game\.js"\)/);
+  assert.match(changelogSource, /window\.CircleMixChangelog\s*=\s*\[\s*\{ version: "0\.9\.32"/);
+  assert.match(changelogSource, /AIM FLOW & PULSE GUIDANCE/);
 });
 
 test("online static assets refresh before cached fallback", () => {
