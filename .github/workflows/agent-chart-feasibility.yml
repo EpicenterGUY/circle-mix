@@ -1,0 +1,130 @@
+name: Agent chart feasibility integration
+
+on:
+  push:
+    branches:
+      - agent/chart-feasibility-validator
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/chart-feasibility-validator
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Integrate feasibility warnings
+        shell: bash
+        run: |
+          python <<'PY'
+          import json
+          from pathlib import Path
+
+          def replace_exact(path, old, new, expected=1):
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != expected:
+                  raise SystemExit(f'{path}: expected {expected} occurrences, found {count}: {old[:120]!r}')
+              file.write_text(text.replace(old, new, expected), encoding='utf-8')
+
+          token = '20260721-local-difficulty-930'
+          replace_exact(
+              'editor.html',
+              f'<script src="./src/chart-difficulty.js?v={token}"></script>\n<script src="./src/songs.js?v={token}"></script>',
+              f'<script src="./src/chart-difficulty.js?v={token}"></script>\n<script src="./src/chart-feasibility.js?v={token}"></script>\n<script src="./src/songs.js?v={token}"></script>'
+          )
+          replace_exact(
+              'service-worker.js',
+              '  versioned("./src/chart-difficulty.js"),\n  versioned("./src/songs.js"),',
+              '  versioned("./src/chart-difficulty.js"),\n  versioned("./src/chart-feasibility.js"),\n  versioned("./src/songs.js"),'
+          )
+          replace_exact(
+              'src/songs.js',
+              'return {ok:errors.length===0, errors, warnings};',
+              'const physical=window.CircleMixChartFeasibility?.analyze(chart)||null; if(physical) warnings.push(...physical.issues.map(issue=>`[${issue.severity.toUpperCase()}] ${issue.message}`)); return {ok:errors.length===0, errors, warnings, physical:physical};'
+          )
+
+          editor = Path('src/editor.js')
+          text = editor.read_text(encoding='utf-8')
+          old_state = 'const state = { notes: [], selected: new Set(), type: "cut", audioUrl: null, audioFile: null, jacketFile: null, jacketData: null, localRecord:null, clipboard: [], undo: [], redo: [], db: null, autoPreview:false, lastMetro:-1 };'
+          new_state = 'const state = { notes: [], selected: new Set(), type: "cut", audioUrl: null, audioFile: null, jacketFile: null, jacketData: null, localRecord:null, clipboard: [], undo: [], redo: [], db: null, autoPreview:false, lastMetro:-1, feasibility:{issues:[],summary:{yellow:0,orange:0,red:0,total:0},highestByNote:{}} };'
+          if text.count(old_state) != 1: raise SystemExit('editor state marker missing or duplicated')
+          text = text.replace(old_state, new_state, 1)
+
+          chart_marker = '  function chartJson(){ const m=meta(); return { schema:"angle-v1", title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, difficulty:m.difficulty, previewStart:m.previewStart, notes:state.notes.slice().sort((a,b)=>(a.beat??0)-(b.beat??0)) }; }\n'
+          helpers = '''  function refreshFeasibility(){ const analyzer=window.CircleMixChartFeasibility; state.feasibility=analyzer?.analyze(chartJson()) || {issues:[],summary:{yellow:0,orange:0,red:0,total:0},highestByNote:{}}; return state.feasibility; }
+  function issueSeverityForNote(index){ return state.feasibility?.highestByNote?.[index] || ""; }
+  function escapeHtml(value){ return String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch])); }
+  function feasibilityHtml(){ const result=state.feasibility || refreshFeasibility(), summary=result.summary||{yellow:0,orange:0,red:0,total:0}; const heading=`<div class="feasibilitySummary"><strong>PHYSICAL CHECK</strong><span class="severity-yellow">YELLOW ${summary.yellow||0}</span><span class="severity-orange">ORANGE ${summary.orange||0}</span><span class="severity-red">RED ${summary.red||0}</span><small>경고는 내보내기를 막지 않습니다.</small></div>`; if(!result.issues?.length) return `${heading}<div class="feasibilityOk">물리 가능성 경고가 없습니다.</div>`; return heading+result.issues.map((issue,index)=>`<button type="button" class="feasibilityIssue severity-${issue.severity}" data-feasibility-i="${index}"><b>${escapeHtml(issue.severity.toUpperCase())}</b><span>${escapeHtml(issue.message)}</span><small>${escapeHtml(issue.code)} · NOTE ${issue.noteIndices.map(i=>`#${i}`).join(", ")}</small></button>`).join(""); }
+'''
+          if text.count(chart_marker) != 1: raise SystemExit('chartJson marker missing or duplicated')
+          text = text.replace(chart_marker, chart_marker + helpers, 1)
+
+          old_output = '$("validation").innerHTML=[...errors.map(e=>`<div class="err">ERROR ${e}</div>`),...warnings.map(w=>`<div class="warn">WARN ${w}</div>`)].join("") || "No errors."; return errors.length===0;'
+          new_output = 'refreshFeasibility(); const formatHtml=[...errors.map(e=>`<div class="err">ERROR ${e}</div>`),...warnings.map(w=>`<div class="warn">WARN ${w}</div>`)].join(""); $("validation").innerHTML=(formatHtml||"<div>No format errors.</div>")+feasibilityHtml(); return errors.length===0;'
+          if text.count(old_output) != 1: raise SystemExit('validation output marker missing or duplicated')
+          text = text.replace(old_output, new_output, 1)
+
+          old_timeline = 'tx.fillStyle=state.selected.has(i)?"#fff36a":(n.type==="pulse"?"#ff4eb8":"#5cfffb"); tx.fillRect(x-2,n.type==="pulse"?16:35+angleToLane(noteAngle(n))*12,5,16);'
+          new_timeline = 'const severity=issueSeverityForNote(i); tx.fillStyle=state.selected.has(i)?"#fff36a":severity==="red"?"#ff4f68":severity==="orange"?"#ff9f43":severity==="yellow"?"#ffd36a":(n.type==="pulse"?"#ff4eb8":"#5cfffb"); tx.fillRect(x-2,n.type==="pulse"?16:35+angleToLane(noteAngle(n))*12,5,16);'
+          if text.count(old_timeline) != 1: raise SystemExit('timeline marker missing or duplicated')
+          text = text.replace(old_timeline, new_timeline, 1)
+
+          old_list = '  function renderList(){ $("noteList").innerHTML=state.notes.map((n,i)=>`<div class="noteRow ${state.selected.has(i)?"on":""}" data-i="${i}"><span>${i} ${n.type}</span><span>b${(n.beat||0).toFixed(3)} ${n.type==="pulse"?"GLOBAL":`A${noteAngle(n)}°`}</span></div>`).join(""); fillProps(); }'
+          new_list = '  function renderList(){ $("noteList").innerHTML=state.notes.map((n,i)=>{ const severity=issueSeverityForNote(i); return `<div class="noteRow ${state.selected.has(i)?"on":""} ${severity?`severity-${severity}`:""}" data-i="${i}"><span>${i} ${n.type}${severity?` <b class="issueBadge severity-${severity}">${severity.toUpperCase()}</b>`:""}</span><span>b${(n.beat||0).toFixed(3)} ${n.type==="pulse"?"GLOBAL":`A${noteAngle(n)}°`}</span></div>`; }).join(""); fillProps(); }'
+          if text.count(old_list) != 1: raise SystemExit('renderList marker missing or duplicated')
+          text = text.replace(old_list, new_list, 1)
+
+          old_all = '  function renderAll(){ renderPreview(); renderTimeline(); renderList(); }'
+          new_all = '  function renderAll(){ refreshFeasibility(); renderPreview(); renderTimeline(); renderList(); }'
+          if text.count(old_all) != 1: raise SystemExit('renderAll marker missing or duplicated')
+          text = text.replace(old_all, new_all, 1)
+
+          click_marker = '  $("noteList").onclick=e=>{ const row=e.target.closest(".noteRow"); if(!row)return; if(!e.shiftKey) state.selected.clear(); state.selected.add(Number(row.dataset.i)); renderAll(); };\n'
+          issue_click = '  $("validation").onclick=e=>{ const row=e.target.closest("[data-feasibility-i]"); if(!row)return; const issue=state.feasibility?.issues?.[Number(row.dataset.feasibilityI)]; const index=issue?.noteIndices?.[0]; if(!Number.isInteger(index)||!state.notes[index])return; state.selected=new Set([index]); audio.currentTime=Math.max(0,noteTime(state.notes[index])-.3); renderAll(); };\n'
+          if text.count(click_marker) != 1: raise SystemExit('noteList click marker missing or duplicated')
+          text = text.replace(click_marker, click_marker + issue_click, 1)
+          editor.write_text(text, encoding='utf-8')
+
+          css = Path('src/editor.css')
+          css_text = css.read_text(encoding='utf-8')
+          addition = '''
+.feasibilitySummary{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:10px 0 8px;padding-top:10px;border-top:1px solid var(--line)}.feasibilitySummary strong{margin-right:auto;color:var(--text)}.feasibilitySummary small{flex-basis:100%;color:var(--muted)}.feasibilityIssue{display:grid;width:100%;grid-template-columns:auto 1fr;gap:3px 8px;text-align:left;margin:6px 0;padding:8px 10px;background:#081426}.feasibilityIssue span{color:var(--text)}.feasibilityIssue small{grid-column:2;color:var(--muted)}.feasibilityIssue.severity-yellow{border-color:#ffd36a}.feasibilityIssue.severity-orange{border-color:#ff9f43}.feasibilityIssue.severity-red{border-color:#ff4f68}.severity-yellow{color:#ffd36a}.severity-orange{color:#ff9f43}.severity-red{color:#ff4f68}.feasibilityOk{color:#78efad}.noteRow.severity-yellow{box-shadow:inset 3px 0 #ffd36a}.noteRow.severity-orange{box-shadow:inset 3px 0 #ff9f43}.noteRow.severity-red{box-shadow:inset 3px 0 #ff4f68}.issueBadge{font-size:9px;margin-left:4px;letter-spacing:.04em}
+'''
+          if '.feasibilityIssue.severity-red' in css_text: raise SystemExit('editor feasibility CSS already exists')
+          css.write_text(css_text + addition, encoding='utf-8')
+
+          package_path = Path('package.json')
+          package = json.loads(package_path.read_text(encoding='utf-8'))
+          command = package['scripts']['test']
+          syntax = 'node --check src/chart-feasibility.js'
+          tests = 'node tests/chart-feasibility.test.js && node tests/editor-feasibility.test.js'
+          if syntax in command or tests in command: raise SystemExit('package test integration already exists')
+          command = command.replace('node --check src/chart-difficulty.js', 'node --check src/chart-difficulty.js && ' + syntax, 1)
+          command = command.replace('node tests/chart-difficulty.test.js', 'node tests/chart-difficulty.test.js && ' + tests, 1)
+          package['scripts']['test'] = command
+          package_path.write_text(json.dumps(package, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate implementation
+        run: |
+          npm test
+          git diff --check
+      - name: Commit integrated feature
+        shell: bash
+        run: |
+          rm .github/workflows/agent-chart-feasibility.yml
+          git config user.name "circle-mix-agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add editor.html service-worker.js src/chart-feasibility.js src/editor.css src/editor.js src/songs.js tests/chart-feasibility.test.js tests/editor-feasibility.test.js package.json .github/workflows/agent-chart-feasibility.yml
+          git commit -m "feat: add chart physical feasibility warnings"
+          git push origin HEAD:agent/chart-feasibility-validator
