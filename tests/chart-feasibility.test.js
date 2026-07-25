@@ -43,6 +43,11 @@ assert.equal(analyzer.signedSweep({type:'traceCW',sweepAngle:1}),1,'authored swe
   assert.equal(result.summary.red,0);
 }
 {
+  const result=analyzer.analyze(chart([{type:'fx',beat:0,angle:45,durationBeat:2},{type:'slideCW',beat:2.06,angle:45,durationBeat:1,sweepAngle:90}],120));
+  assert.equal(codes(result).includes('SUSTAINED_HANDOFF_AIM'),false,'same-angle BLOOM handoff stays valid inside the 36ms grace window');
+  assert.equal(codes(result).includes('AIM_TRAVEL'),false);
+}
+{
   const result=analyzer.analyze(chart([{type:'fx',beat:0,angle:0,durationBeat:2},{type:'slideCW',beat:2,angle:120,durationBeat:1,sweepAngle:90}],120));
   assert.equal(result.issues.find(x=>x.code==='SUSTAINED_HANDOFF_AIM')?.severity,'red','off-angle zero-gap handoffs must remain physically invalid');
 }
