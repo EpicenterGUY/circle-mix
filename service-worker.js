@@ -12,6 +12,7 @@ const APP_SHELL_URLS = [
   "./index.html",
   "./editor.html",
   versioned("./style.css"),
+  versioned("./src/editor.css"),
   "./manifest.webmanifest",
   "./icons/circle-mix-icon-192.png",
   "./icons/circle-mix-icon-512.png",
@@ -26,6 +27,7 @@ const APP_SHELL_URLS = [
   versioned("./src/charts/routing.js"),
   versioned("./src/local-library.js"),
   versioned("./src/chart-difficulty.js"),
+  versioned("./src/chart-feasibility.js"),
   versioned("./src/songs.js"),
   versioned("./src/chart.js"),
   versioned("./src/audio.js"),
@@ -40,6 +42,8 @@ const APP_SHELL_URLS = [
   versioned("./src/cmix-importer.js"),
   versioned("./src/cmix-local-install.js"),
   versioned("./src/cmix-import-ui.js"),
+  versioned("./src/editor.js"),
+  versioned("./src/editor-feasibility.js"),
   versioned("./src/pwa.js")
 ];
 // ANiMA uses the #embedded-anima <audio> element. Routing accepts a user-linked
