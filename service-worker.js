@@ -11,7 +11,9 @@ const APP_SHELL_URLS = [
   "./",
   "./index.html",
   "./editor.html",
+  "./orbit.html",
   versioned("./style.css"),
+  versioned("./orbit.css"),
   versioned("./src/editor.css"),
   "./manifest.webmanifest",
   "./icons/circle-mix-icon-192.png",
@@ -35,6 +37,7 @@ const APP_SHELL_URLS = [
   versioned("./src/ui.js"),
   versioned("./src/input.js"),
   versioned("./src/game.js"),
+  versioned("./src/orbit.js"),
   versioned("./src/cmix-validator.js"),
   versioned("./src/cmix-audio.js"),
   versioned("./src/cmix-zip.js"),
@@ -140,7 +143,7 @@ self.addEventListener("fetch", event=>{
   const request=event.request; if(request.method!=="GET" || !sameOrigin(request) || request.url.startsWith("blob:")) return;
   const url=new URL(request.url); const accept=request.headers.get("accept")||"";
   if(request.mode==="navigate" || accept.includes("text/html")){
-    event.respondWith(fetch(new Request(request,{cache:"no-cache"})).then(async response=>{ const cache=await caches.open(APP_CACHE); if(response.ok && response.status===200) await cache.put("./index.html", response.clone()); return response; }).catch(async()=> (await caches.match("./index.html")) || (await caches.match("./")) || Response.error())); return;
+    event.respondWith(fetch(new Request(request,{cache:"no-cache"})).then(async response=>{ const cache=await caches.open(APP_CACHE); if(response.ok && response.status===200) await cache.put(url.pathname.endsWith("/orbit.html")?"./orbit.html":"./index.html", response.clone()); return response; }).catch(async()=> (await caches.match(request,{ignoreSearch:true})) || (await caches.match("./index.html")) || (await caches.match("./")) || Response.error())); return;
   }
   const isStatic=/\.(?:js|css|png|jpg|jpeg|svg|webp|gif|json|webmanifest)$/i.test(url.pathname);
   const isAudio=/\.(?:mp3|ogg|wav|m4a)$/i.test(url.pathname);

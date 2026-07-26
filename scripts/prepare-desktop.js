@@ -4,7 +4,7 @@ const fs=require('fs'), path=require('path');
 const root=path.resolve(__dirname,'..'), out=path.join(root,'desktop-dist');
 const DESKTOP_VERSION='0.9.40';
 const DESKTOP_BUILD_DATE='2026-07-25';
-const files=['style.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
+const files=['style.css','orbit.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/orbit.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
 fs.rmSync(out,{recursive:true,force:true});
 for(const file of files){const from=path.join(root,file), to=path.join(out,file); fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(from,to);}
@@ -16,6 +16,8 @@ let index=fs.readFileSync(path.join(root,'index.html'),'utf8')
  .replace(/(<script src="\.\/src\/changelog\.js[^>]*><\/script>)/,'$1\n<script src="./src/desktop-release.js"></script>\n<script src="./src/desktop-updater.js"></script>');
 if(!index.includes('./src/desktop-release.js')||!index.includes('./src/desktop-updater.js')) throw new Error('Unable to inject desktop release and updater metadata.');
 fs.writeFileSync(path.join(out,'index.html'),index);
+let orbit=fs.readFileSync(path.join(root,'orbit.html'),'utf8').replace('src="./assets/audio/ghost-rule.mp3"','src=""');
+fs.writeFileSync(path.join(out,'orbit.html'),orbit);
 const desktopGame=path.join(out,'src/game.js');
 let game=fs.readFileSync(desktopGame,'utf8').replace(/\r\n/g,'\n');
 const animaStart=game.indexOf('  // ANiMA osu! reference rechart');
