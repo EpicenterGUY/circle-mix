@@ -56,6 +56,7 @@ test('Android distribution, native patch, icon generation, and APK workflow stay
   assert.match(patch,/setGradleSdk\(gradle,'targetSdk',36\)/);
   assert.match(distAudit,/Android distribution audit passed/);
   assert.match(projectAudit,/Generated Android project audit passed/);
+  assert.equal(packageJson.scripts.tauri,'tauri');
   assert.match(packageJson.scripts['android:icons'],/tauri icon src-tauri\/app-icon\.svg -o src-tauri\/icons/);
   assert.match(packageJson.scripts['android:init'],/^npm run android:icons/);
   assert.match(packageJson.scripts['android:build:apk'],/^npm run android:icons/);
