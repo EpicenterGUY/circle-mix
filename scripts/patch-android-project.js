@@ -158,7 +158,7 @@ manifest=manifest.replace(/<application\b[^>]*>/,tag=>{
   return next;
 });
 manifest=manifest.replace(/<activity\b[^>]*android:name="(?:\.MainActivity|[^\"]*MainActivity)"[^>]*>/,tag=>{
-  let next=setAttribute(tag,'android:screenOrientation','unspecified');
+  let next=setAttribute(tag,'android:screenOrientation','sensorLandscape');
   next=setAttribute(next,'android:resizeableActivity','true');
   next=setAttribute(next,'android:configChanges','orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|uiMode');
   return next;
@@ -166,7 +166,7 @@ manifest=manifest.replace(/<activity\b[^>]*android:name="(?:\.MainActivity|[^\"]
 if(!manifest.includes('android.hardware.touchscreen')){
   manifest=manifest.replace(/(<manifest\b[^>]*>)/,`$1\n    <uses-feature android:name="android.hardware.touchscreen" android:required="true" />\n    <uses-feature android:name="android.hardware.screen.landscape" android:required="false" />`);
 }
-if(!manifest.includes('android:appCategory="game"')||!manifest.includes('android:screenOrientation="unspecified"'))throw new Error('Android manifest patch did not apply.');
+if(!manifest.includes('android:appCategory="game"')||!manifest.includes('android:screenOrientation="sensorLandscape"'))throw new Error('Android manifest patch did not apply.');
 fs.writeFileSync(manifestPath,manifest);
 
 let gradle=fs.readFileSync(gradlePath,'utf8');
