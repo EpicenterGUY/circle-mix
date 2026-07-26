@@ -1,0 +1,84 @@
+name: Apply ORBIT integration
+
+on:
+  push:
+    branches:
+      - agent/orbit-mode-mvp
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Integrate ORBIT mode
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          game=Path('src/game.js')
+          text=game.read_text()
+          if 'safeOrbit' not in text:
+              marker='  function ensurePulseUi(){\n'
+              insert='  function ensurePulseUi(){\n    const orbitAnchor=document.getElementById("safeEditor")||document.getElementById("safeTutorial");\n    if(orbitAnchor&&!document.getElementById("safeOrbit")){\n      const button=document.createElement("button");\n      button.id="safeOrbit"; button.type="button"; button.className=orbitAnchor.className; button.textContent="ORBIT MODE";\n      button.addEventListener("click",()=>{ window.location.href="./orbit.html"; });\n      const parent=orbitAnchor.parentElement; if(parent)parent.insertBefore(button,orbitAnchor.nextSibling);\n    }\n'
+              if marker not in text: raise SystemExit('missing ensurePulseUi marker')
+              game.write_text(text.replace(marker,insert,1))
+
+          sw=Path('service-worker.js')
+          text=sw.read_text()
+          if '"./orbit.html"' not in text: text=text.replace('  "./editor.html",\n','  "./editor.html",\n  "./orbit.html",\n',1)
+          if 'versioned("./orbit.css")' not in text: text=text.replace('  versioned("./style.css"),\n','  versioned("./style.css"),\n  versioned("./orbit.css"),\n',1)
+          if 'versioned("./src/orbit.js")' not in text: text=text.replace('  versioned("./src/game.js"),\n','  versioned("./src/game.js"),\n  versioned("./src/orbit.js"),\n',1)
+          old='event.respondWith(fetch(new Request(request,{cache:"no-cache"})).then(async response=>{ const cache=await caches.open(APP_CACHE); if(response.ok && response.status===200) await cache.put("./index.html", response.clone()); return response; }).catch(async()=> (await caches.match("./index.html")) || (await caches.match("./")) || Response.error())); return;'
+          new='event.respondWith(fetch(new Request(request,{cache:"no-cache"})).then(async response=>{ const cache=await caches.open(APP_CACHE); if(response.ok && response.status===200) await cache.put(url.pathname.endsWith("/orbit.html")?"./orbit.html":"./index.html", response.clone()); return response; }).catch(async()=> (await caches.match(request,{ignoreSearch:true})) || (await caches.match("./index.html")) || (await caches.match("./")) || Response.error())); return;'
+          if old in text: text=text.replace(old,new,1)
+          sw.write_text(text)
+
+          pkg=Path('package.json')
+          data=json.loads(pkg.read_text())
+          test=data['scripts']['test']
+          if 'node --check src/orbit.js' not in test: test=test.replace('node --check src/game.js','node --check src/game.js && node --check src/orbit.js',1)
+          if 'node tests/orbit-mode.test.js' not in test: test=test.replace('node tests/smoke.test.js','node tests/smoke.test.js && node tests/orbit-mode.test.js',1)
+          data['scripts']['test']=test
+          pkg.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+
+          desktop=Path('scripts/prepare-desktop.js')
+          text=desktop.read_text()
+          if "'orbit.css'" not in text: text=text.replace("const files=['style.css',","const files=['style.css','orbit.css',",1)
+          if "'src/orbit.js'" not in text: text=text.replace("'src/game.js',","'src/game.js','src/orbit.js',",1)
+          if "path.join(out,'orbit.html')" not in text:
+              marker="fs.writeFileSync(path.join(out,'index.html'),index);\n"
+              insert=marker+"let orbit=fs.readFileSync(path.join(root,'orbit.html'),'utf8').replace('src=\"./assets/audio/ghost-rule.mp3\"','src=\"\"');\nfs.writeFileSync(path.join(out,'orbit.html'),orbit);\n"
+              if marker not in text: raise SystemExit('missing desktop index write marker')
+              text=text.replace(marker,insert,1)
+          desktop.write_text(text)
+
+          audit=Path('scripts/audit-desktop-dist.js')
+          text=audit.read_text()
+          if 'desktop ORBIT mode is missing' not in text:
+              marker="if(!fs.existsSync(path.join(out,'index.html')))throw new Error('desktop-dist/index.html is missing');\n"
+              insert=marker+"for(const file of ['orbit.html','orbit.css','src/orbit.js'])if(!fs.existsSync(path.join(out,file)))throw new Error('desktop ORBIT mode is missing: '+file);\n"
+              if marker not in text: raise SystemExit('missing desktop audit marker')
+              text=text.replace(marker,insert,1)
+          audit.write_text(text)
+          PY
+      - name: Validate ORBIT mode
+        run: |
+          npm test
+          npm run desktop:check
+      - name: Commit ORBIT integration
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-orbit-integration.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: integrate orbit mode MVP"
+          git push
