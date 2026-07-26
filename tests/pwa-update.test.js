@@ -17,7 +17,7 @@ test("release metadata loads in both window and service worker contexts", () => 
   vm.createContext(browser);
   vm.runInContext(versionSource, browser, {filename:"src/version.js"});
   assert.equal(browser.window.CircleMixVersion.version, "0.9.32");
-  assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260725-aim-flow-pulse-guide-v1");
+  assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260726-unified-settings-mobile-layout-v2");
   assert.equal(Object.isFrozen(browser.window.CircleMixVersion), true);
 
   const worker = {self:{}};
