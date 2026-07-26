@@ -7,8 +7,8 @@ const {execFileSync}=require('child_process');
 const root=path.resolve(__dirname,'..');
 const desktopOut=path.join(root,'desktop-dist');
 const out=path.join(root,'android-dist');
-const ANDROID_VERSION='0.9.41';
-const ANDROID_BUILD_DATE='2026-07-26';
+const ANDROID_VERSION='0.9.42';
+const ANDROID_BUILD_DATE='2026-07-27';
 
 function run(script){execFileSync(process.execPath,[path.join(root,script)],{cwd:root,stdio:'inherit'});}
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
@@ -33,10 +33,10 @@ fs.writeFileSync(path.join(out,'src/build-config.js'),androidSeed+sharedBootstra
 
 const androidRelease=`(function(){
   "use strict";
-  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID APP FOUNDATION",summary:"CIRCLE MIX를 폴더블 대응 Android 앱으로 실행할 수 있는 네이티브 기반을 추가했습니다.",changes:[
-    {category:"ANDROID",text:"로컬 .cmix 라이브러리를 사용하는 저작권 안전 Android 앱 셸을 추가했습니다."},
-    {category:"FOLD",text:"폴드 내부 화면이 펼쳐지면 가로 화면을 우선 요청하고 화면 크기 변화에 맞춰 UI를 다시 배치합니다."},
-    {category:"NATIVE",text:"전체 화면, 화면 꺼짐 방지와 Android 뒤로가기 처리를 앱에서 직접 담당합니다."},
+  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID LAUNCH HOTFIX",summary:"폴더블 기기에서 앱이 실행 직후 종료될 수 있는 네이티브 시작 경로를 안전화했습니다.",changes:[
+    {category:"STABILITY",text:"화면 방향·전체화면·컷아웃 등 제조사별 네이티브 기능이 실패해도 앱 본체는 계속 실행됩니다."},
+    {category:"FOLD",text:"강제 가로 전환을 제거하고 Android 회전 설정을 존중하면서 접힘·펼침 화면에 맞춰 UI를 다시 배치합니다."},
+    {category:"NATIVE",text:"전체 화면, 화면 꺼짐 방지와 Android 뒤로가기를 각각 독립적으로 적용합니다."},
     {category:"INPUT",text:"모바일 ACTION·PULSE 버튼 위치와 기존 플레이 설정을 그대로 사용합니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
