@@ -2,8 +2,8 @@
 'use strict';
 const fs=require('fs'), path=require('path');
 const root=path.resolve(__dirname,'..'), out=path.join(root,'desktop-dist');
-const DESKTOP_VERSION='0.9.40';
-const DESKTOP_BUILD_DATE='2026-07-25';
+const DESKTOP_VERSION='0.9.41';
+const DESKTOP_BUILD_DATE='2026-07-26';
 const files=['style.css','orbit.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/orbit.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
 fs.rmSync(out,{recursive:true,force:true});
@@ -63,11 +63,11 @@ songs=songs.replaceAll('CircleMixGhostRuleBundle','ExcludedBundle').replaceAll('
 fs.writeFileSync(desktopSongs,songs);
 const desktopRelease=`(function(){
   "use strict";
-  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"AUTO & LARGE-ANGLE AIM FLOW",summary:"AUTO 이동을 자연스럽게 표시하고 큰 각도 마우스 에임이 실제 판정 위치를 즉시 따라가도록 개선했습니다.",changes:[
-    {category:"AUTO",text:"AUTO 판정은 즉시 PERFECT를 유지하면서 화면의 에임 팔만 다음 노트까지 최단 원형 경로로 이동합니다."},
-    {category:"PATH",text:"SLIDE·TRACE 진행 중 AUTO 에임이 프레임레이트와 무관한 짧은 시각 응답으로 경로를 따라갑니다."},
-    {category:"MOUSE",text:"SMOOTH는 작은 이동만 부드럽게 유지하고 90도 이상의 큰 에임 점프는 즉시 실제 판정 위치를 표시합니다."},
-    {category:"COMPATIBILITY",text:"판정 시간, 점수, 채보 데이터, 입력 규칙, 설정과 LOCAL .cmix 데이터는 그대로 유지됩니다."}
+  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"UNIFIED SETTINGS & MOBILE LAYOUT V2",summary:"PC 설정을 한 화면으로 통합하고 모바일 ACTION·PULSE 버튼 위치를 직접 조정할 수 있게 했습니다.",changes:[
+    {category:"SETTINGS",text:"플레이·입력·오디오·화면·접근성·고급 설정을 검색 가능한 PC 설정 허브로 통합했습니다."},
+    {category:"MOBILE",text:"ACTION과 PULSE 버튼을 직접 드래그하고 크기·투명도·프리셋을 저장할 수 있습니다."},
+    {category:"MIGRATION",text:"기존 커스텀 SCRATCH 좌표가 있으면 PULSE 위치로 자동 이전해 모바일 배치를 보존합니다."},
+    {category:"COMPATIBILITY",text:"판정, 점수, 기록, 채보와 LOCAL .cmix 라이브러리는 그대로 유지됩니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
   const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];
