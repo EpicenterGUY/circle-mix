@@ -47,7 +47,8 @@ test('Android distribution, native patch, and APK workflow stay wired together',
   const distAudit=read('scripts/audit-android-dist.js');
   const projectAudit=read('scripts/audit-android-project.js');
   const workflow=read('.github/workflows/android-app.yml');
-  for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js','data:audio/'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(distAudit,/data:audio\//,'distribution audit rejects embedded audio');
   for(const needle of ['SCREEN_ORIENTATION_SENSOR_LANDSCAPE','smallestScreenWidthDp >= 600','android:appCategory','targetSdk = 36','FLAG_KEEP_SCREEN_ON','androidBackCallback'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
   assert.match(distAudit,/Android distribution audit passed/);
   assert.match(projectAudit,/Generated Android project audit passed/);
