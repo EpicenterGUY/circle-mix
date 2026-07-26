@@ -4,27 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#061427">
-<title>CIRCLE MIX · ORBIT</title>
+<title>CIRCLE MIX · ORBIT DRAW</title>
 <link rel="stylesheet" href="./orbit.css">
 </head>
 <body>
-<header class="orbitTop"><a href="./index.html" class="orbitBack">← AIM MODE</a><strong>ORBIT MODE</strong><span id="orbitStatus">READY</span></header>
+<header class="orbitTop"><a href="./index.html" class="orbitBack">← AIM MODE</a><strong>ORBIT · DRAW</strong><span id="orbitStatus">READY</span></header>
 <main class="orbitStage">
-  <canvas id="orbitCanvas" tabindex="0" aria-label="Orbit playfield" aria-keyshortcuts="Z X ArrowLeft ArrowRight Shift"></canvas>
+  <canvas id="orbitCanvas" tabindex="0" aria-label="Orbit three-ring picture chart playfield" aria-keyshortcuts="Z X ArrowLeft ArrowRight Shift"></canvas>
   <section class="orbitHud"><div id="orbitScore">0000000</div><div id="orbitCombo">0 COMBO</div><div id="orbitJudge">READY</div></section>
   <section class="orbitHelp">
-    <span><b>Z / X</b> TAP · HOLD · ARC · ROLL</span>
+    <span><b>Z / X</b> DOT · HOLD · RIBBON · STACK · BLOOM · ROLL</span>
     <span><b>← / →</b> FLIP</span>
     <span><b>SHIFT</b> PULSE</span>
   </section>
   <section class="orbitStartCard">
     <h1>ORBIT</h1>
-    <p>판정선은 원을 따라 자동 회전합니다. 노트와 겹치는 순간 키를 입력하세요.</p>
-    <button id="orbitStart" type="button">START DEMO</button>
+    <div class="orbitModeBadges"><span>3 RINGS</span><span>DRAW MODE</span><span>PICTURE CHART</span></div>
+    <p>판정선이 세 개의 링을 동시에 지나갑니다. 처리한 DOT와 RIBBON은 잠시 남아 꽃과 리본 그림을 완성합니다.</p>
+    <button id="orbitStart" type="button">START PICTURE DEMO</button>
     <label class="orbitFile">LOCAL AUDIO<input id="orbitAudioFile" type="file" accept="audio/*"></label>
     <button id="orbitMute" type="button" class="orbitMinor">SOUND ON</button>
   </section>
-  <section id="orbitResult" class="orbitResult" hidden><h2>ORBIT CLEAR</h2><p id="orbitResultText"></p><button id="orbitRetry" type="button">RETRY</button><a href="./index.html">TITLE</a></section>
+  <section id="orbitResult" class="orbitResult" hidden><h2>DRAW COMPLETE</h2><p id="orbitResultText"></p><button id="orbitRetry" type="button">RETRY</button><a href="./index.html">TITLE</a></section>
 </main>
 <audio id="orbitAudio" preload="auto" src="./assets/audio/ghost-rule.mp3"></audio>
 <script src="./src/orbit.js"></script>
