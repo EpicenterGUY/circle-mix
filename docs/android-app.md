@@ -1,6 +1,6 @@
 # CIRCLE MIX Android app
 
-CIRCLE MIX Android v1 reuses the existing HTML/JavaScript game through Tauri 2 and adds a native Android shell for foldable orientation, immersive fullscreen, screen-on behavior, and system back navigation.
+CIRCLE MIX Android v1 reuses the existing HTML/JavaScript game through Tauri 2 and adds a native Android shell for foldable viewport handling, immersive fullscreen, screen-on behavior, and system back navigation.
 
 ## Distribution policy
 
@@ -39,21 +39,24 @@ Install a downloaded APK with ADB:
 adb install -r circle-mix-0.9.41-android-arm64-debug.apk
 ```
 
+A CI debug APK may use a different temporary debug certificate from an APK installed previously. If Android reports a signature conflict, uninstall the previous CIRCLE MIX debug app before installing the replacement.
+
 ## Foldable behavior
 
-The native activity watches Android configuration changes. A wide internal display requests sensor-based landscape when one of these conditions is met:
+The web UI recalculates its visual viewport, safe areas, HUD, and mobile ACTION/PULSE layout after folding, rotation, fullscreen, and system-bar changes.
 
-- `smallestScreenWidthDp >= 600`, or
-- longest side is at least 720 dp and shortest side is at least 480 dp.
+The native activity deliberately leaves screen orientation under Android and the user’s rotation settings. Forcing sensor landscape during activity startup is avoided because large-screen and foldable orientation policy differs by Android version and manufacturer, and a nonessential orientation request must never prevent the game from opening.
 
-A folded phone-sized display returns orientation control to the device. The web UI also recalculates its visual viewport, safe areas, HUD, and mobile ACTION/PULSE layout after folding, rotation, and system-bar changes.
+Both folded phone layouts and expanded inner-screen layouts remain responsive in portrait and landscape.
 
-Android can override requested orientation on some large-screen configurations, so both portrait and landscape layouts remain supported.
+## Crash-safe native startup
+
+Immersive system bars, display-cutout handling, keep-screen-on behavior, WebView options, and Android Back registration are treated as optional enhancements. Each native startup step is isolated and logged with `NATIVE_STARTUP_FAIL_OPEN`; a manufacturer-specific failure in one enhancement must not terminate the activity.
 
 ## Native controls
 
-- System bars are hidden in immersive mode and can temporarily appear with an edge swipe.
-- The display stays awake while CIRCLE MIX is open.
+- System bars are hidden in immersive mode and can temporarily appear with an edge swipe when the device supports it.
+- The display stays awake while CIRCLE MIX is open when the platform accepts the flag.
 - Android Back closes the current layout editor, settings, result, pause, tutorial, or song-select layer before exiting.
 - The app exits only when Back is pressed from the top-level title screen.
 
