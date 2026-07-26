@@ -49,7 +49,6 @@ import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
-import app.tauri.TauriActivity
 import kotlin.math.max
 import kotlin.math.min
 
