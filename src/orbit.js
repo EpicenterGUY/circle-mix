@@ -148,7 +148,7 @@
       if(activeSustain){
         const note=activeSustain;
         if(note.type==='hold'||note.type==='arc'){
-          if(heldActions.size)note.coverage+=dt;
+          if(heldActions.size)note.coverage=Math.max(note.coverage,Math.min(note.duration,Math.max(0,t-note.hitTime)));
           if(t>=note.endTime){
             const ratio=note.duration?note.coverage/note.duration:1;
             if(ratio>=.82)finishNote(note,Math.abs(note.startDelta)<=PERFECT_WINDOW&&ratio>=.94?'PERFECT':'GREAT');else missNote(note,'BREAK');
