@@ -73,7 +73,19 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Build installable ARM64 debug APK
-        run: npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION android build --debug --apk --target aarch64 --ci
+        shell: bash
+        run: |
+          mkdir -p artifacts/android-build
+          set -o pipefail
+          npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION android build --debug --apk --target aarch64 --ci 2>&1 | tee artifacts/android-build/build.log
+      - name: Upload Android build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-diagnostics-${{ github.run_attempt }}
+          path: artifacts/android-build/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify APK identity and SDK level
         shell: bash
         run: |
