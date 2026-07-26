@@ -1,6 +1,6 @@
 # CIRCLE MIX Android app
 
-CIRCLE MIX Android v1 reuses the existing HTML/JavaScript game through Tauri 2 and adds a native Android shell for foldable viewport handling, immersive fullscreen, screen-on behavior, and system back navigation.
+CIRCLE MIX Android v1 reuses the existing HTML/JavaScript game through Tauri 2 and adds a native Android shell for foldable viewport handling, automatic landscape play, immersive fullscreen, screen-on behavior, and system back navigation.
 
 ## Distribution policy
 
@@ -33,25 +33,25 @@ npm run android:build:apk
 
 The GitHub workflow builds an installable ARM64 debug APK and publishes it as the `circle-mix-android-arm64-debug` workflow artifact. A debug APK is intended for direct testing and sideloading; it is not the final Google Play release package.
 
-Install the 0.9.42 launch hotfix APK with ADB:
+Install the 0.9.43 landscape hotfix APK with ADB:
 
 ```bash
-adb install -r circle-mix-0.9.42-android-arm64-debug.apk
+adb install -r circle-mix-0.9.43-android-arm64-debug.apk
 ```
 
 A CI debug APK may use a different temporary debug certificate from an APK installed previously. If Android reports a signature conflict, uninstall the previous CIRCLE MIX debug app before installing the replacement.
 
-## Foldable behavior
+## Foldable and orientation behavior
+
+The activity manifest requests `sensorLandscape`, so CIRCLE MIX automatically enters either landscape direction on both the folded outer display and the expanded inner display. Android can choose the landscape side that matches the device sensor.
+
+The app remains categorized as a game through `android:appCategory="game"`. This preserves the platform game exception for orientation restrictions on Android 16 large screens while the web UI still adapts to the actual available window.
 
 The web UI recalculates its visual viewport, safe areas, HUD, and mobile ACTION/PULSE layout after folding, rotation, fullscreen, and system-bar changes.
 
-The native activity deliberately leaves screen orientation under Android and the user’s rotation settings. Forcing sensor landscape during activity startup is avoided because large-screen and foldable orientation policy differs by Android version and manufacturer, and a nonessential orientation request must never prevent the game from opening.
-
-Both folded phone layouts and expanded inner-screen layouts remain responsive in portrait and landscape.
-
 ## Crash-safe native startup
 
-Immersive system bars, display-cutout handling, keep-screen-on behavior, WebView options, and Android Back registration are treated as optional enhancements. Each native startup step is isolated and logged with `NATIVE_STARTUP_FAIL_OPEN`; a manufacturer-specific failure in one enhancement must not terminate the activity.
+The app does not call `requestedOrientation` from the activity startup path. Immersive system bars, display-cutout handling, keep-screen-on behavior, WebView options, and Android Back registration are treated as optional enhancements. Each native startup step is isolated and logged with `NATIVE_STARTUP_FAIL_OPEN`; a manufacturer-specific failure in one enhancement must not terminate the activity.
 
 ## Native controls
 
