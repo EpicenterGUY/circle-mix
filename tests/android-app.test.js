@@ -51,6 +51,7 @@ test('Android distribution, native patch, icon generation, and APK workflow stay
   for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(distAudit,/data:audio\//,'distribution audit rejects embedded audio');
   for(const needle of ['SCREEN_ORIENTATION_SENSOR_LANDSCAPE','smallestScreenWidthDp >= 600','android:appCategory','FLAG_KEEP_SCREEN_ON','androidBackCallback'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
+  assert.doesNotMatch(patch,/import app\.tauri\.TauriActivity/);
   assert.match(patch,/setGradleSdk\(gradle,'compileSdk',36\)/);
   assert.match(patch,/setGradleSdk\(gradle,'minSdk',24\)/);
   assert.match(patch,/setGradleSdk\(gradle,'targetSdk',36\)/);
