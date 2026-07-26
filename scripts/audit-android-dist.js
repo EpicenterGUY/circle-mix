@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const root=path.resolve(__dirname,'..');
+const out=path.join(root,'android-dist');
+if(!fs.existsSync(path.join(out,'index.html')))throw new Error('android-dist/index.html is missing');
+const files=[];(function walk(directory){for(const entry of fs.readdirSync(directory,{withFileTypes:true})){const full=path.join(directory,entry.name);entry.isDirectory()?walk(full):files.push(full);}})(out);
+const relative=files.map(file=>path.relative(out,file).replaceAll(path.sep,'/'));
+const forbiddenFile=/\.(?:mp3|ogg|wav|flac|m4a|cmix|osz|osu|map)$/i;
+if(relative.some(file=>forbiddenFile.test(file)||/(^|\/)(assets|charts)\//.test(file)||/service-worker|manifest\.webmanifest/.test(file)))throw new Error('Android distribution contains bundled media, chart data, or PWA files');
+for(const file of ['src/android-platform.js','src/android-release.js','src/mobile-layout-v2.js','mobile-layout-v2.css','src/pc-settings.js','pc-settings.css'])if(!relative.includes(file))throw new Error(`Android distribution is missing ${file}`);
+for(const file of ['src/desktop-updater.js','src/desktop-release.js'])if(relative.includes(file))throw new Error(`Android distribution contains desktop-only file ${file}`);
+const index=fs.readFileSync(path.join(out,'index.html'),'utf8');
+if(!index.includes('./src/android-release.js')||!index.includes('./src/android-platform.js'))throw new Error('Android index does not load native shell assets');
+if(index.includes('desktop-updater.js')||index.includes('desktop-release.js')||index.includes('data:audio/'))throw new Error('Android index contains desktop updater or embedded audio');
+const config=fs.readFileSync(path.join(out,'src/build-config.js'),'utf8');
+for(const needle of ["target:'android'",'includeBundledSongs:false','enableServiceWorker:false','nativeAndroid:true'])if(!config.includes(needle))throw new Error(`Android build config is missing ${needle}`);
+const platform=fs.readFileSync(path.join(out,'src/android-platform.js'),'utf8');
+for(const needle of ['androidBackCallback','foldExpanded','circlemix:viewportchange','ANDROID · READY'])if(!platform.includes(needle))throw new Error(`Android platform bridge is missing ${needle}`);
+const game=fs.readFileSync(path.join(out,'src/game.js'),'utf8');
+if(!game.includes('function checkScratch'))throw new Error('Android app lost legacy SCRATCH chart playback compatibility');
+console.log(`Android distribution audit passed: ${files.length} files.`);
