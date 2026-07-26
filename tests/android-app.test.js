@@ -8,11 +8,12 @@ const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 
 test('Android platform configuration uses a fullscreen local-library shell',()=>{
   const config=JSON.parse(read('src-tauri/tauri.android.conf.json'));
+  assert.equal(config.version,'0.9.42');
   assert.equal(config.build.frontendDist,'../android-dist');
   assert.equal(config.app.windows[0].fullscreen,true);
   assert.equal(config.app.windows[0].decorations,false);
   assert.equal(config.bundle.android.minSdkVersion,24);
-  assert.equal(config.bundle.android.versionCode,9041);
+  assert.equal(config.bundle.android.versionCode,9042);
 });
 
 test('mobile build gates the Windows updater while retaining a Tauri mobile entrypoint',()=>{
@@ -62,6 +63,8 @@ test('Android distribution, native patch, icon generation, and APK workflow stay
   const projectAudit=read('scripts/audit-android-project.js');
   const workflow=read('.github/workflows/android-app.yml');
   for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(prepare,/ANDROID_VERSION='0\.9\.42'/);
+  assert.match(prepare,/ANDROID LAUNCH HOTFIX/);
   assert.match(distAudit,/data:audio\//,'distribution audit rejects embedded audio');
   for(const needle of ['android:appCategory','FLAG_KEEP_SCREEN_ON','androidBackCallback','NATIVE_STARTUP_FAIL_OPEN'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
   assert.doesNotMatch(patch,/import app\.tauri\.TauriActivity/);
@@ -78,6 +81,7 @@ test('Android distribution, native patch, icon generation, and APK workflow stay
   assert.match(workflow,/test -f src-tauri\/icons\/icon\.png/);
   assert.match(workflow,/@tauri-apps\/cli@\$TAURI_CLI_VERSION android init --ci --skip-targets-install/);
   assert.match(workflow,/@tauri-apps\/cli@\$TAURI_CLI_VERSION android build --debug --apk --target aarch64 --ci/);
+  assert.match(workflow,/circle-mix-0\.9\.42-android-arm64-debug\.apk/);
   assert.match(workflow,/circle-mix-android-arm64-debug/);
   assert.doesNotMatch(workflow,/KEYSTORE_PASSWORD|SIGNING_PRIVATE_KEY|base64.*keystore/i);
 });
