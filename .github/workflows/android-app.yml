@@ -59,9 +59,20 @@ jobs:
       - name: Initialize generated Android project
         run: cargo tauri android init --ci --skip-targets-install
       - name: Apply and audit CIRCLE MIX Android patches
+        shell: bash
         run: |
-          npm run android:patch
-          npm run android:audit
+          mkdir -p artifacts/android-patch
+          set -o pipefail
+          npm run android:patch 2>&1 | tee artifacts/android-patch/patch.log
+          npm run android:audit 2>&1 | tee artifacts/android-patch/audit.log
+      - name: Upload Android patch diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-patch-diagnostics-${{ github.run_attempt }}
+          path: artifacts/android-patch/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Build installable ARM64 debug APK
         run: cargo tauri android build --debug --apk --target aarch64 --ci
       - name: Verify APK identity and SDK level
