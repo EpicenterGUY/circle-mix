@@ -21,10 +21,12 @@ function setAttribute(tag,name,value){
   if(expression.test(tag))return tag.replace(expression,` ${name}="${value}"`);
   return tag.replace(/\s*\/$/,` ${name}="${value}" /`).replace(/\s*>$/,` ${name}="${value}">`);
 }
-function replaceOrThrow(source,expression,replacement,label){
-  const next=source.replace(expression,replacement);
-  if(next===source)throw new Error(`Unable to ${label}.`);
-  return next;
+function setGradleSdk(source,name,value){
+  const expression=new RegExp(`${name}\\s*=\\s*\\d+`);
+  const current=source.match(expression)?.[0];
+  if(!current)throw new Error(`Unable to locate ${name} in generated Gradle configuration.`);
+  if(new RegExp(`=\\s*${value}$`).test(current))return source;
+  return source.replace(expression,`${name} = ${value}`);
 }
 
 if(!fs.existsSync(androidRoot))throw new Error('Run `cargo tauri android init --ci` before patching the Android project.');
@@ -149,9 +151,9 @@ if(!manifest.includes('android:appCategory="game"')||!manifest.includes('android
 fs.writeFileSync(manifestPath,manifest);
 
 let gradle=fs.readFileSync(gradlePath,'utf8');
-gradle=replaceOrThrow(gradle,/compileSdk\s*=\s*\d+/,'compileSdk = 36','set compileSdk 36');
-gradle=replaceOrThrow(gradle,/minSdk\s*=\s*\d+/,'minSdk = 24','set minSdk 24');
-gradle=replaceOrThrow(gradle,/targetSdk\s*=\s*\d+/,'targetSdk = 36','set targetSdk 36');
+gradle=setGradleSdk(gradle,'compileSdk',36);
+gradle=setGradleSdk(gradle,'minSdk',24);
+gradle=setGradleSdk(gradle,'targetSdk',36);
 fs.writeFileSync(gradlePath,gradle);
 
 console.log(`Patched Android project: ${path.relative(root,activityPath)}, ${path.relative(root,manifestPath)}, ${path.relative(root,gradlePath)}`);
