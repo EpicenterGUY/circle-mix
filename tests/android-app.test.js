@@ -52,8 +52,8 @@ test('Android distribution, native patch, and APK workflow stay wired together',
   for(const needle of ['SCREEN_ORIENTATION_SENSOR_LANDSCAPE','smallestScreenWidthDp >= 600','android:appCategory','targetSdk = 36','FLAG_KEEP_SCREEN_ON','androidBackCallback'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
   assert.match(distAudit,/Android distribution audit passed/);
   assert.match(projectAudit,/Generated Android project audit passed/);
-  assert.match(workflow,/cargo tauri android init --ci --skip-targets-install/);
-  assert.match(workflow,/cargo tauri android build --debug --apk --target aarch64 --ci/);
+  assert.match(workflow,/@tauri-apps\/cli@\$TAURI_CLI_VERSION android init --ci --skip-targets-install/);
+  assert.match(workflow,/@tauri-apps\/cli@\$TAURI_CLI_VERSION android build --debug --apk --target aarch64 --ci/);
   assert.match(workflow,/circle-mix-android-arm64-debug/);
   assert.doesNotMatch(workflow,/KEYSTORE_PASSWORD|SIGNING_PRIVATE_KEY|base64.*keystore/i);
 });
