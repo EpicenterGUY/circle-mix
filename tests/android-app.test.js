@@ -41,6 +41,19 @@ test('fold viewport classification and Android back policy are deterministic',()
   assert.equal(backClicks,1);
 });
 
+test('Android native startup fails open and leaves orientation to the device',()=>{
+  const patch=read('scripts/patch-android-project.js');
+  const audit=read('scripts/audit-android-project.js');
+  for(const needle of ['NATIVE_STARTUP_FAIL_OPEN','nativeStartupStep','window.decorView.post','Log.e("CircleMix"','FLAG_KEEP_SCREEN_ON','BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE','LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES']){
+    assert.ok(patch.includes(needle),`native patch contains ${needle}`);
+  }
+  assert.doesNotMatch(patch,/SCREEN_ORIENTATION_SENSOR_LANDSCAPE/);
+  assert.doesNotMatch(patch,/requestedOrientation\s*=/);
+  assert.match(patch,/android:screenOrientation','unspecified'/);
+  assert.match(audit,/must not force startup orientation/);
+  assert.match(audit,/NATIVE_STARTUP_FAIL_OPEN/);
+});
+
 test('Android distribution, native patch, icon generation, and APK workflow stay wired together',()=>{
   const packageJson=JSON.parse(read('package.json'));
   const prepare=read('scripts/prepare-android.js');
@@ -50,7 +63,7 @@ test('Android distribution, native patch, icon generation, and APK workflow stay
   const workflow=read('.github/workflows/android-app.yml');
   for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(distAudit,/data:audio\//,'distribution audit rejects embedded audio');
-  for(const needle of ['SCREEN_ORIENTATION_SENSOR_LANDSCAPE','smallestScreenWidthDp >= 600','android:appCategory','FLAG_KEEP_SCREEN_ON','androidBackCallback'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
+  for(const needle of ['android:appCategory','FLAG_KEEP_SCREEN_ON','androidBackCallback','NATIVE_STARTUP_FAIL_OPEN'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
   assert.doesNotMatch(patch,/import app\.tauri\.TauriActivity/);
   assert.match(patch,/setGradleSdk\(gradle,'compileSdk',36\)/);
   assert.match(patch,/setGradleSdk\(gradle,'minSdk',24\)/);
