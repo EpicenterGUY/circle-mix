@@ -121,14 +121,13 @@
 
   function mount(doc,win){
     if(!doc||!win||doc.getElementById('pcSettingsHub'))return win.CircleMixPcSettingsTestApi||null;
-    if(!isPcEnvironment(win))return null;
-
     const oldOrbit=doc.getElementById('safeOrbit');
     if(oldOrbit){
       oldOrbit.textContent='ORBIT · EXPERIMENTAL';
       oldOrbit.classList.add('experimentalModeButton');
       oldOrbit.title='실험 중인 비공식 모드입니다. 기록과 밸런스는 AIM 모드와 분리됩니다.';
     }
+    if(!isPcEnvironment(win))return null;
 
     const state={...loadUiState(win),open:false,origin:'title',query:'',changed:0,lastOpenAt:0,returnFocus:null};
     const baseline=new Map();
@@ -254,7 +253,7 @@
         if(pressed!==null&&pressed!==undefined)card._value.setAttribute('aria-pressed',pressed);
         else card._value.removeAttribute('aria-pressed');
       }
-      if(setting.id==='visualResponse')card.hidden=!!original?.hidden;
+      if(setting.id==='visualResponse')card.dataset.conditionHidden=String(!!original?.hidden);
       if(setting.id==='lockedSensitivity'){
         const aimText=normalizeText(readNodeValue(doc,'pauseSetPcAim'));
         card.classList.toggle('isContextual',!aimText.includes('locked')&&!aimText.includes('잠금'));
@@ -298,7 +297,8 @@
         let visible=0;
         const active=!query&&groupId===state.group;
         for(const card of section.querySelectorAll('.pcSettingCard')){
-          const match=!query||card.dataset.search.includes(query);
+          const conditionHidden=card.dataset.conditionHidden==='true';
+          const match=!conditionHidden&&(!query||card.dataset.search.includes(query));
           card.hidden=!match;
           if(match)visible++;
         }
