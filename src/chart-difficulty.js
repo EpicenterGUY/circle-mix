@@ -1,13 +1,13 @@
 /* Shared, data-only LOCAL chart difficulty estimator. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;if(root)root.CircleMixChartDifficulty=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){'use strict';
-  const VERSION='local-v3',TAU=Math.PI*2,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const VERSION='local-v4',MAX_STARS=15,TAU=Math.PI*2,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const angle=n=>((Number(n?.angle??((n?.directionIndex??n?.lane??0)*45))%360)+360)%360;
   const signedDistance=(a,b)=>((b-a+540)%360)-180;
   const distance=(a,b)=>Math.abs(signedDistance(a,b));
   const family=n=>{const t=String(n?.type||'cut').toLowerCase();return t==='fx'||t==='hold'?'hold':t.startsWith('slide')?'slide':t.startsWith('trace')?'trace':t.startsWith('swing')?'swing':t.startsWith('scratch')?'scratch':t==='pulse'?'pulse':'cut';};
   const duration=(n,spb)=>Math.max(.08,Number(n.duration)||Number(n.durationBeat)*spb||spb*.5);
   const sign=n=>String(n?.direction||n?.type||'').toUpperCase().includes('CCW')?-1:1;
-  function degrees(value,preferRadians=false){const v=Number(value);if(!Number.isFinite(v))return null;return (preferRadians||Math.abs(v)>0&&Math.abs(v)<=TAU*2.1)?v*180/Math.PI:v;}
+  function degrees(value,asRadians=false){const v=Number(value);if(!Number.isFinite(v))return null;return asRadians?v*180/Math.PI:v;}
   function signedSweep(n){
     for(const key of ['signedSweepAngle','sweepAngle']) if(Number.isFinite(Number(n?.[key]))) return degrees(n[key]);
     for(const key of ['slideAmount','amount']) if(Number.isFinite(Number(n?.[key]))&&Number(n[key])!==0) return degrees(n[key],true);
@@ -15,26 +15,33 @@
     if(n?.endAngle===undefined)return 0;
     return sign(n)*distance(angle(n),Number(n.endAngle));
   }
-  const percentile=(values,p)=>{if(!values.length)return 0;const v=values.slice().sort((x,y)=>x-y),i=(v.length-1)*p,l=Math.floor(i),h=Math.ceil(i);return v[l]+(v[h]-v[l])*(i-l);};
-  function rotationTransitions(notes){const out=[];for(let i=1;i<notes.length;i++){const gap=notes[i].time-notes[i-1].time;if(gap<.03)continue;const delta=signedDistance(angle(notes[i-1]),angle(notes[i]));if(Math.abs(delta)<8||Math.abs(delta)>=179.999)continue;out.push({time:notes[i].time,delta,travel:Math.abs(delta)});}return out;}
-  function rotationWindowStrains(transitions,seconds){const out=[];let end=0,signed=0,total=0;for(let start=0;start<transitions.length;start++){if(end<start){end=start;signed=0;total=0;}const limit=transitions[start].time+seconds;while(end<transitions.length&&transitions[end].time<limit){signed+=transitions[end].delta;total+=transitions[end].travel;end++;}const continuity=total?Math.abs(signed)/total:0,turns=total/360;out.push(clamp(turns*(.12+.88*Math.pow(continuity,1.7)),0,seconds===2?3.5:8));signed-=transitions[start].delta;total-=transitions[start].travel;}return out;}
+  const upperMean=(values,ratio=.82)=>{if(!values.length)return 0;let max=-Infinity;for(const value of values)if(value>max)max=value;const floor=max*ratio,upper=values.filter(value=>value>=floor),mean=upper.reduce((sum,value)=>sum+value,0)/upper.length;return max*.62+mean*.38;};
+  function localRates(items,seconds){if(!items.length)return [];const sorted=items.slice().sort((a,b)=>a.time-b.time),out=[];let end=0,sum=0;for(let start=0;start<sorted.length;start++){if(end<start){end=start;sum=0;}const limit=sorted[start].time+seconds;while(end<sorted.length&&sorted[end].time<limit){sum+=sorted[end].value;end++;}out.push(sum/seconds);sum-=sorted[start].value;}return out;}
+  function localPeak(items,seconds,ratio=.82){return upperMean(localRates(items,seconds),ratio);}
+  function rotationTransitions(notes){const out=[];for(let i=1;i<notes.length;i++){const gap=notes[i].time-notes[i-1].time;if(gap<.03||gap>.75)continue;const delta=signedDistance(angle(notes[i-1]),angle(notes[i]));if(Math.abs(delta)<8||Math.abs(delta)>=179.999)continue;out.push({time:notes[i].time,delta,travel:Math.abs(delta)});}return out;}
+  function rotationWindowStrains(transitions,seconds){const out=[];let end=0,signed=0,total=0;for(let start=0;start<transitions.length;start++){if(end<start){end=start;signed=0;total=0;}const limit=transitions[start].time+seconds;while(end<transitions.length&&transitions[end].time<limit){signed+=transitions[end].delta;total+=transitions[end].travel;end++;}const continuity=total?Math.abs(signed)/total:0,turns=total/360;out.push(clamp(turns*(.12+.88*Math.pow(continuity,1.7)),0,seconds===2?5.5:12));signed-=transitions[start].delta;total-=transitions[start].travel;}return out;}
   function calculate(chart,options={}){
     const bpm=Number(chart?.bpm)||Number(options.bpm)||120,spb=60/bpm;
     const notes=(Array.isArray(chart?.notes)?chart.notes:[]).map(n=>({...n,time:(Number(n.beat)||0)*spb})).sort((a,b)=>a.time-b.time);
-    const emptyComponents={density:0,speed:0,aim:0,rotation:0,rotationChain:0,rotationChain2:0,rotationChain5:0,overlap:0,pulseOverlap:0,complexity:0};
+    const emptyComponents={density:0,speed:0,sustain:0,aim:0,rotation:0,rotationChain:0,rotationChain2:0,rotationChain5:0,overlap:0,pulseOverlap:0,complexity:0};
     if(!notes.length)return {stars:1,raw:0,version:VERSION,components:emptyComponents};
-    const base={cut:1,hold:1.18,slide:1.32,trace:.78,swing:1.36,scratch:1.42,pulse:1.12};let raw=0,aim=0,rotation=0,overlap=0,pulseOverlap=0,complexity=0,previous=null,previousAimed=null,burdens=[];
+    const base={cut:1,hold:1.18,slide:1.32,trace:.78,swing:1.36,scratch:1.42,pulse:1.12};let raw=0,previous=null,previousAimed=null;
+    const burdens=[],aimEvents=[],rotationEvents=[],overlapEvents=[],pulseEvents=[],complexityEvents=[];
     for(const note of notes){const type=family(note),seconds=duration(note,spb);let burden=base[type]||1;
-      if(previous){const gap=Math.max(.045,note.time-previous.time),transition=type!==family(previous)?clamp((.6-gap)/.6,0,1)*.34:0;complexity+=transition;burden+=clamp((.52-gap)/.52,0,1)*.58+transition;} if(type!=='pulse'&&previousAimed){const gap=Math.max(.045,note.time-previousAimed.time),move=distance(angle(note),angle(previousAimed))/180,velocity=move/Math.max(.12,gap);aim+=clamp(velocity,0,3)*.34;burden+=clamp(velocity,0,2.5)*.24;}
-      if(['slide','trace','scratch'].includes(type)){const travel=Math.abs(signedSweep(note)),rot=clamp(travel/360*(.23+.34/Math.sqrt(Math.max(.12,seconds))),0,1.15);rotation+=rot;burden+=rot;}
-      if(['hold','slide','trace'].includes(type)){const count=notes.filter(other=>other!==note&&other.time>note.time+.025&&other.time<note.time+seconds-.025).length,value=clamp(count*.24,0,.9);overlap+=value;burden+=value;} if(type==='pulse'){const simultaneous=notes.some(other=>other!==note&&family(other)!=='pulse'&&Math.abs(other.time-note.time)<.001);if(simultaneous){pulseOverlap+=.42;burden+=.42;}}
+      if(previous){const gap=Math.max(.045,note.time-previous.time),transition=type!==family(previous)?clamp((.6-gap)/.6,0,1)*.34:0;complexityEvents.push({time:note.time,value:transition});burden+=clamp((.52-gap)/.52,0,1)*.58+transition;}
+      if(type!=='pulse'&&previousAimed){const gap=Math.max(.045,note.time-previousAimed.time),move=distance(angle(note),angle(previousAimed))/180,velocity=move/Math.max(.12,gap),value=clamp(velocity,0,3)*.34;aimEvents.push({time:note.time,value});burden+=clamp(velocity,0,2.5)*.24;}
+      if(['slide','trace','scratch'].includes(type)){const travel=Math.abs(signedSweep(note)),value=clamp(travel/360*(.23+.34/Math.sqrt(Math.max(.12,seconds))),0,1.8);rotationEvents.push({time:note.time,value});burden+=value;}
+      if(['hold','slide','trace'].includes(type)){const count=notes.filter(other=>other!==note&&other.time>note.time+.025&&other.time<note.time+seconds-.025).length,value=clamp(count*.24,0,1.2);overlapEvents.push({time:note.time,value});burden+=value;}
+      if(type==='pulse'){const simultaneous=notes.some(other=>other!==note&&family(other)!=='pulse'&&Math.abs(other.time-note.time)<.001);if(simultaneous){pulseEvents.push({time:note.time,value:.42});burden+=.42;}}
       raw+=burden;burdens.push({time:note.time,value:burden});previous=note;if(type!=='pulse')previousAimed=note;
     }
-    const songSeconds=Math.max(1,notes.at(-1).time-notes[0].time),rate=raw/songSeconds,windows=seconds=>notes.map(note=>burdens.filter(item=>item.time>=note.time&&item.time<note.time+seconds).reduce((sum,item)=>sum+item.value,0)/seconds),peak2=percentile(windows(2),.94),peak5=percentile(windows(5),.90),sustained=Math.max(0,peak5-rate);
-    const transitions=rotationTransitions(notes),chain2=percentile(rotationWindowStrains(transitions,2),.90),chain5=percentile(rotationWindowStrains(transitions,5),.90),rotationChain=clamp(.65*Math.pow(chain2,1.15)+1.05*Math.pow(chain5,1.22),0,3.6);
-    const components={density:rate,speed:peak2,aim:aim/songSeconds,rotation:rotation/songSeconds,rotationChain,rotationChain2:chain2,rotationChain5:chain5,overlap:overlap/songSeconds,pulseOverlap:pulseOverlap/songSeconds,complexity:complexity/songSeconds};
-    const normalized=1+Math.sqrt(rate)*.18+Math.sqrt(peak2)*.28+Math.sqrt(peak5)*.22+Math.sqrt(sustained)*.14+components.aim*.06+components.rotation*.22+rotationChain+components.overlap*.16+components.pulseOverlap*.24+components.complexity*.12;
-    return {stars:Math.round(clamp(normalized,1,10)*10)/10,raw:Math.round(raw*100)/100,version:VERSION,components};
+    const peak2=localPeak(burdens,2,.82),peak5=localPeak(burdens,5,.82),peak8=localPeak(burdens,8,.82),sustain=Math.max(0,peak5*.72+peak8*.28-peak2*.42);
+    const transitions=rotationTransitions(notes),chain2=upperMean(rotationWindowStrains(transitions,2),.82),chain5=upperMean(rotationWindowStrains(transitions,5),.82),rotationChain=clamp(.72*Math.pow(chain2,1.18)+1.10*Math.pow(chain5,1.24),0,6.5);
+    const components={density:peak5,speed:peak2,sustain,aim:localPeak(aimEvents,2,.82),rotation:localPeak(rotationEvents,2,.82),rotationChain,rotationChain2:chain2,rotationChain5:chain5,overlap:localPeak(overlapEvents,2,.82),pulseOverlap:localPeak(pulseEvents,2,.82),complexity:localPeak(complexityEvents,2,.82)};
+    const burst=Math.max(0,components.speed-8)*.035;
+    const core=1+Math.sqrt(components.density)*.32+Math.sqrt(components.speed)*.32+Math.sqrt(sustain)*.12+components.aim*.08+components.rotation*.24+rotationChain*.90+components.overlap*.16+components.pulseOverlap*.24+components.complexity*.12+burst;
+    const normalized=core<=8?core:8+Math.pow(core-8,1.20)*1.12;
+    return {stars:Math.round(clamp(normalized,1,MAX_STARS)*10)/10,raw:Math.round(raw*100)/100,version:VERSION,components};
   }
-  return Object.freeze({VERSION,calculate,signedSweep,family,rotationTransitions,rotationWindowStrains});
+  return Object.freeze({VERSION,MAX_STARS,calculate,signedSweep,family,localRates,localPeak,upperMean,rotationTransitions,rotationWindowStrains});
 });
