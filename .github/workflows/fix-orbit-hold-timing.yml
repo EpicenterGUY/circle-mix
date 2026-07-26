@@ -1,0 +1,50 @@
+name: Fix ORBIT hold timing
+
+on:
+  push:
+    branches:
+      - agent/orbit-mode-mvp
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Use elapsed time for sustain coverage
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          orbit=Path('src/orbit.js')
+          text=orbit.read_text()
+          old="if(heldActions.size)note.coverage+=dt;"
+          new="if(heldActions.size)note.coverage=Math.max(note.coverage,Math.min(note.duration,Math.max(0,t-note.hitTime)));"
+          if old in text:text=text.replace(old,new,1)
+          elif new not in text:raise SystemExit('missing sustain coverage marker')
+          orbit.write_text(text)
+          test=Path('tests/orbit-mode.test.js')
+          text=test.read_text()
+          marker="const game=fs.readFileSync('src/game.js','utf8');\n"
+          insert="const orbitSource=fs.readFileSync('src/orbit.js','utf8');\nassert.doesNotMatch(orbitSource,/coverage\\+=dt/,'sustain coverage must not depend on frame rate');\nassert.match(orbitSource,/Math\\.min\\(note\\.duration,Math\\.max\\(0,t-note\\.hitTime\\)\\)/,'sustain coverage uses elapsed gameplay time');\n"+marker
+          if 'sustain coverage must not depend on frame rate' not in text:
+              if marker not in text:raise SystemExit('missing orbit test marker')
+              text=text.replace(marker,insert,1)
+          test.write_text(text)
+          PY
+      - name: Validate timing fix
+        run: npm test
+      - name: Commit timing fix
+        shell: bash
+        run: |
+          rm -f .github/workflows/fix-orbit-hold-timing.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: make ORBIT sustain timing frame independent"
+          git push
