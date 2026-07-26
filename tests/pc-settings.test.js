@@ -32,11 +32,13 @@ test('desktop environment detection is forceable and rejects compact coarse layo
 test('loader and distributions include unified settings assets',()=>{
   const build=fs.readFileSync('src/build-config.js','utf8');
   const sw=fs.readFileSync('service-worker.js','utf8');
-  const desktop=fs.readFileSync('scripts/prepare-desktop.js','utf8');
+  const desktopPass=fs.readFileSync('scripts/pc-settings-desktop-pass.js','utf8');
+  const pkg=fs.readFileSync('package.json','utf8');
   assert.match(build,/pc-settings\.css/);
   assert.match(build,/src\/pc-settings\.js/);
   for(const asset of ['./pc-settings.css','./src/pc-settings.js'])assert.ok(sw.includes(asset),`service worker caches ${asset}`);
-  assert.match(desktop,/pc-settings\.css/);
-  assert.match(desktop,/src\/pc-settings\.js/);
-  assert.match(desktop,/CircleMixBuildConfig=.*target:'desktop'/);
+  assert.match(desktopPass,/pc-settings\.css/);
+  assert.match(desktopPass,/src\/pc-settings\.js/);
+  assert.match(desktopPass,/target:'desktop'/);
+  assert.match(pkg,/pc-settings-desktop-pass\.js/);
 });
