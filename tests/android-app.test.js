@@ -41,7 +41,8 @@ test('fold viewport classification and Android back policy are deterministic',()
   assert.equal(backClicks,1);
 });
 
-test('Android distribution, native patch, and APK workflow stay wired together',()=>{
+test('Android distribution, native patch, icon generation, and APK workflow stay wired together',()=>{
+  const packageJson=JSON.parse(read('package.json'));
   const prepare=read('scripts/prepare-android.js');
   const patch=read('scripts/patch-android-project.js');
   const distAudit=read('scripts/audit-android-dist.js');
@@ -55,6 +56,11 @@ test('Android distribution, native patch, and APK workflow stay wired together',
   assert.match(patch,/setGradleSdk\(gradle,'targetSdk',36\)/);
   assert.match(distAudit,/Android distribution audit passed/);
   assert.match(projectAudit,/Generated Android project audit passed/);
+  assert.match(packageJson.scripts['android:icons'],/tauri icon src-tauri\/app-icon\.svg -o src-tauri\/icons/);
+  assert.match(packageJson.scripts['android:init'],/^npm run android:icons/);
+  assert.match(packageJson.scripts['android:build:apk'],/^npm run android:icons/);
+  assert.match(workflow,/@tauri-apps\/cli@\$TAURI_CLI_VERSION icon src-tauri\/app-icon\.svg -o src-tauri\/icons/);
+  assert.match(workflow,/test -f src-tauri\/icons\/icon\.png/);
   assert.match(workflow,/@tauri-apps\/cli@\$TAURI_CLI_VERSION android init --ci --skip-targets-install/);
   assert.match(workflow,/@tauri-apps\/cli@\$TAURI_CLI_VERSION android build --debug --apk --target aarch64 --ci/);
   assert.match(workflow,/circle-mix-android-arm64-debug/);
