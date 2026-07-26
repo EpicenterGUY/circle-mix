@@ -29,11 +29,16 @@ test('custom coordinates clamp inside the mobile safe area',()=>{
   assert.ok(result.pulsePx.x<=720&&result.pulsePx.y<=320);
 });
 
-test('mobile environment can be forced and assets are wired into distributions',()=>{
+test('mobile environment can be forced and assets are wired into all distributions',()=>{
   const make=search=>({location:{search},innerWidth:1200,innerHeight:800,navigator:{maxTouchPoints:0},matchMedia:()=>({matches:false})});
   assert.equal(M.isMobileEnvironment(make('?mobileLayoutV2=1')),true);
   assert.equal(M.isMobileEnvironment(make('?mobileLayoutV2=0')),false);
   const build=fs.readFileSync('src/build-config.js','utf8');
-  assert.match(build,/mobile-layout-v2\.css/);
-  assert.match(build,/src\/mobile-layout-v2\.js/);
+  const serviceWorker=fs.readFileSync('service-worker.js','utf8');
+  const desktopPass=fs.readFileSync('scripts/pc-settings-desktop-pass.js','utf8');
+  for(const asset of ['mobile-layout-v2.css','src/mobile-layout-v2.js']){
+    assert.ok(build.includes(asset),`bootstrap loads ${asset}`);
+    assert.ok(serviceWorker.includes(asset),`offline cache includes ${asset}`);
+    assert.ok(desktopPass.includes(asset),`desktop pass includes ${asset}`);
+  }
 });
