@@ -51,6 +51,13 @@ jobs:
           echo "Resolved Android NDK: $NDK_DIR"
       - name: Install dependencies
         run: npm ci
+      - name: Generate Tauri app icons
+        run: npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION icon src-tauri/app-icon.svg -o src-tauri/icons
+      - name: Verify generated Android icon inputs
+        shell: bash
+        run: |
+          test -f src-tauri/icons/icon.png
+          test -f src-tauri/icons/32x32.png
       - name: Run repository and Android shell tests
         run: npm test
       - name: Prepare Android web distribution
