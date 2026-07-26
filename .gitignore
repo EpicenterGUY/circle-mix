@@ -4,5 +4,8 @@ out/cmix/
 node_modules/
 
 desktop-dist/
+android-dist/
 src-tauri/target/
 src-tauri/icons/
+src-tauri/gen/android/
+.gradle/
