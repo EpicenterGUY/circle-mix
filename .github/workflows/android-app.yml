@@ -1,0 +1,111 @@
+name: Android app verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-arm64-apk:
+    runs-on: ubuntu-24.04
+    env:
+      NDK_VERSION: 27.2.12479018
+      TAURI_CLI_VERSION: 2.11.4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Install Android SDK and resolve NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          NDK_DIR="${ANDROID_NDK_LATEST_HOME:-}"
+          if [ ! -d "$NDK_DIR" ]; then
+            sdkmanager "ndk;$NDK_VERSION"
+            NDK_DIR="$ANDROID_HOME/ndk/$NDK_VERSION"
+          fi
+          test -d "$NDK_DIR"
+          echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
+          echo "Resolved Android NDK: $NDK_DIR"
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Tauri app icons
+        run: npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION icon src-tauri/app-icon.svg -o src-tauri/icons
+      - name: Verify generated Android icon inputs
+        shell: bash
+        run: |
+          test -f src-tauri/icons/icon.png
+          test -f src-tauri/icons/32x32.png
+      - name: Run repository and Android shell tests
+        run: npm test
+      - name: Prepare Android web distribution
+        run: npm run android:prepare
+      - name: Initialize generated Android project
+        run: npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION android init --ci --skip-targets-install
+      - name: Apply and audit CIRCLE MIX Android patches
+        shell: bash
+        run: |
+          mkdir -p artifacts/android-patch
+          set -o pipefail
+          npm run android:patch 2>&1 | tee artifacts/android-patch/patch.log
+          npm run android:audit 2>&1 | tee artifacts/android-patch/audit.log
+      - name: Upload Android patch diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-patch-diagnostics-${{ github.run_attempt }}
+          path: artifacts/android-patch/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Build installable ARM64 debug APK
+        shell: bash
+        run: |
+          mkdir -p artifacts/android-build
+          set -o pipefail
+          npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION android build --debug --apk --target aarch64 --ci 2>&1 | tee artifacts/android-build/build.log
+      - name: Upload Android build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-diagnostics-${{ github.run_attempt }}
+          path: artifacts/android-build/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Verify APK identity and SDK level
+        shell: bash
+        run: |
+          mkdir -p artifacts/android
+          APK="$(find src-tauri/gen/android -type f -path '*/outputs/apk/*' -name '*.apk' | head -n 1)"
+          test -n "$APK" && test -f "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee artifacts/android/badging.txt
+          grep -q "package: name='com.epicenterguy.circlemix'" artifacts/android/badging.txt
+          grep -q "targetSdkVersion:'36'" artifacts/android/badging.txt
+          cp "$APK" artifacts/android/circle-mix-0.9.41-android-arm64-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: circle-mix-android-arm64-debug
+          path: artifacts/android/
+          if-no-files-found: error
+          retention-days: 14
