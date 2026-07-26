@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       NDK_VERSION: 27.2.12479018
+      TAURI_CLI_VERSION: 2.11.4
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,8 +49,6 @@ jobs:
           echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
           echo "NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
           echo "Resolved Android NDK: $NDK_DIR"
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2.10.1" --locked
       - name: Install dependencies
         run: npm ci
       - name: Run repository and Android shell tests
@@ -57,7 +56,7 @@ jobs:
       - name: Prepare Android web distribution
         run: npm run android:prepare
       - name: Initialize generated Android project
-        run: cargo tauri android init --ci --skip-targets-install
+        run: npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION android init --ci --skip-targets-install
       - name: Apply and audit CIRCLE MIX Android patches
         shell: bash
         run: |
@@ -74,7 +73,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
       - name: Build installable ARM64 debug APK
-        run: cargo tauri android build --debug --apk --target aarch64 --ci
+        run: npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION android build --debug --apk --target aarch64 --ci
       - name: Verify APK identity and SDK level
         shell: bash
         run: |
