@@ -2,22 +2,35 @@
 (function(root){
   const supplied=root.CircleMixBuildConfig || {};
   root.CircleMixBuildConfig=Object.freeze({...supplied,includeBundledSongs:supplied.includeBundledSongs !== false});
-  function loadPcSettingsAssets(){
-    if(typeof document==='undefined'||root.__circleMixPcSettingsAssetsLoaded)return;
-    if(!document.getElementById('quickSettingsBtn')&&!document.getElementById('settingsBtn')&&!document.getElementById('safeOrbit'))return;
-    root.__circleMixPcSettingsAssetsLoaded=true;
-    const revision=encodeURIComponent(String(root.CircleMixVersion?.cacheRevision||root.CircleMixVersion?.version||'pc-settings-v1'));
-    if(!document.querySelector('link[data-circle-mix-pc-settings]')){
-      const link=document.createElement('link');
-      link.rel='stylesheet';link.href=`./pc-settings.css?v=${revision}`;link.dataset.circleMixPcSettings='true';document.head.appendChild(link);
+
+  function appendStyle(href,dataKey){
+    if(document.querySelector(`link[${dataKey}]`))return;
+    const link=document.createElement('link');
+    link.rel='stylesheet';link.href=href;link.setAttribute(dataKey,'true');document.head.appendChild(link);
+  }
+  function appendScript(src,dataKey){
+    if(document.querySelector(`script[${dataKey}]`))return;
+    const script=document.createElement('script');
+    script.src=src;script.setAttribute(dataKey,'true');script.defer=true;(document.body||document.head).appendChild(script);
+  }
+  function loadSettingsAssets(){
+    if(typeof document==='undefined'||root.__circleMixSettingsAssetsLoaded)return;
+    const hasPcSurface=!!(document.getElementById('quickSettingsBtn')||document.getElementById('settingsBtn')||document.getElementById('safeOrbit'));
+    const hasMobileSurface=!!(document.getElementById('mobileActionBtn')&&document.getElementById('mobilePulseBtn'));
+    if(!hasPcSurface&&!hasMobileSurface)return;
+    root.__circleMixSettingsAssetsLoaded=true;
+    const revision=encodeURIComponent(String(root.CircleMixVersion?.cacheRevision||root.CircleMixVersion?.version||'settings-v2'));
+    if(hasPcSurface){
+      appendStyle(`./pc-settings.css?v=${revision}`,'data-circle-mix-pc-settings');
+      appendScript(`./src/pc-settings.js?v=${revision}`,'data-circle-mix-pc-settings');
     }
-    if(!document.querySelector('script[data-circle-mix-pc-settings]')){
-      const script=document.createElement('script');
-      script.src=`./src/pc-settings.js?v=${revision}`;script.dataset.circleMixPcSettings='true';script.defer=true;(document.body||document.head).appendChild(script);
+    if(hasMobileSurface){
+      appendStyle(`./mobile-layout-v2.css?v=${revision}`,'data-circle-mix-mobile-layout-v2');
+      appendScript(`./src/mobile-layout-v2.js?v=${revision}`,'data-circle-mix-mobile-layout-v2');
     }
   }
   if(typeof document!=='undefined'){
-    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadPcSettingsAssets,{once:true});
-    else loadPcSettingsAssets();
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadSettingsAssets,{once:true});
+    else loadSettingsAssets();
   }
 })(typeof globalThis!=="undefined"?globalThis:this);
