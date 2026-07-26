@@ -1,0 +1,75 @@
+name: Android app verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-arm64-apk:
+    runs-on: ubuntu-24.04
+    env:
+      NDK_VERSION: 27.0.12077973
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Install Android SDK and NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;$NDK_VERSION"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.10.1" --locked
+      - name: Install dependencies
+        run: npm ci
+      - name: Run repository and Android shell tests
+        run: npm test
+      - name: Prepare Android web distribution
+        run: npm run android:prepare
+      - name: Initialize generated Android project
+        run: cargo tauri android init --ci --skip-targets-install
+      - name: Apply and audit CIRCLE MIX Android patches
+        run: |
+          npm run android:patch
+          npm run android:audit
+      - name: Build installable ARM64 debug APK
+        run: cargo tauri android build --debug --apk --target aarch64 --ci
+      - name: Verify APK identity and SDK level
+        shell: bash
+        run: |
+          mkdir -p artifacts/android
+          APK="$(find src-tauri/gen/android -type f -path '*/outputs/apk/*' -name '*.apk' | head -n 1)"
+          test -n "$APK" && test -f "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee artifacts/android/badging.txt
+          grep -q "package: name='com.epicenterguy.circlemix'" artifacts/android/badging.txt
+          grep -q "targetSdkVersion:'36'" artifacts/android/badging.txt
+          cp "$APK" artifacts/android/circle-mix-0.9.41-android-arm64-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: circle-mix-android-arm64-debug
+          path: artifacts/android/
+          if-no-files-found: error
+          retention-days: 14
