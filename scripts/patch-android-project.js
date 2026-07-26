@@ -40,92 +40,112 @@ const packageName=originalActivity.match(/^package\s+([^\s]+)/m)?.[1];
 if(!packageName)throw new Error('Unable to resolve the generated Android package name.');
 const activity=`package ${packageName}
 
-import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
-import kotlin.math.max
-import kotlin.math.min
 
 class MainActivity : TauriActivity() {
   private var gameWebView: WebView? = null
 
+  private inline fun nativeStartupStep(name: String, block: () -> Unit) {
+    try {
+      block()
+    } catch (error: Throwable) {
+      Log.e("CircleMix", "NATIVE_STARTUP_FAIL_OPEN:$name", error)
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-    applyImmersiveMode()
-    updateFoldOrientation()
-    onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-      override fun handleOnBackPressed() {
-        val webView = gameWebView
-        if (webView == null) {
-          finish()
-          return
+    nativeStartupStep("keep-screen-on") {
+      window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+    nativeStartupStep("immersive-post") {
+      window.decorView.post { applyImmersiveMode() }
+    }
+    nativeStartupStep("back-dispatcher") {
+      onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+          val webView = gameWebView
+          if (webView == null) {
+            finish()
+            return
+          }
+          nativeStartupStep("back-evaluate") {
+            webView.evaluateJavascript(
+              "(function(){try{return !!(window.androidBackCallback&&window.androidBackCallback());}catch(e){return true;}})()"
+            ) { result -> if (result == "true") finish() }
+          }
         }
-        webView.evaluateJavascript(
-          "(function(){try{return !!(window.androidBackCallback&&window.androidBackCallback());}catch(e){return true;}})()"
-        ) { result -> if (result == "true") finish() }
-      }
-    })
+      })
+    }
   }
 
   override fun onWebViewCreate(webView: WebView) {
     gameWebView = webView
-    webView.isHapticFeedbackEnabled = true
-    webView.overScrollMode = View.OVER_SCROLL_NEVER
+    nativeStartupStep("webview-options") {
+      webView.isHapticFeedbackEnabled = true
+      webView.overScrollMode = View.OVER_SCROLL_NEVER
+    }
   }
 
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
-    applyImmersiveMode()
-    updateFoldOrientation()
-    gameWebView?.evaluateJavascript(
-      "window.dispatchEvent(new Event('resize'));window.dispatchEvent(new CustomEvent('circlemix:nativeconfigurationchange'));",
-      null
-    )
+    nativeStartupStep("configuration-immersive") {
+      window.decorView.post { applyImmersiveMode() }
+    }
+    nativeStartupStep("configuration-webview") {
+      gameWebView?.evaluateJavascript(
+        "window.dispatchEvent(new Event('resize'));window.dispatchEvent(new CustomEvent('circlemix:nativeconfigurationchange'));",
+        null
+      )
+    }
   }
 
   override fun onWindowFocusChanged(hasFocus: Boolean) {
     super.onWindowFocusChanged(hasFocus)
-    if (hasFocus) applyImmersiveMode()
+    if (hasFocus) nativeStartupStep("focus-immersive") {
+      window.decorView.post { applyImmersiveMode() }
+    }
+  }
+
+  override fun onDestroy() {
+    gameWebView = null
+    super.onDestroy()
   }
 
   @Suppress("DEPRECATION")
   private fun applyImmersiveMode() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      window.setDecorFitsSystemWindows(false)
-      window.insetsController?.let { controller ->
-        controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-        controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-      }
-    } else {
-      window.decorView.systemUiVisibility =
-        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-        View.SYSTEM_UI_FLAG_FULLSCREEN or
-        View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-    }
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-      window.attributes = window.attributes.apply {
-        layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+    nativeStartupStep("system-bars") {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        window.setDecorFitsSystemWindows(false)
+        window.insetsController?.let { controller ->
+          controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+          controller.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+      } else {
+        window.decorView.systemUiVisibility =
+          View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+          View.SYSTEM_UI_FLAG_FULLSCREEN or
+          View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+          View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+          View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+          View.SYSTEM_UI_FLAG_LAYOUT_STABLE
       }
     }
-  }
-
-  private fun updateFoldOrientation() {
-    val config = resources.configuration
-    val shortest = min(config.screenWidthDp, config.screenHeightDp)
-    val longest = max(config.screenWidthDp, config.screenHeightDp)
-    val unfolded = config.smallestScreenWidthDp >= 600 || (longest >= 720 && shortest >= 480)
-    val target = if (unfolded) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-    if (requestedOrientation != target) requestedOrientation = target
+    nativeStartupStep("display-cutout") {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        window.attributes = window.attributes.apply {
+          layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+      }
+    }
   }
 }
 `;
