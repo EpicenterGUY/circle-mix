@@ -17,7 +17,7 @@ jobs:
   build-arm64-apk:
     runs-on: ubuntu-24.04
     env:
-      NDK_VERSION: 27.0.12077973
+      NDK_VERSION: 27.2.12479018
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,13 +34,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
-      - name: Install Android SDK and NDK
+      - name: Install Android SDK and resolve NDK
         shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;$NDK_VERSION"
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
-          echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          NDK_DIR="${ANDROID_NDK_LATEST_HOME:-}"
+          if [ ! -d "$NDK_DIR" ]; then
+            sdkmanager "ndk;$NDK_VERSION"
+            NDK_DIR="$ANDROID_HOME/ndk/$NDK_VERSION"
+          fi
+          test -d "$NDK_DIR"
+          echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
+          echo "Resolved Android NDK: $NDK_DIR"
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.10.1" --locked
       - name: Install dependencies
