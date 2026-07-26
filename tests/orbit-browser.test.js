@@ -30,21 +30,31 @@ const server=http.createServer((request,response)=>{
     const initial=await page.evaluate(()=>({
       canvas:{width:document.getElementById('orbitCanvas').width,height:document.getElementById('orbitCanvas').height},
       types:[...new Set(window.CircleMixOrbitTestApi.chart.map(note=>note.type))],
+      rings:[...new Set(window.CircleMixOrbitTestApi.chart.flatMap(note=>note.stackRings||[note.ring]))],
+      ribbonRings:[...new Set(window.CircleMixOrbitTestApi.chart.filter(note=>note.type==='ribbon').flatMap(note=>note.points.map(point=>point.ring)))],
       state:window.CircleMixOrbitTestApi.state(),
-      shortcuts:document.getElementById('orbitCanvas').getAttribute('aria-keyshortcuts')
+      shortcuts:document.getElementById('orbitCanvas').getAttribute('aria-keyshortcuts'),
+      badges:document.querySelector('.orbitModeBadges')?.textContent||''
     }));
     assert.ok(initial.canvas.width>300&&initial.canvas.height>300,'ORBIT canvas is sized');
-    assert.deepEqual(initial.types.sort(),['arc','flipCCW','flipCW','hold','pulse','roll','tap']);
+    assert.deepEqual(initial.types.sort(),['bloom','dot','flipCCW','flipCW','hold','pulse','ribbon','roll','stack']);
+    assert.deepEqual(initial.rings.sort(),[0,1,2]);
+    assert.deepEqual(initial.ribbonRings.sort(),[0,1,2]);
+    assert.equal(initial.state.ringCount,3);
+    assert.equal(initial.state.drawMode,true);
+    assert.match(initial.badges,/3 RINGS/);
+    assert.match(initial.badges,/DRAW MODE/);
     assert.equal(initial.types.some(type=>type.startsWith('trace')||type.startsWith('scratch')),false);
     assert.match(initial.shortcuts,/ArrowLeft/);
     await page.locator('#orbitStart').click();
     await page.waitForFunction(()=>window.CircleMixOrbitTestApi.state().running===true);
-    await page.waitForTimeout(250);
+    await page.waitForFunction(()=>window.CircleMixOrbitTestApi.state().frameCount>2);
     const playing=await page.evaluate(()=>window.CircleMixOrbitTestApi.state());
     assert.equal(playing.running,true);
     assert.ok(Number.isFinite(playing.judgeLineAngle));
+    assert.equal(playing.ringCount,3);
     assert.equal(pageErrors.length,0,pageErrors.join('\n'));
-    console.log('orbit browser regression passed');
+    console.log('orbit picture browser regression passed');
   }finally{
     if(browser)await browser.close();
     await new Promise(resolve=>server.close(resolve));
