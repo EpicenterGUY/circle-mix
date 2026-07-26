@@ -9,6 +9,7 @@ const tauri=JSON.parse(fs.readFileSync(path.join(root,'src-tauri/tauri.conf.json
 const cargo=fs.readFileSync(path.join(root,'src-tauri/Cargo.toml'),'utf8');
 const workflow=fs.readFileSync(path.join(root,'.github/workflows/windows-desktop.yml'),'utf8');
 const prepare=fs.readFileSync(path.join(root,'scripts/prepare-desktop.js'),'utf8');
+const settingsPass=fs.readFileSync(path.join(root,'scripts/pc-settings-desktop-pass.js'),'utf8');
 const visualPass=fs.readFileSync(path.join(root,'scripts/desktop-visual-pass.js'),'utf8');
 const audit=fs.readFileSync(path.join(root,'scripts/audit-desktop-dist.js'),'utf8');
 
@@ -19,15 +20,17 @@ assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop bu
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
 assert.equal(pkg.version,tauri.version,'npm and desktop versions must match for updater releases');
-assert.equal(tauri.version,'0.9.40','Windows installer must publish the AUTO aim flow version');
-assert.match(prepare,/DESKTOP_VERSION='0\.9\.40'/,'desktop distribution must expose version 0.9.40');
+assert.equal(tauri.version,'0.9.41','Windows installer must publish the unified settings release');
+assert.match(prepare,/DESKTOP_VERSION='0\.9\.41'/,'desktop distribution must expose version 0.9.41');
 assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must normalize Windows CRLF line endings');
 assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must retain the dedicated visual pass');
-assert.match(prepare,/AUTO & LARGE-ANGLE AIM FLOW/,'desktop changelog must announce the 0.9.40 aim release');
+assert.match(prepare,/UNIFIED SETTINGS & MOBILE LAYOUT V2/,'desktop changelog must announce the unified settings release');
+assert.match(prepare,/ACTION과 PULSE 버튼을 직접 드래그/,'desktop changelog must announce mobile layout editing');
 assert.match(prepare,/desktop-updater\.js/,'desktop build must inject the updater UI');
 assert.match(prepare,/DESKTOP_UPDATE_LOG_RETRY/,'desktop release metadata must retry the update log after title startup');
 assert.match(prepare,/circleMixLastSeenVersion/,'desktop update-log retry must respect the shared last-seen version key');
 assert.match(prepare,/safeUpdateLogBtn/,'desktop update-log retry must reuse the existing release-log button');
+for(const asset of ['pc-settings.css','src/pc-settings.js','mobile-layout-v2.css','src/mobile-layout-v2.js'])assert.ok(settingsPass.includes(asset),`desktop settings pass includes ${asset}`);
 assert.match(visualPass,/readPaletteColor\(game,'pulse'\)/,'desktop visual pass must retain the shared PULSE color');
 assert.match(visualPass,/pulseColor===swingCcwColor/,'desktop visual pass must verify PULSE and SWING CCW remain distinct');
 assert.match(visualPass,/PULSE_VISUAL_SINGLE_RING/,'PULSE must use the single-ring approach visual');
@@ -51,6 +54,7 @@ assert.match(audit,/tutorial TRACE finalization still ignores endpoint grace/,'d
 assert.match(audit,/desktop tutorial still exposes SCRATCH/,'desktop audit must reject SCRATCH tutorial exposure');
 assert.match(audit,/legacy SCRATCH playback compatibility is missing/,'desktop audit must retain legacy SCRATCH playback');
 assert.match(audit,/desktop offline-ready shim is missing/,'desktop audit must verify the offline-ready shim');
+assert.match(audit,/mobile layout v2 asset is missing/,'desktop audit must verify mobile layout packaging');
 assert.match(workflow,/\*-setup\.exe/,'Windows CI must locate the NSIS setup executable');
 assert.match(workflow,/ArgumentList '\/S'/,'Windows CI must exercise silent NSIS install and uninstall');
 assert.match(workflow,/DisplayName -like 'CIRCLE MIX\*'/,'Windows CI must verify the installed application entry');
