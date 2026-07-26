@@ -100,9 +100,9 @@ jobs:
           APK="$(find src-tauri/gen/android -type f -path '*/outputs/apk/*' -name '*.apk' | head -n 1)"
           test -n "$APK" && test -f "$APK"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee artifacts/android/badging.txt
-          grep -q "package: name='com.epicenterguy.circlemix'" artifacts/android/badging.txt
+          grep -q "package: name='com.epicenterguy.circlemix' versionCode='9042' versionName='0.9.42'" artifacts/android/badging.txt
           grep -q "targetSdkVersion:'36'" artifacts/android/badging.txt
-          cp "$APK" artifacts/android/circle-mix-0.9.41-android-arm64-debug.apk
+          cp "$APK" artifacts/android/circle-mix-0.9.42-android-arm64-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: circle-mix-android-arm64-debug
