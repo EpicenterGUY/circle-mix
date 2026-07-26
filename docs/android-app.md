@@ -33,10 +33,10 @@ npm run android:build:apk
 
 The GitHub workflow builds an installable ARM64 debug APK and publishes it as the `circle-mix-android-arm64-debug` workflow artifact. A debug APK is intended for direct testing and sideloading; it is not the final Google Play release package.
 
-Install a downloaded APK with ADB:
+Install the 0.9.42 launch hotfix APK with ADB:
 
 ```bash
-adb install -r circle-mix-0.9.41-android-arm64-debug.apk
+adb install -r circle-mix-0.9.42-android-arm64-debug.apk
 ```
 
 A CI debug APK may use a different temporary debug certificate from an APK installed previously. If Android reports a signature conflict, uninstall the previous CIRCLE MIX debug app before installing the replacement.
