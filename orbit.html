@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#061427">
+<title>CIRCLE MIX · ORBIT</title>
+<link rel="stylesheet" href="./orbit.css">
+</head>
+<body>
+<header class="orbitTop"><a href="./index.html" class="orbitBack">← AIM MODE</a><strong>ORBIT MODE</strong><span id="orbitStatus">READY</span></header>
+<main class="orbitStage">
+  <canvas id="orbitCanvas" tabindex="0" aria-label="Orbit playfield" aria-keyshortcuts="Z X ArrowLeft ArrowRight Shift"></canvas>
+  <section class="orbitHud"><div id="orbitScore">0000000</div><div id="orbitCombo">0 COMBO</div><div id="orbitJudge">READY</div></section>
+  <section class="orbitHelp">
+    <span><b>Z / X</b> TAP · HOLD · ARC · ROLL</span>
+    <span><b>← / →</b> FLIP</span>
+    <span><b>SHIFT</b> PULSE</span>
+  </section>
+  <section class="orbitStartCard">
+    <h1>ORBIT</h1>
+    <p>판정선은 원을 따라 자동 회전합니다. 노트와 겹치는 순간 키를 입력하세요.</p>
+    <button id="orbitStart" type="button">START DEMO</button>
+    <label class="orbitFile">LOCAL AUDIO<input id="orbitAudioFile" type="file" accept="audio/*"></label>
+    <button id="orbitMute" type="button" class="orbitMinor">SOUND ON</button>
+  </section>
+  <section id="orbitResult" class="orbitResult" hidden><h2>ORBIT CLEAR</h2><p id="orbitResultText"></p><button id="orbitRetry" type="button">RETRY</button><a href="./index.html">TITLE</a></section>
+</main>
+<audio id="orbitAudio" preload="auto" src="./assets/audio/ghost-rule.mp3"></audio>
+<script src="./src/orbit.js"></script>
+</body>
+</html>

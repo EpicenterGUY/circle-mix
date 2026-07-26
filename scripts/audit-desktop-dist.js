@@ -3,6 +3,7 @@
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.resolve(__dirname,'..'),out=path.join(root,'desktop-dist');
 if(!fs.existsSync(path.join(out,'index.html')))throw new Error('desktop-dist/index.html is missing');
+for(const file of ['orbit.html','orbit.css','src/orbit.js'])if(!fs.existsSync(path.join(out,file)))throw new Error('desktop ORBIT mode is missing: '+file);
 const all=[];(function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,e.name);e.isDirectory()?walk(p):all.push(p)}})(out);
 const rel=all.map(p=>path.relative(out,p).replaceAll(path.sep,'/'));const forbidden=/\.(mp3|ogg|wav|flac|m4a|cmix|osz|osu|map)$/i;
 if(rel.some(p=>forbidden.test(p)||/(^|\/)(assets|charts)\//.test(p)||/service-worker|manifest\.webmanifest|\.git|node_modules/.test(p)))throw new Error('desktop distribution contains a forbidden file');

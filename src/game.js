@@ -1,5 +1,12 @@
 (() => {
   function ensurePulseUi(){
+    const orbitAnchor=document.getElementById("safeEditor")||document.getElementById("safeTutorial");
+    if(orbitAnchor&&!document.getElementById("safeOrbit")){
+      const button=document.createElement("button");
+      button.id="safeOrbit"; button.type="button"; button.className=orbitAnchor.className; button.textContent="ORBIT MODE";
+      button.addEventListener("click",()=>{ window.location.href="./orbit.html"; });
+      const parent=orbitAnchor.parentElement; if(parent)parent.insertBefore(button,orbitAnchor.nextSibling);
+    }
     const controls=document.querySelector(".mobileGameplayControls");
     if(controls&&!document.getElementById("mobilePulseBtn")){ const button=document.createElement("button"); button.className="mobilePulseBtn mobilePlayBtn"; button.id="mobilePulseBtn"; button.type="button"; button.setAttribute("aria-label","Tap pulse"); button.textContent="PULSE"; controls.prepend(button); }
     const scratchEditor=document.getElementById("addScratchCWBtn");
