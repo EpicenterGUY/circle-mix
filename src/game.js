@@ -250,7 +250,7 @@
 
   const COLORS = {
     cut:"#5cfffb", swingCW:"#79ff7d", swingCCW:"#ff72d6", slide:"#ffe15a", fx:"#b77cff",
-    trace:"#4388ff", traceSoft:"#2466d9", pulse:"#ff9f43", scratch:"#ee3d9a", scratchCW:"#ee3d9a", scratchCCW:"#ff5aa8",
+    trace:"#4388ff", traceSoft:"#2466d9", pulse:"#ff9f43", pulseSwingCW:"#ffb347", pulseSwingCCW:"#ff784f", scratch:"#ee3d9a", scratchCW:"#ee3d9a", scratchCCW:"#ff5aa8",
     perfect:"#fff36a", great:"#80ffdb", miss:"#ff4567"
   };
 
@@ -2152,11 +2152,20 @@
   function progress(n,t){return clamp((t-n.spawnTime)/(n.hitTime-n.spawnTime),0,1);}
   function noteR(n,t){return lerp(outerR,hitR,progress(n,t));}
   function notePos(n,t){const r=noteR(n,t); return {x:cx+Math.cos(n.angle)*r,y:cy+Math.sin(n.angle)*r,r};}
+  function isPulseSynchronizedNote(n, notes=chart){
+    return !!n && n.type!=="pulse" && notes.some(note=>note!==n && note.type==="pulse" && Math.abs(Number(note.hitTime)-Number(n.hitTime))<=PULSE_SYNC_EPSILON);
+  }
   function isPulseSynchronizedCut(n, notes=chart){
-    return !!n && n.type==="cut" && notes.some(note=>note!==n && note.type==="pulse" && Math.abs(Number(note.hitTime)-Number(n.hitTime))<=PULSE_SYNC_EPSILON);
+    return !!n && n.type==="cut" && isPulseSynchronizedNote(n,notes);
+  }
+  function pulseSynchronizedColor(n){
+    if(n.type==="swingCW")return COLORS.pulseSwingCW;
+    if(n.type==="swingCCW")return COLORS.pulseSwingCCW;
+    return COLORS.pulse;
   }
   function noteColor(n, notes=chart){
-    if(n.type==="cut")return isPulseSynchronizedCut(n,notes)?COLORS.pulse:COLORS.cut;
+    if(isPulseSynchronizedNote(n,notes))return pulseSynchronizedColor(n);
+    if(n.type==="cut")return COLORS.cut;
     if(n.type==="swingCW")return COLORS.swingCW;
     if(n.type==="swingCCW")return COLORS.swingCCW;
     if(n.type.startsWith("slide"))return COLORS.slide;
@@ -2167,6 +2176,12 @@
     if(n.type==="scratchCCW")return COLORS.scratchCCW;
     if(n.type.startsWith("scratch"))return COLORS.scratch;
     return "#fff";
+  }
+  function colorAlpha(color,alpha){
+    const match=/^#([0-9a-f]{6})$/i.exec(String(color||""));
+    if(!match)return color;
+    const value=parseInt(match[1],16);
+    return `rgba(${value>>16},${value>>8&255},${value&255},${clamp(Number(alpha)||0,0,1)})`;
   }
   function aligned(angle, extra=0){return distAng(judgementAimAngle,angle)<DIAL_ARC_HALF+Math.PI*extra;}
   function isAimMagnetNote(n){ return !!n && (n.type==="cut"||n.type==="fx"||n.type.startsWith("swing")||n.type.startsWith("scratch")); }
@@ -2755,9 +2770,10 @@
       if(t+1e-6<end)return;
       Object.assign(n,{directedTravel:required,progressRatio:1,motionTime:Math.max(minimumMotionTime,n.duration),endpointCaptured:true,endpointCapturedAt:end,bestEndpointError:0,bestPerfectEndpointTimingError:0,completed:true,completionTime:end,failReason:null});
       setAutoAimAngle(motion.finalAngle,motion.signedSweepAngle/Math.max(n.duration,.001));
-      addWave(motion.finalAngle,COLORS.trace); addRingBurst(COLORS.trace,.42,"END");
+      const color=noteColor(n);
+      addWave(motion.finalAngle,color); addRingBurst(color,.42,"END");
       logAutoProcessing(n);
-      judge(n,"PERFECT",COLORS.trace,{source:"auto",reason:"AUTO_JUDGEMENT"});
+      judge(n,"PERFECT",color,{source:"auto",reason:"AUTO_JUDGEMENT"});
       return;
     }
     if(n.type!=="pulse"){
@@ -2970,7 +2986,7 @@ activePath.autoTraceProgress=progress;
           const onTime=endpointJudgement.onTime;
           const passed=n.startCaptured && greatTravel && greatReverse && greatEndpoint && n.motionTime>=n.minimumMotionTime;
           n.completed=passed; n.failReason=passed?null:traceFailureReason(n,profile);
-          if(passed){ const perfect=perfectTravel&&perfectReverse&&perfectEndpoint&&onTime; n.completionTime=Number.isFinite(n.endpointCapturedAt)?n.endpointCapturedAt:t; judge(n,perfect?"PERFECT":"GREAT",COLORS.trace,{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"}); }
+          if(passed){ const perfect=perfectTravel&&perfectReverse&&perfectEndpoint&&onTime; n.completionTime=Number.isFinite(n.endpointCapturedAt)?n.endpointCapturedAt:t; judge(n,perfect?"PERFECT":"GREAT",noteColor(n),{source:isAutoActive()?"auto":(tutorialState.activeInput||"pointer"),reason:isAutoActive()?"AUTO_JUDGEMENT":"USER_JUDGEMENT"}); }
           else miss(n,n.failReason);
         }
         continue;
@@ -3009,12 +3025,12 @@ activePath.autoTraceProgress=progress;
           if(isAutoActive()||(filterHeld&&aligned(n.angle,.020))){
             if(isAutoActive())logAutoProcessing(n);
             n.hold+=dt;
-            if(Math.random()<.45)addParticles(cx+Math.cos(n.angle)*hitR,cy+Math.sin(n.angle)*hitR,COLORS.fx,1,.25);
+            if(Math.random()<.45)addParticles(cx+Math.cos(n.angle)*hitR,cy+Math.sin(n.angle)*hitR,noteColor(n),1,.25);
           }
         }
         if(t>end){
           const ratio=n.hold/n.duration;
-          if(ratio>=.55)judge(n,ratio>.85?"PERFECT":"GREAT",COLORS.fx,{source:tutorialState.activeInput||"keyboard",reason:"USER_JUDGEMENT"});
+          if(ratio>=.55)judge(n,ratio>.85?"PERFECT":"GREAT",noteColor(n),{source:tutorialState.activeInput||"keyboard",reason:"USER_JUDGEMENT"});
           else miss(n,filterHeld?"MOVE CLOSER TO THE PATH":"HOLD THE BUTTON");
         }
         if(t>n.hitTime+.38&&n.hold<.035&&!isAutoActive())miss(n,filterHeld?"MOVE CLOSER TO THE PATH":"HOLD THE BUTTON");
@@ -3259,8 +3275,8 @@ activePath.autoTraceProgress=progress;
       const d=slideDelta(n);
       const endA=n.angle+d;
       const dir=d>=0?1:-1;
-      const mainColor=COLORS.slide;
-      const glowColor=`rgba(255,225,90,${isFocus?.34:.18})`;
+      const mainColor=noteColor(n);
+      const glowColor=isPulseSynchronizedNote(n)?colorAlpha(mainColor,isFocus?.34:.18):`rgba(255,225,90,${isFocus?.34:.18})`;
       drawDirectedArcSegments(hitR,n.angle,d,glowColor,isFocus?9:6,1);
 
       ctx.save();
@@ -3419,19 +3435,19 @@ activePath.autoTraceProgress=progress;
   }
 
   function drawTrace(n,t){
-    const active=t>=n.hitTime, focus=n===focusNote, motion=resolveTraceMotion(n), full=motion.signedSweepAngle;
+    const active=t>=n.hitTime, focus=n===focusNote, motion=resolveTraceMotion(n), full=motion.signedSweepAngle, color=noteColor(n), pulseSync=isPulseSynchronizedNote(n);
     const r=active?hitR:clamp(noteR(n,t)-10,hitR-14,outerR-18), progress=active?(n.progressRatio||0):0;
     const dir=full>=0?1:-1;
     const visual=traceVisualProfile();
     const pathScale=visualScale("path");
     // A thin blue future route and a bright completed arc communicate travel, not target chasing.
-    drawDirectedArcSegments(r,motion.startAngle,full,`rgba(67,136,255,${.28*pathScale})`,visual.futureWidth,1,null,0);
-    if(progress>0) drawDirectedArcSegments(r,motion.startAngle,full*progress,"rgba(104,181,255,.98)",visual.pastWidth+1,1,COLORS.trace,4);
+    drawDirectedArcSegments(r,motion.startAngle,full,pulseSync?colorAlpha(color,.28*pathScale):`rgba(67,136,255,${.28*pathScale})`,visual.futureWidth,1,null,0);
+    if(progress>0) drawDirectedArcSegments(r,motion.startAngle,full*progress,pulseSync?colorAlpha(color,.98):"rgba(104,181,255,.98)",visual.pastWidth+1,1,color,4);
     ctx.save(); ctx.translate(cx,cy); ctx.lineCap="round";
     const marker=(a,color,label,size)=>{ const x=Math.cos(a)*r,y=Math.sin(a)*r; ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,size,0,TAU);ctx.fill();ctx.fillStyle="#071326";ctx.font="900 9px system-ui";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(label,x,y+.5); };
-    marker(motion.startAngle,"#fff","S",7); marker(motion.finalAngle,"#ffe15a","E",8);
+    marker(motion.startAngle,"#fff","S",7); marker(motion.finalAngle,pulseSync?color:"#ffe15a","E",8);
     const arrows=Math.max(1,Math.ceil(Math.abs(full)/(Math.PI*.55)));
-    for(let i=1;i<=arrows;i++){ const a=motion.startAngle+full*(i/(arrows+1));ctx.save();ctx.translate(Math.cos(a)*r,Math.sin(a)*r);ctx.rotate(a+(dir>0?Math.PI/2:-Math.PI/2));ctx.fillStyle="rgba(139,188,255,.92)";ctx.beginPath();ctx.moveTo(7,0);ctx.lineTo(-5,-4);ctx.lineTo(-2,0);ctx.lineTo(-5,4);ctx.closePath();ctx.fill();ctx.restore(); }
+    for(let i=1;i<=arrows;i++){ const a=motion.startAngle+full*(i/(arrows+1));ctx.save();ctx.translate(Math.cos(a)*r,Math.sin(a)*r);ctx.rotate(a+(dir>0?Math.PI/2:-Math.PI/2));ctx.fillStyle=pulseSync?colorAlpha(color,.92):"rgba(139,188,255,.92)";ctx.beginPath();ctx.moveTo(7,0);ctx.lineTo(-5,-4);ctx.lineTo(-2,0);ctx.lineTo(-5,4);ctx.closePath();ctx.fill();ctx.restore(); }
     if(focus&&active){ const turns=n.requiredTravel ? n.directedTravel/n.requiredTravel : 0;ctx.fillStyle="#d9e9ff";ctx.font="800 11px system-ui";ctx.textAlign="center";ctx.fillText(n.requiredTravel>=TAU?`${turns.toFixed(1)} / ${(n.requiredTravel/TAU).toFixed(1)} TURN`:`TRACE ${Math.round(progress*100)}%`,0,-Math.max(34,r*.26)); if((n.reverseTravel||0)>.08){ctx.fillStyle="#ff6c80";ctx.fillText("↶",0,-Math.max(18,r*.15));} }
     ctx.restore();
   }
@@ -3479,6 +3495,7 @@ activePath.autoTraceProgress=progress;
     const d=slideDelta(n);
     const end=start+d;
     const dir=d>=0?1:-1;
+    const color=noteColor(n), pulseSync=isPulseSynchronizedNote(n);
 
     function drawArrowAt(angle,rad,size=11,alpha=.9){
       ctx.save();
@@ -3498,7 +3515,7 @@ activePath.autoTraceProgress=progress;
     }
 
     if(!active){
-      drawDirectedArcSegments(r,start,d,"rgba(255,225,90,.42)",NOTE_WIDTHS.slide+4,1);
+      drawDirectedArcSegments(r,start,d,pulseSync?colorAlpha(color,.42):"rgba(255,225,90,.42)",NOTE_WIDTHS.slide+4,1);
       drawDirectedArcSegments(r,start,d,"rgba(255,255,255,.18)",3,1);
 
       const arrowCount=Math.max(3,Math.ceil(Math.abs(d)/(Math.PI*.55)));
@@ -3507,17 +3524,17 @@ activePath.autoTraceProgress=progress;
       ctx.save();
       ctx.translate(cx,cy);
       ctx.shadowBlur=9*visualScale("effect");
-      ctx.shadowColor=COLORS.slide;
+      ctx.shadowColor=color;
 
       ctx.fillStyle="#ffffff";
       ctx.beginPath();
       ctx.arc(Math.cos(start)*r,Math.sin(start)*r,12,0,TAU);
       ctx.fill();
-      ctx.strokeStyle=COLORS.slide;
+      ctx.strokeStyle=color;
       ctx.lineWidth=4;
       ctx.stroke();
 
-      ctx.fillStyle=COLORS.slide;
+      ctx.fillStyle=color;
       ctx.beginPath();
       ctx.arc(Math.cos(end)*r,Math.sin(end)*r,13,0,TAU);
       ctx.fill();
@@ -3539,11 +3556,11 @@ activePath.autoTraceProgress=progress;
     const curr=start+d*k;
 
     if(Math.abs(curr-start)>0.003){
-      drawDirectedArcSegments(hitR,start,curr-start,"rgba(255,240,170,.22)",9,1);
+      drawDirectedArcSegments(hitR,start,curr-start,pulseSync?colorAlpha(color,.22):"rgba(255,240,170,.22)",9,1);
       drawDirectedArcSegments(hitR,start,curr-start,"rgba(255,255,255,.10)",4,1);
     }
     if(Math.abs(end-curr)>0.003){
-      drawDirectedArcSegments(hitR,curr,end-curr,"rgba(255,225,90,.96)",NOTE_WIDTHS.slide+6,1);
+      drawDirectedArcSegments(hitR,curr,end-curr,pulseSync?colorAlpha(color,.96):"rgba(255,225,90,.96)",NOTE_WIDTHS.slide+6,1);
       drawDirectedArcSegments(hitR,curr,end-curr,"rgba(255,255,255,.38)",3.5,1);
     }
 
@@ -3556,17 +3573,17 @@ activePath.autoTraceProgress=progress;
     ctx.save();
     ctx.translate(cx,cy);
     ctx.shadowBlur=24;
-    ctx.shadowColor=COLORS.slide;
+    ctx.shadowColor=color;
 
     ctx.fillStyle="rgba(255,255,255,.70)";
     ctx.beginPath();
     ctx.arc(Math.cos(start)*hitR,Math.sin(start)*hitR,11,0,TAU);
     ctx.fill();
-    ctx.strokeStyle=COLORS.slide;
+    ctx.strokeStyle=color;
     ctx.lineWidth=4;
     ctx.stroke();
 
-    ctx.fillStyle=COLORS.slide;
+    ctx.fillStyle=color;
     ctx.beginPath();
     ctx.arc(Math.cos(end)*hitR,Math.sin(end)*hitR,14,0,TAU);
     ctx.fill();
@@ -3594,7 +3611,7 @@ activePath.autoTraceProgress=progress;
 
   function drawFx(n,t){
     const active=t>=n.hitTime;
-    const color=COLORS.fx;
+    const color=noteColor(n);
     const focus=n===focusNote;
     const k=progress(n,t);
 
@@ -3616,7 +3633,7 @@ activePath.autoTraceProgress=progress;
     ctx.lineCap="round";
 
     if(visibleLen>0.5){
-      ctx.strokeStyle=active?"rgba(183,124,255,.92)":"rgba(183,124,255,.72)";
+      ctx.strokeStyle=colorAlpha(color,active?.92:.72);
       ctx.lineWidth=focus?NOTE_WIDTHS.hold+4:NOTE_WIDTHS.hold;
       ctx.beginPath();ctx.moveTo(headR,0);ctx.lineTo(tailR,0);ctx.stroke();
 
