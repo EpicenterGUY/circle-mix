@@ -3462,7 +3462,7 @@ activePath.autoTraceProgress=progress;
       if(ratio<.78)return;
       ctx.globalAlpha=ratio<1?lerp(.22,.55,clamp((ratio-.78)/.22,0,1)):1;
     }
-    const color=noteColor(n), dir=n.type==="swingCW"?1:-1;
+    const color=noteColor(n), pulseSync=isPulseSynchronizedNote(n), dir=n.type==="swingCW"?1:-1;
     const k=progress(n,t);
     const r=lerp(outerR, hitR, k);
     const center=n.angle;
@@ -3472,18 +3472,26 @@ activePath.autoTraceProgress=progress;
     const linkDir=link?Math.sign(slideDelta(link)||dir):0;
     const isReversal=!!(link && linkDir && linkDir!==dir);
 
-    drawDirectedArcSegments(r,startA,amount,`rgba(255,255,255,${n===focusNote?.22:.12})`,n===focusNote?NOTE_WIDTHS.swing+4:NOTE_WIDTHS.swing,1,color,n===focusNote?12:6);
-    drawDirectedArcSegments(r,startA,amount,color,n===focusNote?NOTE_WIDTHS.swing+1:NOTE_WIDTHS.swing,n===focusNote?.82:.64,color,n===focusNote?14:7);
+    const backingColor=pulseSync?colorAlpha(color,n===focusNote?.46:.34):`rgba(255,255,255,${n===focusNote?.22:.12})`;
+    const bodyAlpha=pulseSync?(n===focusNote?1:.94):(n===focusNote?.82:.64);
+    drawDirectedArcSegments(r,startA,amount,backingColor,n===focusNote?NOTE_WIDTHS.swing+5:NOTE_WIDTHS.swing+1,1,color,n===focusNote?14:8);
+    drawDirectedArcSegments(r,startA,amount,color,n===focusNote?NOTE_WIDTHS.swing+2:NOTE_WIDTHS.swing+1,bodyAlpha,color,n===focusNote?16:10);
+    if(pulseSync){
+      ctx.save();ctx.translate(cx,cy);ctx.strokeStyle=colorAlpha(color,.96);ctx.lineWidth=2.5;ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.arc(0,0,r+8,startA,startA+amount,dir<0);ctx.stroke();ctx.setLineDash([]);ctx.restore();
+    }
 
     const arrowA=startA+amount;
     ctx.save();
     ctx.translate(cx+Math.cos(arrowA)*r,cy+Math.sin(arrowA)*r);
     ctx.rotate(arrowA + (dir>0 ? Math.PI/2 : -Math.PI/2));
-    ctx.fillStyle="rgba(255,255,255,.94)";
+    ctx.fillStyle=pulseSync?color:"rgba(255,255,255,.94)";
     ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(-8,-8);ctx.lineTo(-4,0);ctx.lineTo(-8,8);ctx.closePath();ctx.fill();
+    if(pulseSync){ctx.strokeStyle="#ffffff";ctx.lineWidth=2;ctx.stroke();}
     ctx.restore();
 
-    drawRingLabel(isReversal?"REV":(link?"EXIT":(dir>0?"↻":"↺")),center,r+24,isReversal?"rgba(255,114,214,.9)":"rgba(255,255,255,.86)",n===focusNote?18:14);
+    const labelColor=pulseSync?color:(isReversal?"rgba(255,114,214,.9)":"rgba(255,255,255,.86)");
+    drawRingLabel(isReversal?"REV":(link?"EXIT":(dir>0?"↻":"↺")),center,r+24,labelColor,n===focusNote?18:14);
     ctx.globalAlpha=1;
   }
 
@@ -3612,6 +3620,7 @@ activePath.autoTraceProgress=progress;
   function drawFx(n,t){
     const active=t>=n.hitTime;
     const color=noteColor(n);
+    const pulseSync=isPulseSynchronizedNote(n);
     const focus=n===focusNote;
     const k=progress(n,t);
 
@@ -3628,12 +3637,12 @@ activePath.autoTraceProgress=progress;
     ctx.translate(cx,cy);
     ctx.rotate(n.angle);
     ctx.globalAlpha=alpha;
-    ctx.shadowBlur=24;
+    ctx.shadowBlur=pulseSync?30:24;
     ctx.shadowColor=color;
     ctx.lineCap="round";
 
     if(visibleLen>0.5){
-      ctx.strokeStyle=colorAlpha(color,active?.92:.72);
+      ctx.strokeStyle=colorAlpha(color,pulseSync?(active?.98:.90):(active?.92:.72));
       ctx.lineWidth=focus?NOTE_WIDTHS.hold+4:NOTE_WIDTHS.hold;
       ctx.beginPath();ctx.moveTo(headR,0);ctx.lineTo(tailR,0);ctx.stroke();
 
@@ -3641,9 +3650,14 @@ activePath.autoTraceProgress=progress;
       ctx.lineWidth=3;
       ctx.beginPath();ctx.moveTo(headR+12,0);ctx.lineTo(Math.max(headR+12,tailR-12),0);ctx.stroke();
 
-      ctx.fillStyle="#ffffff";
+      ctx.fillStyle=pulseSync?color:"#ffffff";
       ctx.beginPath();ctx.arc(headR,0,focus?14:12,0,TAU);ctx.fill();
-      ctx.strokeStyle="rgba(0,0,0,.45)";ctx.lineWidth=3;ctx.stroke();
+      ctx.strokeStyle=pulseSync?"#ffffff":"rgba(0,0,0,.45)";ctx.lineWidth=3;ctx.stroke();
+      if(pulseSync){
+        ctx.strokeStyle="rgba(255,255,255,.94)";ctx.lineWidth=2;ctx.setLineDash([4,3]);
+        ctx.beginPath();ctx.arc(headR,0,focus?19:17,0,TAU);ctx.stroke();ctx.setLineDash([]);
+        ctx.fillStyle="#ffffff";ctx.beginPath();ctx.arc(headR,0,4,0,TAU);ctx.fill();
+      }
 
       ctx.fillStyle=color;
       ctx.beginPath();ctx.arc(tailR,0,focus?11:9,0,TAU);ctx.fill();
@@ -3654,13 +3668,18 @@ activePath.autoTraceProgress=progress;
         ctx.font="900 12px system-ui";
         ctx.textAlign="center";
         ctx.textBaseline="middle";
-        ctx.fillText("START",headR,-18);
+        ctx.fillText(pulseSync?"PULSE":"START",headR,-18);
         ctx.fillText("END",tailR,18);
       }
     }else{
-      ctx.fillStyle="#ffffff";
+      ctx.fillStyle=pulseSync?color:"#ffffff";
       ctx.beginPath();ctx.arc(headR,0,focus?14:12,0,TAU);ctx.fill();
-      ctx.strokeStyle="rgba(0,0,0,.45)";ctx.lineWidth=3;ctx.stroke();
+      ctx.strokeStyle=pulseSync?"#ffffff":"rgba(0,0,0,.45)";ctx.lineWidth=3;ctx.stroke();
+      if(pulseSync){
+        ctx.strokeStyle="rgba(255,255,255,.94)";ctx.lineWidth=2;ctx.setLineDash([4,3]);
+        ctx.beginPath();ctx.arc(headR,0,focus?19:17,0,TAU);ctx.stroke();ctx.setLineDash([]);
+        ctx.fillStyle="#ffffff";ctx.beginPath();ctx.arc(headR,0,4,0,TAU);ctx.fill();
+      }
     }
 
     ctx.globalAlpha=1;

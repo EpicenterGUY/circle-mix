@@ -5,9 +5,6 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   syntax-and-smoke:
     runs-on: ubuntu-latest
@@ -64,33 +61,3 @@ jobs:
           path: artifacts/browser-regression
           if-no-files-found: warn
           retention-days: 14
-
-  apply-pulse-sync-render-fix:
-    if: ${{ github.event_name == 'pull_request' && github.head_ref == 'agent/pulse-sync-hold-swing-visibility' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - name: Apply focused renderer patch
-        run: python scripts/agent-pulse-sync-render-fix.py
-      - name: Install dependencies
-        run: npm ci
-      - name: Verify focused patch
-        run: npm test
-      - name: Commit clean renderer fix
-        shell: bash
-        run: |
-          git fetch origin main
-          git checkout origin/main -- .github/workflows/ci.yml
-          rm -f .github/workflows/agent-pulse-sync-render-fix.yml scripts/agent-pulse-sync-render-fix.py
-          git config user.name "circle-mix-agent"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          git commit -m "fix: make PULSE-synced HOLD and SWING visibly orange"
-          git push origin HEAD:${{ github.head_ref }}

@@ -236,11 +236,21 @@ test("PULSE-synchronized aimed notes share orange while SWING keeps direction", 
   assert.equal(api.isPulseSynchronizedNote(pulse,[pulse]),false);
 
   const src=fs.readFileSync("src/game.js","utf8");
-  for(const [name,next] of [["drawTrace","linkedTraceForSwing"],["drawSlide","drawFx"],["drawFx","drawScratch"]]){
+  for(const [name,next] of [["drawTrace","linkedTraceForSwing"],["drawSwing","drawSlide"],["drawSlide","drawFx"],["drawFx","drawScratch"]]){
     const start=src.indexOf(`  function ${name}(`), end=src.indexOf(`\n  function ${next}(`,start);
     const renderer=start>=0&&end>start?src.slice(start,end):"";
     assert.ok(renderer.includes("noteColor(n)"),name+" uses synchronized color");
   }
+  const swingStart=src.indexOf("  function drawSwing("), swingEnd=src.indexOf("\n  function drawSlide(",swingStart);
+  const swingRenderer=src.slice(swingStart,swingEnd);
+  assert.ok(swingRenderer.includes("pulseSync=isPulseSynchronizedNote(n)"),"SWING renderer detects PULSE synchronization");
+  assert.ok(swingRenderer.includes("ctx.fillStyle=pulseSync?color"),"SWING arrow uses directional orange");
+  assert.ok(swingRenderer.includes("ctx.setLineDash([5,4])"),"SWING shows a synchronized dashed accent");
+  const holdStart=src.indexOf("  function drawFx("), holdEnd=src.indexOf("\n  function drawScratch(",holdStart);
+  const holdRenderer=src.slice(holdStart,holdEnd);
+  assert.ok(holdRenderer.includes("pulseSync=isPulseSynchronizedNote(n)"),"HOLD renderer detects PULSE synchronization");
+  assert.ok(holdRenderer.includes('ctx.fillStyle=pulseSync?color:"#ffffff"'),"HOLD head uses synchronized orange");
+  assert.ok(holdRenderer.includes('ctx.fillText(pulseSync?"PULSE":"START"'),"HOLD labels the synchronized start");
 });
 
 test("PULSE aim guide groups simultaneous aim chords without clutter", () => {
