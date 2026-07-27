@@ -18,7 +18,7 @@ setAttribute(){}, removeAttribute(){}, focus(){}, blur(){}, getBoundingClientRec
 }
 function loadGameExports(){
 const src = fs.readFileSync("src/game.js", "utf8");
-const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n SLIDE_JUDGEMENT_PROFILE, PULSE_SYNC_EPSILON, COLORS, isPulseSynchronizedCut, noteColor, nextAimNotesAfterPulse, nextAimNoteAfterPulse, PULSE_AIM_GUIDE_LINGER, PULSE_AIM_GUIDE_LOOKAHEAD, AUTO_VISUAL_AIM_PATH_RESPONSE, autoVisualAimStep, AIM_VISUAL_SNAP_ERROR, aimStabilizerProfile, mouseVisualAimStep, effectivePcAimMode, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
+const exportPatch = `\nwindow.__smoke = {\n generateAnimaNormalChart, generateAnimaTechChart, chartForDifficulty,\n difficultyViewForSong, getActiveDifficultyLabel, localChartEntries, tutorialSteps, buildTutorialStepRuntime,\n SLIDE_JUDGEMENT_PROFILE, PULSE_SYNC_EPSILON, COLORS, isPulseSynchronizedNote, isPulseSynchronizedCut, noteColor, nextAimNotesAfterPulse, nextAimNoteAfterPulse, PULSE_AIM_GUIDE_LINGER, PULSE_AIM_GUIDE_LOOKAHEAD, AUTO_VISUAL_AIM_PATH_RESPONSE, autoVisualAimStep, AIM_VISUAL_SNAP_ERROR, aimStabilizerProfile, mouseVisualAimStep, effectivePcAimMode, updateTraceEndpointCapture, traceEndpointJudgement, traceProfile,\n formatStarValue, formatDifficulty, renderSongSelect, resolveSelectedSong,\n renderedDifficultyHtml:()=>songDifficulty?.innerHTML||""\n};\n`;
 const patched = src.replace(/\r?\n\s*updateModeButtons\(\);\r?\n\s*updateButtons\(\);\r?\n\}\)\(\);\s*$/, `${exportPatch}\n updateModeButtons();\n updateButtons();\n})();`);
 const elements = new Map();
 const document = {
@@ -211,14 +211,36 @@ test("mouse aim keeps raw judgement while improving large-angle visual response"
   assert.ok(!autoModeLine.includes("LOCKED")&&!autoModeLine.includes("requestPointerLock"));
 });
 
-test("PULSE-synchronized CUT uses the shared orange readability language", () => {
-  const cut={type:"cut",hitTime:1}, pulse={type:"pulse",hitTime:1}, nearPulse={type:"pulse",hitTime:1+api.PULSE_SYNC_EPSILON*.5};
+test("PULSE-synchronized aimed notes share orange while SWING keeps direction", () => {
+  const pulse={type:"pulse",hitTime:1}, nearPulse={type:"pulse",hitTime:1+api.PULSE_SYNC_EPSILON*.5};
+  const families=["cut","fx","slideCW","slideCCW","traceCW","traceCCW","scratchCW","scratchCCW"];
   assert.equal(api.COLORS.pulse,"#ff9f43");
+  assert.equal(api.COLORS.pulseSwingCW,"#ffb347");
+  assert.equal(api.COLORS.pulseSwingCCW,"#ff784f");
+  assert.notEqual(api.COLORS.pulseSwingCW,api.COLORS.pulseSwingCCW);
+  for(const type of families){
+    const note={type,hitTime:1};
+    assert.equal(api.isPulseSynchronizedNote(note,[note,pulse]),true,type);
+    assert.equal(api.isPulseSynchronizedNote(note,[note,nearPulse]),true,type+" epsilon");
+    assert.equal(api.noteColor(note,[note,pulse]),api.COLORS.pulse,type+" orange");
+  }
+  const cut={type:"cut",hitTime:1};
   assert.equal(api.isPulseSynchronizedCut(cut,[cut,pulse]),true);
-  assert.equal(api.isPulseSynchronizedCut(cut,[cut,nearPulse]),true);
-  assert.equal(api.isPulseSynchronizedCut(cut,[cut,{type:"pulse",hitTime:1+api.PULSE_SYNC_EPSILON*2}]),false);
-  assert.equal(api.noteColor(cut,[cut,pulse]),api.COLORS.pulse);
+  assert.equal(api.isPulseSynchronizedNote(cut,[cut,{type:"pulse",hitTime:1+api.PULSE_SYNC_EPSILON*2}]),false);
   assert.equal(api.noteColor(cut,[cut]),api.COLORS.cut);
+  const cw={type:"swingCW",hitTime:1}, ccw={type:"swingCCW",hitTime:1};
+  assert.equal(api.noteColor(cw,[cw,pulse]),api.COLORS.pulseSwingCW);
+  assert.equal(api.noteColor(ccw,[ccw,pulse]),api.COLORS.pulseSwingCCW);
+  assert.equal(api.noteColor(cw,[cw]),api.COLORS.swingCW);
+  assert.equal(api.noteColor(ccw,[ccw]),api.COLORS.swingCCW);
+  assert.equal(api.isPulseSynchronizedNote(pulse,[pulse]),false);
+
+  const src=fs.readFileSync("src/game.js","utf8");
+  for(const [name,next] of [["drawTrace","linkedTraceForSwing"],["drawSlide","drawFx"],["drawFx","drawScratch"]]){
+    const start=src.indexOf(`  function ${name}(`), end=src.indexOf(`\n  function ${next}(`,start);
+    const renderer=start>=0&&end>start?src.slice(start,end):"";
+    assert.ok(renderer.includes("noteColor(n)"),name+" uses synchronized color");
+  }
 });
 
 test("PULSE aim guide groups simultaneous aim chords without clutter", () => {
