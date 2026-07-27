@@ -93,15 +93,17 @@ jobs:
           path: artifacts/android-build/
           if-no-files-found: warn
           retention-days: 14
-      - name: Align, sign, and verify installable APK
+      - name: Align, sign, and verify installable test APK
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/android
+          VERSION="$(node -p "require('./src-tauri/tauri.android.conf.json').version")"
+          VERSION_CODE="$(node -p "require('./src-tauri/tauri.android.conf.json').bundle.android.versionCode")"
           SOURCE_APK="$(find src-tauri/gen/android -type f -path '*/outputs/apk/*' -name '*.apk' -printf '%s %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)"
           test -n "$SOURCE_APK" && test -f "$SOURCE_APK"
-          ALIGNED_APK="$RUNNER_TEMP/circle-mix-0.9.44-aligned.apk"
-          FINAL_APK="artifacts/android/circle-mix-0.9.44-android-arm64-debug-signed.apk"
+          ALIGNED_APK="$RUNNER_TEMP/circle-mix-$VERSION-aligned.apk"
+          FINAL_APK="artifacts/android/circle-mix-$VERSION-android-arm64-debug-signed.apk"
           KEYSTORE="$RUNNER_TEMP/circle-mix-debug.keystore"
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -f -p 4 "$SOURCE_APK" "$ALIGNED_APK"
           keytool -genkeypair -noprompt \
@@ -123,7 +125,7 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$FINAL_APK" | tee artifacts/android/signature.txt
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -p 4 "$FINAL_APK"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$FINAL_APK" | tee artifacts/android/badging.txt
-          grep -q "package: name='com.epicenterguy.circlemix' versionCode='9044' versionName='0.9.44'" artifacts/android/badging.txt
+          grep -q "package: name='com.epicenterguy.circlemix' versionCode='$VERSION_CODE' versionName='$VERSION'" artifacts/android/badging.txt
           grep -q "targetSdkVersion:'36'" artifacts/android/badging.txt
           grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" artifacts/android/signature.txt
           sha256sum "$FINAL_APK" | tee artifacts/android/sha256.txt
