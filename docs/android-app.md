@@ -31,21 +31,21 @@ npm run android:dev
 npm run android:build:apk
 ```
 
-The GitHub workflow builds an installable ARM64 debug APK and publishes it as the `circle-mix-android-arm64-debug` workflow artifact. A debug APK is intended for direct testing and sideloading; it is not the final Google Play release package.
+The GitHub workflow builds an ARM64 debug APK, aligns it with `zipalign`, signs it with an ephemeral debug certificate, and rejects the artifact unless `apksigner verify` succeeds. Only the verified signed APK is published in the `circle-mix-android-arm64-debug` workflow artifact.
 
-Install the 0.9.43 landscape hotfix APK with ADB:
+Install the 0.9.44 signed landscape hotfix APK with ADB:
 
 ```bash
-adb install -r circle-mix-0.9.43-android-arm64-debug.apk
+adb install -r circle-mix-0.9.44-android-arm64-debug-signed.apk
 ```
 
-A CI debug APK may use a different temporary debug certificate from an APK installed previously. If Android reports a signature conflict, uninstall the previous CIRCLE MIX debug app before installing the replacement.
+The ephemeral CI debug certificate can differ between workflow runs. If Android reports an update-incompatible signature, uninstall the previous CIRCLE MIX debug app before installing the replacement. Uninstalling clears app-local settings and imported LOCAL data unless backed up first.
 
 ## Foldable and orientation behavior
 
 The activity manifest requests `sensorLandscape`, so CIRCLE MIX automatically enters either landscape direction on both the folded outer display and the expanded inner display. Android can choose the landscape side that matches the device sensor.
 
-The app remains categorized as a game through `android:appCategory="game"`. This preserves the platform game exception for orientation restrictions on Android 16 large screens while the web UI still adapts to the actual available window.
+The app remains categorized as a game through `android:appCategory="game"`. This preserves game-specific orientation behavior on Android large-screen devices while the web UI still adapts to the actual available window.
 
 The web UI recalculates its visual viewport, safe areas, HUD, and mobile ACTION/PULSE layout after folding, rotation, fullscreen, and system-bar changes.
 
@@ -62,4 +62,4 @@ The app does not call `requestedOrientation` from the activity startup path. Imm
 
 ## Release signing
 
-No Android keystore or password is committed to the repository. A future Google Play AAB release must use a persistent private upload key stored in GitHub Actions secrets, and the first Play Console upload should be reviewed manually.
+The CI debug APK uses a temporary test certificate and is intended only for direct device testing. No persistent Android keystore or password is committed to the repository. A future Google Play AAB release must use a persistent private upload key stored in GitHub Actions secrets, and the first Play Console upload should be reviewed manually.
