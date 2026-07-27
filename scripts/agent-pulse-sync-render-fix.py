@@ -72,8 +72,14 @@ source = replace_once(
 
 source = replace_once(
     source,
-    '    ctx.shadowBlur=24;',
-    '    ctx.shadowBlur=pulseSync?30:24;',
+    '''    ctx.globalAlpha=alpha;
+    ctx.shadowBlur=24;
+    ctx.shadowColor=color;
+''',
+    '''    ctx.globalAlpha=alpha;
+    ctx.shadowBlur=pulseSync?30:24;
+    ctx.shadowColor=color;
+''',
     "drawFx glow",
 )
 
