@@ -1,0 +1,293 @@
+name: Apply PULSE sync renderer fix
+
+on:
+  push:
+    branches:
+      - agent/pulse-sync-hold-swing-visibility
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    if: ${{ !contains(github.event.head_commit.message, '[renderer-patched]') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/pulse-sync-hold-swing-visibility
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply HOLD and SWING visibility fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          game_path = Path('src/game.js')
+          source = game_path.read_text(encoding='utf-8')
+
+          old_swing = '''  function drawSwing(n,t){
+    const link=linkedTraceForSwing(n);
+    if(link){
+      const ratio=clamp((t-link.hitTime)/Math.max(link.duration,.001),0,1);
+      if(ratio<.78)return;
+      ctx.globalAlpha=ratio<1?lerp(.22,.55,clamp((ratio-.78)/.22,0,1)):1;
+    }
+    const color=noteColor(n), dir=n.type==="swingCW"?1:-1;
+    const k=progress(n,t);
+    const r=lerp(outerR, hitR, k);
+    const center=n.angle;
+    const span=Math.PI*.24;
+    const startA=center-dir*span*.5;
+    const amount=dir*span;
+    const linkDir=link?Math.sign(slideDelta(link)||dir):0;
+    const isReversal=!!(link && linkDir && linkDir!==dir);
+
+    drawDirectedArcSegments(r,startA,amount,`rgba(255,255,255,${n===focusNote?.22:.12})`,n===focusNote?NOTE_WIDTHS.swing+4:NOTE_WIDTHS.swing,1,color,n===focusNote?12:6);
+    drawDirectedArcSegments(r,startA,amount,color,n===focusNote?NOTE_WIDTHS.swing+1:NOTE_WIDTHS.swing,n===focusNote?.82:.64,color,n===focusNote?14:7);
+
+    const arrowA=startA+amount;
+    ctx.save();
+    ctx.translate(cx+Math.cos(arrowA)*r,cy+Math.sin(arrowA)*r);
+    ctx.rotate(arrowA + (dir>0 ? Math.PI/2 : -Math.PI/2));
+    ctx.fillStyle="rgba(255,255,255,.94)";
+    ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(-8,-8);ctx.lineTo(-4,0);ctx.lineTo(-8,8);ctx.closePath();ctx.fill();
+    ctx.restore();
+
+    drawRingLabel(isReversal?"REV":(link?"EXIT":(dir>0?"↻":"↺")),center,r+24,isReversal?"rgba(255,114,214,.9)":"rgba(255,255,255,.86)",n===focusNote?18:14);
+    ctx.globalAlpha=1;
+  }
+'''
+
+          new_swing = '''  function drawSwing(n,t){
+    const link=linkedTraceForSwing(n);
+    if(link){
+      const ratio=clamp((t-link.hitTime)/Math.max(link.duration,.001),0,1);
+      if(ratio<.78)return;
+      ctx.globalAlpha=ratio<1?lerp(.22,.55,clamp((ratio-.78)/.22,0,1)):1;
+    }
+    const color=noteColor(n), pulseSync=isPulseSynchronizedNote(n), dir=n.type==="swingCW"?1:-1;
+    const k=progress(n,t);
+    const r=lerp(outerR, hitR, k);
+    const center=n.angle;
+    const span=Math.PI*.24;
+    const startA=center-dir*span*.5;
+    const amount=dir*span;
+    const linkDir=link?Math.sign(slideDelta(link)||dir):0;
+    const isReversal=!!(link && linkDir && linkDir!==dir);
+    const backingColor=pulseSync?colorAlpha(color,n===focusNote?.46:.34):`rgba(255,255,255,${n===focusNote?.22:.12})`;
+    const bodyAlpha=pulseSync?(n===focusNote?1:.94):(n===focusNote?.82:.64);
+
+    drawDirectedArcSegments(r,startA,amount,backingColor,n===focusNote?NOTE_WIDTHS.swing+5:NOTE_WIDTHS.swing+1,1,color,n===focusNote?14:8);
+    drawDirectedArcSegments(r,startA,amount,color,n===focusNote?NOTE_WIDTHS.swing+2:NOTE_WIDTHS.swing+1,bodyAlpha,color,n===focusNote?16:10);
+
+    if(pulseSync){
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.strokeStyle=colorAlpha(color,.96);
+      ctx.lineWidth=2.5;
+      ctx.setLineDash([5,4]);
+      ctx.beginPath();ctx.arc(0,0,r+8,startA,startA+amount,dir<0);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+
+    const arrowA=startA+amount;
+    ctx.save();
+    ctx.translate(cx+Math.cos(arrowA)*r,cy+Math.sin(arrowA)*r);
+    ctx.rotate(arrowA + (dir>0 ? Math.PI/2 : -Math.PI/2));
+    ctx.fillStyle=pulseSync?color:"rgba(255,255,255,.94)";
+    ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(-8,-8);ctx.lineTo(-4,0);ctx.lineTo(-8,8);ctx.closePath();ctx.fill();
+    if(pulseSync){ctx.strokeStyle="#ffffff";ctx.lineWidth=2;ctx.stroke();}
+    ctx.restore();
+
+    const labelColor=pulseSync?color:(isReversal?"rgba(255,114,214,.9)":"rgba(255,255,255,.86)");
+    drawRingLabel(isReversal?"REV":(link?"EXIT":(dir>0?"↻":"↺")),center,r+24,labelColor,n===focusNote?18:14);
+    ctx.globalAlpha=1;
+  }
+'''
+
+          old_fx = '''  function drawFx(n,t){
+    const active=t>=n.hitTime;
+    const color=noteColor(n);
+    const focus=n===focusNote;
+    const k=progress(n,t);
+
+    const headR = active ? hitR : noteR(n,t);
+    const maxOuter = outerR + baseR*.08;
+    const maxLen = baseR*.62;
+    const startLen = Math.min(maxLen, Math.max(28, maxOuter-headR));
+    const holdRatio = active ? clamp(n.hold/n.duration,0,1) : 0;
+    const visibleLen = active ? lerp(startLen,0,holdRatio) : startLen;
+    const tailR = headR + visibleLen;
+    const alpha = active ? (1-holdRatio*.38) : (.22+.78*k);
+
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(n.angle);
+    ctx.globalAlpha=alpha;
+    ctx.shadowBlur=24;
+    ctx.shadowColor=color;
+    ctx.lineCap="round";
+
+    if(visibleLen>0.5){
+      ctx.strokeStyle=colorAlpha(color,active?.92:.72);
+      ctx.lineWidth=focus?NOTE_WIDTHS.hold+4:NOTE_WIDTHS.hold;
+      ctx.beginPath();ctx.moveTo(headR,0);ctx.lineTo(tailR,0);ctx.stroke();
+
+      ctx.strokeStyle="rgba(255,255,255,.62)";
+      ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(headR+12,0);ctx.lineTo(Math.max(headR+12,tailR-12),0);ctx.stroke();
+
+      ctx.fillStyle="#ffffff";
+      ctx.beginPath();ctx.arc(headR,0,focus?14:12,0,TAU);ctx.fill();
+      ctx.strokeStyle="rgba(0,0,0,.45)";ctx.lineWidth=3;ctx.stroke();
+
+      ctx.fillStyle=color;
+      ctx.beginPath();ctx.arc(tailR,0,focus?11:9,0,TAU);ctx.fill();
+      ctx.strokeStyle="#ffffff";ctx.lineWidth=2;ctx.stroke();
+
+      if(visibleLen>34){
+        ctx.fillStyle="#fff";
+        ctx.font="900 12px system-ui";
+        ctx.textAlign="center";
+        ctx.textBaseline="middle";
+        ctx.fillText("START",headR,-18);
+        ctx.fillText("END",tailR,18);
+      }
+    }else{
+      ctx.fillStyle="#ffffff";
+      ctx.beginPath();ctx.arc(headR,0,focus?14:12,0,TAU);ctx.fill();
+      ctx.strokeStyle="rgba(0,0,0,.45)";ctx.lineWidth=3;ctx.stroke();
+    }
+
+    ctx.globalAlpha=1;
+    ctx.restore();
+  }
+'''
+
+          new_fx = '''  function drawFx(n,t){
+    const active=t>=n.hitTime;
+    const color=noteColor(n);
+    const pulseSync=isPulseSynchronizedNote(n);
+    const focus=n===focusNote;
+    const k=progress(n,t);
+
+    const headR = active ? hitR : noteR(n,t);
+    const maxOuter = outerR + baseR*.08;
+    const maxLen = baseR*.62;
+    const startLen = Math.min(maxLen, Math.max(28, maxOuter-headR));
+    const holdRatio = active ? clamp(n.hold/n.duration,0,1) : 0;
+    const visibleLen = active ? lerp(startLen,0,holdRatio) : startLen;
+    const tailR = headR + visibleLen;
+    const alpha = active ? (1-holdRatio*.38) : (.22+.78*k);
+
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(n.angle);
+    ctx.globalAlpha=alpha;
+    ctx.shadowBlur=pulseSync?30:24;
+    ctx.shadowColor=color;
+    ctx.lineCap="round";
+
+    const drawHead=()=>{
+      ctx.fillStyle=pulseSync?color:"#ffffff";
+      ctx.beginPath();ctx.arc(headR,0,focus?14:12,0,TAU);ctx.fill();
+      ctx.strokeStyle=pulseSync?"#ffffff":"rgba(0,0,0,.45)";ctx.lineWidth=3;ctx.stroke();
+      if(pulseSync){
+        ctx.strokeStyle="rgba(255,255,255,.94)";
+        ctx.lineWidth=2;
+        ctx.setLineDash([4,3]);
+        ctx.beginPath();ctx.arc(headR,0,focus?19:17,0,TAU);ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle="#ffffff";
+        ctx.beginPath();ctx.arc(headR,0,4,0,TAU);ctx.fill();
+      }
+    };
+
+    if(visibleLen>0.5){
+      ctx.strokeStyle=colorAlpha(color,pulseSync?(active?.98:.90):(active?.92:.72));
+      ctx.lineWidth=focus?NOTE_WIDTHS.hold+4:NOTE_WIDTHS.hold;
+      ctx.beginPath();ctx.moveTo(headR,0);ctx.lineTo(tailR,0);ctx.stroke();
+
+      ctx.strokeStyle="rgba(255,255,255,.62)";
+      ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(headR+12,0);ctx.lineTo(Math.max(headR+12,tailR-12),0);ctx.stroke();
+
+      drawHead();
+
+      ctx.fillStyle=color;
+      ctx.beginPath();ctx.arc(tailR,0,focus?11:9,0,TAU);ctx.fill();
+      ctx.strokeStyle="#ffffff";ctx.lineWidth=2;ctx.stroke();
+
+      if(visibleLen>34){
+        ctx.fillStyle="#fff";
+        ctx.font="900 12px system-ui";
+        ctx.textAlign="center";
+        ctx.textBaseline="middle";
+        ctx.fillText(pulseSync?"PULSE":"START",headR,-18);
+        ctx.fillText("END",tailR,18);
+      }
+    }else{
+      drawHead();
+    }
+
+    ctx.globalAlpha=1;
+    ctx.restore();
+  }
+'''
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              return text.replace(old, new, 1)
+
+          source = replace_once(source, old_swing, new_swing, 'drawSwing')
+          source = replace_once(source, old_fx, new_fx, 'drawFx')
+          game_path.write_text(source, encoding='utf-8')
+
+          test_path = Path('tests/smoke.test.js')
+          tests = test_path.read_text(encoding='utf-8')
+          old_test = '''  for(const [name,next] of [["drawTrace","linkedTraceForSwing"],["drawSlide","drawFx"],["drawFx","drawScratch"]]){
+    const start=src.indexOf(`  function ${name}(`), end=src.indexOf(`\\n  function ${next}(`,start);
+    const renderer=start>=0&&end>start?src.slice(start,end):"";
+    assert.ok(renderer.includes("noteColor(n)"),name+" uses synchronized color");
+  }
+'''
+          new_test = '''  for(const [name,next] of [["drawTrace","linkedTraceForSwing"],["drawSwing","drawSlide"],["drawSlide","drawFx"],["drawFx","drawScratch"]]){
+    const start=src.indexOf(`  function ${name}(`), end=src.indexOf(`\\n  function ${next}(`,start);
+    const renderer=start>=0&&end>start?src.slice(start,end):"";
+    assert.ok(renderer.includes("noteColor(n)"),name+" uses synchronized color");
+  }
+  const swingStart=src.indexOf("  function drawSwing("), swingEnd=src.indexOf("\\n  function drawSlide(",swingStart);
+  const swingRenderer=src.slice(swingStart,swingEnd);
+  assert.ok(swingRenderer.includes("pulseSync=isPulseSynchronizedNote(n)"),"SWING renderer detects PULSE synchronization");
+  assert.ok(swingRenderer.includes("ctx.fillStyle=pulseSync?color"),"SWING arrow uses directional orange");
+  assert.ok(swingRenderer.includes("ctx.setLineDash([5,4])"),"SWING shows a synchronized dashed accent");
+  const holdStart=src.indexOf("  function drawFx("), holdEnd=src.indexOf("\\n  function drawScratch(",holdStart);
+  const holdRenderer=src.slice(holdStart,holdEnd);
+  assert.ok(holdRenderer.includes("pulseSync=isPulseSynchronizedNote(n)"),"HOLD renderer detects PULSE synchronization");
+  assert.ok(holdRenderer.includes('ctx.fillStyle=pulseSync?color:"#ffffff"'),"HOLD head uses synchronized orange");
+  assert.ok(holdRenderer.includes('ctx.fillText(pulseSync?"PULSE":"START"'),"HOLD labels the synchronized start");
+'''
+          tests = replace_once(tests, old_test, new_test, 'renderer smoke test')
+          test_path.write_text(tests, encoding='utf-8')
+          PY
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Commit renderer fix
+        shell: bash
+        run: |
+          rm .github/workflows/agent-pulse-sync-render-fix.yml
+          git config user.name "circle-mix-agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/game.js tests/smoke.test.js .github/workflows/agent-pulse-sync-render-fix.yml
+          git commit -m "fix: make PULSE-synced HOLD and SWING visibly orange [renderer-patched]"
+          git push origin HEAD:agent/pulse-sync-hold-swing-visibility
