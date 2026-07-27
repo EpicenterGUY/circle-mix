@@ -19,7 +19,7 @@ for(const needle of ["target:'android'",'includeBundledSongs:false','enableServi
 const platform=fs.readFileSync(path.join(out,'src/android-platform.js'),'utf8');
 for(const needle of ['androidBackCallback','foldExpanded','circlemix:viewportchange','ANDROID · READY'])if(!platform.includes(needle))throw new Error(`Android platform bridge is missing ${needle}`);
 const updater=fs.readFileSync(path.join(out,'src/android-updater.js'),'utf8');
-for(const needle of ['api.github.com/repos/EpicenterGUY/circle-mix/releases?per_page=20','CircleMixAndroidUpdaterNative','sha256:','androidUpdateCheck','PackageInstaller'])if(!updater.includes(needle))throw new Error(`Android updater frontend is missing ${needle}`);
+for(const needle of ['api.github.com/repos/EpicenterGUY/circle-mix/releases?per_page=20','CircleMixAndroidUpdaterNative','sha256:','androidUpdateCheck','releaseToUpdate','다운로드 및 설치'])if(!updater.includes(needle))throw new Error(`Android updater frontend is missing ${needle}`);
 const game=fs.readFileSync(path.join(out,'src/game.js'),'utf8');
 if(!game.includes('function checkScratch'))throw new Error('Android app lost legacy SCRATCH chart playback compatibility');
 console.log(`Android distribution audit passed: ${files.length} files.`);
