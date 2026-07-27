@@ -8,12 +8,12 @@ const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 
 test('Android platform configuration uses a fullscreen local-library shell',()=>{
   const config=JSON.parse(read('src-tauri/tauri.android.conf.json'));
-  assert.equal(config.version,'0.9.43');
+  assert.equal(config.version,'0.9.44');
   assert.equal(config.build.frontendDist,'../android-dist');
   assert.equal(config.app.windows[0].fullscreen,true);
   assert.equal(config.app.windows[0].decorations,false);
   assert.equal(config.bundle.android.minSdkVersion,24);
-  assert.equal(config.bundle.android.versionCode,9043);
+  assert.equal(config.bundle.android.versionCode,9044);
 });
 
 test('mobile build gates the Windows updater while retaining a Tauri mobile entrypoint',()=>{
@@ -57,6 +57,19 @@ test('Android startup fails open while the manifest owns auto landscape',()=>{
   assert.match(audit,/NATIVE_STARTUP_FAIL_OPEN/);
 });
 
+test('Android artifact is aligned, signed, identity-checked, and only then uploaded',()=>{
+  const workflow=read('.github/workflows/android-app.yml');
+  assert.match(workflow,/zipalign" -f -p 4/);
+  assert.match(workflow,/keytool -genkeypair -noprompt/);
+  assert.match(workflow,/apksigner" sign/);
+  assert.match(workflow,/apksigner" verify --verbose --print-certs/);
+  assert.match(workflow,/Verified using v2 scheme \(APK Signature Scheme v2\): true/);
+  assert.match(workflow,/circle-mix-0\.9\.44-android-arm64-debug-signed\.apk/);
+  assert.match(workflow,/versionCode='9044' versionName='0\.9\.44'/);
+  assert.match(workflow,/sha256sum "\$FINAL_APK"/);
+  assert.doesNotMatch(workflow,/cp "\$APK" artifacts\/android/,'unsigned build output must not be copied directly');
+});
+
 test('Android distribution, native patch, icon generation, and APK workflow stay wired together',()=>{
   const packageJson=JSON.parse(read('package.json'));
   const prepare=read('scripts/prepare-android.js');
@@ -65,8 +78,8 @@ test('Android distribution, native patch, icon generation, and APK workflow stay
   const projectAudit=read('scripts/audit-android-project.js');
   const workflow=read('.github/workflows/android-app.yml');
   for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  assert.match(prepare,/ANDROID_VERSION='0\.9\.43'/);
-  assert.match(prepare,/ANDROID LANDSCAPE HOTFIX/);
+  assert.match(prepare,/ANDROID_VERSION='0\.9\.44'/);
+  assert.match(prepare,/ANDROID SIGNED LANDSCAPE HOTFIX/);
   assert.match(distAudit,/data:audio\//,'distribution audit rejects embedded audio');
   for(const needle of ['android:appCategory','sensorLandscape','FLAG_KEEP_SCREEN_ON','androidBackCallback','NATIVE_STARTUP_FAIL_OPEN'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
   assert.doesNotMatch(patch,/import app\.tauri\.TauriActivity/);
@@ -83,8 +96,6 @@ test('Android distribution, native patch, icon generation, and APK workflow stay
   assert.match(workflow,/test -f src-tauri\/icons\/icon\.png/);
   assert.match(workflow,/@tauri-apps\/cli@\$TAURI_CLI_VERSION android init --ci --skip-targets-install/);
   assert.match(workflow,/@tauri-apps\/cli@\$TAURI_CLI_VERSION android build --debug --apk --target aarch64 --ci/);
-  assert.match(workflow,/circle-mix-0\.9\.43-android-arm64-debug\.apk/);
-  assert.match(workflow,/versionCode='9043' versionName='0\.9\.43'/);
   assert.match(workflow,/circle-mix-android-arm64-debug/);
   assert.doesNotMatch(workflow,/KEYSTORE_PASSWORD|SIGNING_PRIVATE_KEY|base64.*keystore/i);
 });
