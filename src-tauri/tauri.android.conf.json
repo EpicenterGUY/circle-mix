@@ -1,5 +1,5 @@
 {
-  "version": "0.9.44",
+  "version": "0.9.45",
   "build": {
     "frontendDist": "../android-dist",
     "beforeDevCommand": "npm run android:prepare",
@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
+      "csp": "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://api.github.com"
     }
   },
   "bundle": {
@@ -32,7 +32,7 @@
     ],
     "android": {
       "minSdkVersion": 24,
-      "versionCode": 9044
+      "versionCode": 9045
     }
   }
 }
