@@ -7,8 +7,8 @@ const {execFileSync}=require('child_process');
 const root=path.resolve(__dirname,'..');
 const desktopOut=path.join(root,'desktop-dist');
 const out=path.join(root,'android-dist');
-const ANDROID_VERSION='0.9.41';
-const ANDROID_BUILD_DATE='2026-07-26';
+const ANDROID_VERSION='0.9.44';
+const ANDROID_BUILD_DATE='2026-07-27';
 
 function run(script){execFileSync(process.execPath,[path.join(root,script)],{cwd:root,stdio:'inherit'});}
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
@@ -33,11 +33,11 @@ fs.writeFileSync(path.join(out,'src/build-config.js'),androidSeed+sharedBootstra
 
 const androidRelease=`(function(){
   "use strict";
-  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID APP FOUNDATION",summary:"CIRCLE MIX를 폴더블 대응 Android 앱으로 실행할 수 있는 네이티브 기반을 추가했습니다.",changes:[
-    {category:"ANDROID",text:"로컬 .cmix 라이브러리를 사용하는 저작권 안전 Android 앱 셸을 추가했습니다."},
-    {category:"FOLD",text:"폴드 내부 화면이 펼쳐지면 가로 화면을 우선 요청하고 화면 크기 변화에 맞춰 UI를 다시 배치합니다."},
-    {category:"NATIVE",text:"전체 화면, 화면 꺼짐 방지와 Android 뒤로가기 처리를 앱에서 직접 담당합니다."},
-    {category:"INPUT",text:"모바일 ACTION·PULSE 버튼 위치와 기존 플레이 설정을 그대로 사용합니다."}
+  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID SIGNED LANDSCAPE HOTFIX",summary:"자동 가로 화면 수정판을 설치 가능한 서명 APK로 다시 배포했습니다.",changes:[
+    {category:"INSTALL",text:"APK를 zipalign 후 디버그 인증서로 서명하고 apksigner 검증을 통과한 파일만 배포합니다."},
+    {category:"ORIENTATION",text:"접힌 외부 화면과 펼친 내부 화면 모두 sensor landscape를 사용합니다."},
+    {category:"STABILITY",text:"실행 중 requestedOrientation을 호출하지 않아 시작 크래시 방지 구조를 유지합니다."},
+    {category:"FOLD",text:"회전·접힘·펼침 후 화면 크기에 맞춰 게임 UI와 모바일 버튼을 다시 배치합니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
   const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];

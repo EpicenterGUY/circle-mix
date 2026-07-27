@@ -1,18 +1,19 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const path=require('node:path');
+const fs=require('fs');
+const path=require('path');
 const Android=require('../src/android-platform');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 
 test('Android platform configuration uses a fullscreen local-library shell',()=>{
   const config=JSON.parse(read('src-tauri/tauri.android.conf.json'));
+  assert.equal(config.version,'0.9.44');
   assert.equal(config.build.frontendDist,'../android-dist');
   assert.equal(config.app.windows[0].fullscreen,true);
   assert.equal(config.app.windows[0].decorations,false);
   assert.equal(config.bundle.android.minSdkVersion,24);
-  assert.equal(config.bundle.android.versionCode,9041);
+  assert.equal(config.bundle.android.versionCode,9044);
 });
 
 test('mobile build gates the Windows updater while retaining a Tauri mobile entrypoint',()=>{
@@ -41,6 +42,34 @@ test('fold viewport classification and Android back policy are deterministic',()
   assert.equal(backClicks,1);
 });
 
+test('Android startup fails open while the manifest owns auto landscape',()=>{
+  const patch=read('scripts/patch-android-project.js');
+  const audit=read('scripts/audit-android-project.js');
+  for(const needle of ['NATIVE_STARTUP_FAIL_OPEN','nativeStartupStep','window.decorView.post','Log.e("CircleMix"','FLAG_KEEP_SCREEN_ON','BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE','LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES']){
+    assert.ok(patch.includes(needle),`native patch contains ${needle}`);
+  }
+  assert.doesNotMatch(patch,/SCREEN_ORIENTATION_SENSOR_LANDSCAPE/);
+  assert.doesNotMatch(patch,/requestedOrientation\s*=/);
+  assert.match(patch,/android:screenOrientation','sensorLandscape'/);
+  assert.match(patch,/android:appCategory','game'/);
+  assert.match(audit,/must not change orientation through the startup runtime path/);
+  assert.match(audit,/android:screenOrientation="sensorLandscape"/);
+  assert.match(audit,/NATIVE_STARTUP_FAIL_OPEN/);
+});
+
+test('Android artifact is aligned, signed, identity-checked, and only then uploaded',()=>{
+  const workflow=read('.github/workflows/android-app.yml');
+  assert.match(workflow,/zipalign" -f -p 4/);
+  assert.match(workflow,/keytool -genkeypair -noprompt/);
+  assert.match(workflow,/apksigner" sign/);
+  assert.match(workflow,/apksigner" verify --verbose --print-certs/);
+  assert.match(workflow,/Verified using v2 scheme \(APK Signature Scheme v2\): true/);
+  assert.match(workflow,/circle-mix-0\.9\.44-android-arm64-debug-signed\.apk/);
+  assert.match(workflow,/versionCode='9044' versionName='0\.9\.44'/);
+  assert.match(workflow,/sha256sum "\$FINAL_APK"/);
+  assert.doesNotMatch(workflow,/cp "\$APK" artifacts\/android/,'unsigned build output must not be copied directly');
+});
+
 test('Android distribution, native patch, icon generation, and APK workflow stay wired together',()=>{
   const packageJson=JSON.parse(read('package.json'));
   const prepare=read('scripts/prepare-android.js');
@@ -49,8 +78,10 @@ test('Android distribution, native patch, icon generation, and APK workflow stay
   const projectAudit=read('scripts/audit-android-project.js');
   const workflow=read('.github/workflows/android-app.yml');
   for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+  assert.match(prepare,/ANDROID_VERSION='0\.9\.44'/);
+  assert.match(prepare,/ANDROID SIGNED LANDSCAPE HOTFIX/);
   assert.match(distAudit,/data:audio\//,'distribution audit rejects embedded audio');
-  for(const needle of ['SCREEN_ORIENTATION_SENSOR_LANDSCAPE','smallestScreenWidthDp >= 600','android:appCategory','FLAG_KEEP_SCREEN_ON','androidBackCallback'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
+  for(const needle of ['android:appCategory','sensorLandscape','FLAG_KEEP_SCREEN_ON','androidBackCallback','NATIVE_STARTUP_FAIL_OPEN'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
   assert.doesNotMatch(patch,/import app\.tauri\.TauriActivity/);
   assert.match(patch,/setGradleSdk\(gradle,'compileSdk',36\)/);
   assert.match(patch,/setGradleSdk\(gradle,'minSdk',24\)/);

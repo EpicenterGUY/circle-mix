@@ -79,7 +79,7 @@ jobs:
           path: artifacts/android-patch/
           if-no-files-found: warn
           retention-days: 14
-      - name: Build installable ARM64 debug APK
+      - name: Build ARM64 debug APK
         shell: bash
         run: |
           mkdir -p artifacts/android-build
@@ -93,16 +93,40 @@ jobs:
           path: artifacts/android-build/
           if-no-files-found: warn
           retention-days: 14
-      - name: Verify APK identity and SDK level
+      - name: Align, sign, and verify installable APK
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p artifacts/android
-          APK="$(find src-tauri/gen/android -type f -path '*/outputs/apk/*' -name '*.apk' | head -n 1)"
-          test -n "$APK" && test -f "$APK"
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | tee artifacts/android/badging.txt
-          grep -q "package: name='com.epicenterguy.circlemix'" artifacts/android/badging.txt
+          SOURCE_APK="$(find src-tauri/gen/android -type f -path '*/outputs/apk/*' -name '*.apk' -printf '%s %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)"
+          test -n "$SOURCE_APK" && test -f "$SOURCE_APK"
+          ALIGNED_APK="$RUNNER_TEMP/circle-mix-0.9.44-aligned.apk"
+          FINAL_APK="artifacts/android/circle-mix-0.9.44-android-arm64-debug-signed.apk"
+          KEYSTORE="$RUNNER_TEMP/circle-mix-debug.keystore"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -f -p 4 "$SOURCE_APK" "$ALIGNED_APK"
+          keytool -genkeypair -noprompt \
+            -keystore "$KEYSTORE" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -dname "CN=Android Debug,O=CIRCLE MIX,C=KR" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign \
+            --ks "$KEYSTORE" \
+            --ks-key-alias androiddebugkey \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out "$FINAL_APK" \
+            "$ALIGNED_APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$FINAL_APK" | tee artifacts/android/signature.txt
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -p 4 "$FINAL_APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$FINAL_APK" | tee artifacts/android/badging.txt
+          grep -q "package: name='com.epicenterguy.circlemix' versionCode='9044' versionName='0.9.44'" artifacts/android/badging.txt
           grep -q "targetSdkVersion:'36'" artifacts/android/badging.txt
-          cp "$APK" artifacts/android/circle-mix-0.9.41-android-arm64-debug.apk
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" artifacts/android/signature.txt
+          sha256sum "$FINAL_APK" | tee artifacts/android/sha256.txt
       - uses: actions/upload-artifact@v4
         with:
           name: circle-mix-android-arm64-debug

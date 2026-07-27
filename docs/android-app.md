@@ -1,6 +1,6 @@
 # CIRCLE MIX Android app
 
-CIRCLE MIX Android v1 reuses the existing HTML/JavaScript game through Tauri 2 and adds a native Android shell for foldable orientation, immersive fullscreen, screen-on behavior, and system back navigation.
+CIRCLE MIX Android v1 reuses the existing HTML/JavaScript game through Tauri 2 and adds a native Android shell for foldable viewport handling, automatic landscape play, immersive fullscreen, screen-on behavior, and system back navigation.
 
 ## Distribution policy
 
@@ -31,32 +31,35 @@ npm run android:dev
 npm run android:build:apk
 ```
 
-The GitHub workflow builds an installable ARM64 debug APK and publishes it as the `circle-mix-android-arm64-debug` workflow artifact. A debug APK is intended for direct testing and sideloading; it is not the final Google Play release package.
+The GitHub workflow builds an ARM64 debug APK, aligns it with `zipalign`, signs it with an ephemeral debug certificate, and rejects the artifact unless `apksigner verify` succeeds. Only the verified signed APK is published in the `circle-mix-android-arm64-debug` workflow artifact.
 
-Install a downloaded APK with ADB:
+Install the 0.9.44 signed landscape hotfix APK with ADB:
 
 ```bash
-adb install -r circle-mix-0.9.41-android-arm64-debug.apk
+adb install -r circle-mix-0.9.44-android-arm64-debug-signed.apk
 ```
 
-## Foldable behavior
+The ephemeral CI debug certificate can differ between workflow runs. If Android reports an update-incompatible signature, uninstall the previous CIRCLE MIX debug app before installing the replacement. Uninstalling clears app-local settings and imported LOCAL data unless backed up first.
 
-The native activity watches Android configuration changes. A wide internal display requests sensor-based landscape when one of these conditions is met:
+## Foldable and orientation behavior
 
-- `smallestScreenWidthDp >= 600`, or
-- longest side is at least 720 dp and shortest side is at least 480 dp.
+The activity manifest requests `sensorLandscape`, so CIRCLE MIX automatically enters either landscape direction on both the folded outer display and the expanded inner display. Android can choose the landscape side that matches the device sensor.
 
-A folded phone-sized display returns orientation control to the device. The web UI also recalculates its visual viewport, safe areas, HUD, and mobile ACTION/PULSE layout after folding, rotation, and system-bar changes.
+The app remains categorized as a game through `android:appCategory="game"`. This preserves game-specific orientation behavior on Android large-screen devices while the web UI still adapts to the actual available window.
 
-Android can override requested orientation on some large-screen configurations, so both portrait and landscape layouts remain supported.
+The web UI recalculates its visual viewport, safe areas, HUD, and mobile ACTION/PULSE layout after folding, rotation, fullscreen, and system-bar changes.
+
+## Crash-safe native startup
+
+The app does not call `requestedOrientation` from the activity startup path. Immersive system bars, display-cutout handling, keep-screen-on behavior, WebView options, and Android Back registration are treated as optional enhancements. Each native startup step is isolated and logged with `NATIVE_STARTUP_FAIL_OPEN`; a manufacturer-specific failure in one enhancement must not terminate the activity.
 
 ## Native controls
 
-- System bars are hidden in immersive mode and can temporarily appear with an edge swipe.
-- The display stays awake while CIRCLE MIX is open.
+- System bars are hidden in immersive mode and can temporarily appear with an edge swipe when the device supports it.
+- The display stays awake while CIRCLE MIX is open when the platform accepts the flag.
 - Android Back closes the current layout editor, settings, result, pause, tutorial, or song-select layer before exiting.
 - The app exits only when Back is pressed from the top-level title screen.
 
 ## Release signing
 
-No Android keystore or password is committed to the repository. A future Google Play AAB release must use a persistent private upload key stored in GitHub Actions secrets, and the first Play Console upload should be reviewed manually.
+The CI debug APK uses a temporary test certificate and is intended only for direct device testing. No persistent Android keystore or password is committed to the repository. A future Google Play AAB release must use a persistent private upload key stored in GitHub Actions secrets, and the first Play Console upload should be reviewed manually.
