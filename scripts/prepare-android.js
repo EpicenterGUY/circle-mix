@@ -7,7 +7,7 @@ const {execFileSync}=require('child_process');
 const root=path.resolve(__dirname,'..');
 const desktopOut=path.join(root,'desktop-dist');
 const out=path.join(root,'android-dist');
-const ANDROID_VERSION='0.9.44';
+const ANDROID_VERSION='0.9.45';
 const ANDROID_BUILD_DATE='2026-07-27';
 
 function run(script){execFileSync(process.execPath,[path.join(root,script)],{cwd:root,stdio:'inherit'});}
@@ -19,25 +19,25 @@ fs.rmSync(out,{recursive:true,force:true});
 fs.cpSync(desktopOut,out,{recursive:true});
 
 for(const file of ['src/desktop-release.js','src/desktop-updater.js'])fs.rmSync(path.join(out,file),{force:true});
-fs.copyFileSync(path.join(root,'src/android-platform.js'),path.join(out,'src/android-platform.js'));
+for(const file of ['src/android-platform.js','src/android-updater.js'])fs.copyFileSync(path.join(root,file),path.join(out,file));
 
 let index=fs.readFileSync(path.join(out,'index.html'),'utf8').replace(/\r\n/g,'\n');
 index=replaceOrThrow(index,'<script src="./src/desktop-release.js"></script>','<script src="./src/android-release.js"></script>','replace desktop release metadata');
-index=replaceOrThrow(index,'<script src="./src/desktop-updater.js"></script>','<script src="./src/android-platform.js"></script>','inject the Android platform bridge');
+index=replaceOrThrow(index,'<script src="./src/desktop-updater.js"></script>','<script src="./src/android-platform.js"></script>\n<script src="./src/android-updater.js"></script>','inject the Android platform and updater bridges');
 if(index.includes('desktop-updater.js')||index.includes('desktop-release.js'))throw new Error('Android index still loads desktop-only scripts.');
 fs.writeFileSync(path.join(out,'index.html'),index);
 
 const sharedBootstrap=fs.readFileSync(path.join(root,'src/build-config.js'),'utf8');
-const androidSeed="window.CircleMixBuildConfig={target:'android',includeBundledSongs:false,enableServiceWorker:false,enablePwaInstallUi:false,enableSignedUpdater:false,nativeAndroid:true};\n";
+const androidSeed="window.CircleMixBuildConfig={target:'android',includeBundledSongs:false,enableServiceWorker:false,enablePwaInstallUi:false,enableSignedUpdater:true,enableAndroidUpdater:true,nativeAndroid:true};\n";
 fs.writeFileSync(path.join(out,'src/build-config.js'),androidSeed+sharedBootstrap);
 
 const androidRelease=`(function(){
   "use strict";
-  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID SIGNED LANDSCAPE HOTFIX",summary:"자동 가로 화면 수정판을 설치 가능한 서명 APK로 다시 배포했습니다.",changes:[
-    {category:"INSTALL",text:"APK를 zipalign 후 디버그 인증서로 서명하고 apksigner 검증을 통과한 파일만 배포합니다."},
-    {category:"ORIENTATION",text:"접힌 외부 화면과 펼친 내부 화면 모두 sensor landscape를 사용합니다."},
-    {category:"STABILITY",text:"실행 중 requestedOrientation을 호출하지 않아 시작 크래시 방지 구조를 유지합니다."},
-    {category:"FOLD",text:"회전·접힘·펼침 후 화면 크기에 맞춰 게임 UI와 모바일 버튼을 다시 배치합니다."}
+  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID AUTO UPDATE",summary:"GitHub Releases 기반 Android 앱 업데이트 확인과 안전한 APK 설치 흐름을 추가했습니다.",changes:[
+    {category:"UPDATE",text:"앱 실행 시 최신 Android Release를 확인하고 설정의 시스템 카테고리에서도 수동 확인할 수 있습니다."},
+    {category:"VERIFY",text:"GitHub Release asset의 SHA-256 digest와 다운로드한 APK를 대조한 뒤에만 설치를 진행합니다."},
+    {category:"INSTALL",text:"Android PackageInstaller를 사용하며 최초 한 번은 ‘이 출처의 앱 설치 허용’ 승인이 필요합니다."},
+    {category:"SIGNING",text:"정식 업데이트 Release는 GitHub Secrets에 저장된 동일한 영구 서명키로만 게시합니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
   const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];
@@ -65,5 +65,5 @@ fs.writeFileSync(path.join(out,'src/pwa.js'),androidPwa);
 
 const forbidden=['src/desktop-release.js','src/desktop-updater.js','service-worker.js','manifest.webmanifest'];
 for(const relative of forbidden)if(fs.existsSync(path.join(out,relative)))throw new Error(`Android distribution contains forbidden file: ${relative}`);
-for(const required of ['index.html','src/android-release.js','src/android-platform.js','src/build-config.js','src/pwa.js','src/mobile-layout-v2.js','mobile-layout-v2.css'])if(!fs.existsSync(path.join(out,required)))throw new Error(`Android distribution is missing ${required}`);
+for(const required of ['index.html','src/android-release.js','src/android-platform.js','src/android-updater.js','src/build-config.js','src/pwa.js','src/mobile-layout-v2.js','mobile-layout-v2.css'])if(!fs.existsSync(path.join(out,required)))throw new Error(`Android distribution is missing ${required}`);
 console.log(`Prepared copyright-safe android-dist v${ANDROID_VERSION}.`);

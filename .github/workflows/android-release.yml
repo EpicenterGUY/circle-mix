@@ -1,0 +1,145 @@
+name: Publish Android release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-production-release
+  cancel-in-progress: false
+
+jobs:
+  release-arm64-apk:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: android-release
+    env:
+      NDK_VERSION: 27.2.12479018
+      TAURI_CLI_VERSION: 2.11.4
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Require persistent Android signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          test -n "$ANDROID_KEY_PASSWORD"
+      - name: Install Android SDK and resolve NDK
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          NDK_DIR="${ANDROID_NDK_LATEST_HOME:-}"
+          if [ ! -d "$NDK_DIR" ]; then
+            sdkmanager "ndk;$NDK_VERSION"
+            NDK_DIR="$ANDROID_HOME/ndk/$NDK_VERSION"
+          fi
+          test -d "$NDK_DIR"
+          echo "ANDROID_NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$NDK_DIR" >> "$GITHUB_ENV"
+      - name: Install dependencies and verify repository
+        run: npm ci && npm test
+      - name: Generate icons and initialize Android project
+        shell: bash
+        run: |
+          npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION icon src-tauri/app-icon.svg -o src-tauri/icons
+          npm run android:prepare
+          npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION android init --ci --skip-targets-install
+          npm run android:patch
+          npm run android:audit
+      - name: Build unsigned ARM64 release APK
+        shell: bash
+        run: npx --yes @tauri-apps/cli@$TAURI_CLI_VERSION android build --apk --target aarch64 --ci
+      - name: Sign and verify production APK
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/android-release
+          VERSION="$(node -p "require('./src-tauri/tauri.android.conf.json').version")"
+          VERSION_CODE="$(node -p "require('./src-tauri/tauri.android.conf.json').bundle.android.versionCode")"
+          TAG="android-v$VERSION"
+          SOURCE_APK="$(find src-tauri/gen/android -type f -path '*/outputs/apk/*' -name '*.apk' ! -name '*debug*' -printf '%s %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)"
+          test -n "$SOURCE_APK" && test -f "$SOURCE_APK"
+          KEYSTORE="$RUNNER_TEMP/circle-mix-release.keystore"
+          ALIGNED_APK="$RUNNER_TEMP/circle-mix-$VERSION-release-aligned.apk"
+          FINAL_APK="artifacts/android-release/circle-mix-$VERSION-android-arm64-release.apk"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -f -p 4 "$SOURCE_APK" "$ALIGNED_APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign \
+            --ks "$KEYSTORE" \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --key-pass env:ANDROID_KEY_PASSWORD \
+            --out "$FINAL_APK" \
+            "$ALIGNED_APK"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$FINAL_APK" | tee artifacts/android-release/signature.txt
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -p 4 "$FINAL_APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$FINAL_APK" | tee artifacts/android-release/badging.txt
+          grep -q "package: name='com.epicenterguy.circlemix' versionCode='$VERSION_CODE' versionName='$VERSION'" artifacts/android-release/badging.txt
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" artifacts/android-release/signature.txt
+          sha256sum "$FINAL_APK" | tee artifacts/android-release/sha256.txt
+          cat > artifacts/android-release/release-notes.md <<EOF
+          CIRCLE MIX Android $VERSION
+
+          - 앱 실행 시 Android 릴리스 업데이트 확인
+          - APK 다운로드 후 SHA-256 무결성 검증
+          - Android PackageInstaller를 통한 사용자 승인 업데이트
+          - 접힘·펼침 자동 가로화면 및 통합 설정 허브 포함
+
+          0.9.44 테스트 APK는 임시 인증서로 서명되었으므로 이번 정식 서명판은 최초 한 번 기존 앱 삭제 후 설치가 필요할 수 있습니다. 이후 Android 릴리스는 같은 영구 키로 서명되어 앱 데이터와 LOCAL 채보를 유지한 채 덮어쓸 수 있습니다.
+          EOF
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "apk=$FINAL_APK" >> "$GITHUB_OUTPUT"
+      - name: Publish Android GitHub Release without replacing desktop latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.package.outputs.tag }}"
+          VERSION="${{ steps.package.outputs.version }}"
+          APK="${{ steps.package.outputs.apk }}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to replace a signed release." >&2
+            exit 1
+          fi
+          BODY="$(cat artifacts/android-release/release-notes.md)"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/releases" \
+            -f tag_name="$TAG" \
+            -f target_commitish="$GITHUB_SHA" \
+            -f name="CIRCLE MIX Android $VERSION" \
+            -f body="$BODY" \
+            -F draft=false \
+            -F prerelease=false \
+            -f make_latest=false >/dev/null
+          gh release upload "$TAG" "$APK" artifacts/android-release/sha256.txt --repo "$GITHUB_REPOSITORY"
+          EXPECTED="sha256:$(cut -d' ' -f1 artifacts/android-release/sha256.txt)"
+          ACTUAL="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.assets[] | select(.name | endswith("-android-arm64-release.apk")) | .digest')"
+          test "$ACTUAL" = "$EXPECTED"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: circle-mix-android-production-release
+          path: artifacts/android-release/
+          if-no-files-found: error
+          retention-days: 30
