@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>CIRCLE MIX Chart Editor</title>
-<link rel="stylesheet" href="./src/editor.css?v=20260726-unified-settings-mobile-layout-v2" />
+<link rel="stylesheet" href="./src/editor.css?v=20260728-editor-playtest-v1" />
 </head>
 <body>
 <header class="topbar">
@@ -51,6 +51,16 @@
       <label class="check"><input id="loop" type="checkbox" /> loop ±4s</label>
       <label class="check"><input id="metro" type="checkbox" /> metronome</label>
     </div>
+    <section class="playtestPanel" aria-labelledby="playtestTitle">
+      <div class="playtestHead"><div><strong id="playtestTitle">DIRECT PLAYTEST</strong><small>현재 편집본을 LOCAL SONGS에 저장한 뒤 공식 게임 판정으로 바로 테스트합니다. 아래 값은 테스트에만 적용되며 .cmix에는 저장되지 않습니다.</small></div><button id="playtestBtn" type="button">SAVE &amp; OPEN PLAYTEST</button></div>
+      <div class="playtestControls">
+        <label>Judgement <select id="playtestJudge"><option value="STRICT">STRICT</option><option value="NORMAL" selected>NORMAL</option><option value="LENIENT">LENIENT</option></select></label>
+        <label>Judge circle <input id="playtestRing" type="range" min="0.75" max="1.15" step="0.05" value="1" /><output id="playtestRingValue">1.00x</output></label>
+        <label>Note size <input id="playtestNoteScale" type="range" min="0.80" max="1.40" step="0.05" value="1" /><output id="playtestNoteScaleValue">1.00x</output></label>
+        <label>Approach <input id="playtestApproach" type="range" min="0.34" max="1.10" step="0.02" value="0.60" /><output id="playtestApproachValue">0.60s</output></label>
+      </div>
+      <div id="playtestSummary" class="playtestSummary">NORMAL · RING 1.00x · NOTE 1.00x · APPROACH 0.60s</div>
+    </section>
     <div class="timeline" id="timeline"><canvas id="timelineCanvas" height="160"></canvas></div>
   </section>
   <aside class="panel tools">
@@ -76,17 +86,18 @@
   </aside>
 </main>
 <audio id="audio" preload="metadata"></audio>
-<script src="./src/song-record.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/song-package-adapter.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/local-library.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/chart-difficulty.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/chart-feasibility.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/songs.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/cmix-validator.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/cmix-audio.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/cmix-zip.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/cmix-exporter.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/editor.js?v=20260726-unified-settings-mobile-layout-v2"></script>
-<script src="./src/editor-feasibility.js?v=20260726-unified-settings-mobile-layout-v2"></script>
+<script src="./src/song-record.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/song-package-adapter.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/local-library.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/chart-difficulty.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/chart-feasibility.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/songs.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/cmix-validator.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/cmix-audio.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/cmix-zip.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/cmix-exporter.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/editor-playtest.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/editor.js?v=20260728-editor-playtest-v1"></script>
+<script src="./src/editor-feasibility.js?v=20260728-editor-playtest-v1"></script>
 </body>
 </html>

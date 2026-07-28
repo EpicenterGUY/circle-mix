@@ -49,6 +49,7 @@ const APP_SHELL_URLS = [
   versioned("./src/cmix-importer.js"),
   versioned("./src/cmix-local-install.js"),
   versioned("./src/cmix-import-ui.js"),
+  versioned("./src/editor-playtest.js"),
   versioned("./src/editor.js"),
   versioned("./src/editor-feasibility.js"),
   versioned("./src/pwa.js")
