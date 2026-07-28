@@ -36,6 +36,10 @@ test("editor playtest is wired into editor, game, offline shell and packages",()
   assert.match(game,/editorPlaytestSession/);
   assert.match(game,/EDITOR_PLAYTEST_JUDGEMENT_SCALE/);
   assert.match(game,/hitR = baseR \* EDITOR_PLAYTEST_HIT_RADIUS_SCALE/);
+  assert.match(game,/const recordInfo=editorPlaytestSession \? \{playtest:true/);
+  assert.match(game,/if\(!editorPlaytestSession\)\{ try\{ localStorage\.setItem\("circleMixPlayCount\.v1"/);
+  assert.match(game,/EDITOR PLAYTEST · RECORD NOT SAVED/);
+  assert.match(game,/PLAYTEST RESULT · OFFICIAL RECORDS UNCHANGED/);
   assert.match(index,/editor-playtest\.js[\s\S]*game\.js/);
   assert.match(sw,/src\/editor-playtest\.js/);
   assert.ok(pkg.scripts.test.includes("tests/editor-playtest.test.js"));

@@ -4557,14 +4557,17 @@ activePath.autoTraceProgress=progress;
     if(resultMaxCombo) resultMaxCombo.textContent=result.maxCombo;
     if(resultTotalNotes) resultTotalNotes.textContent=result.totalNotes;
     if(resultMapLevel) resultMapLevel.textContent=`${result.difficultyLabel || getActiveDifficultyLabel(selectedSong,result.difficulty)} ${result.starLevel}`;
-    if(resultPower) resultPower.textContent=result.autoPlay ? "AUTO — NO POWER" : (result.power !== null ? `POWER ${result.power}` : "POWER ---");
-    if(resultAuto) resultAuto.textContent=result.autoPlay ? "AUTO PLAY RESULT" : "PLAYER RESULT";
-    if(resultNewRecord) resultNewRecord.textContent=recordInfo?.newPowerRecord ? "NEW POWER RECORD" : (recordInfo?.newRecord ? "NEW RECORD" : "");
+    if(resultPower) resultPower.textContent=editorPlaytestSession ? "PLAYTEST — NO POWER" : (result.autoPlay ? "AUTO — NO POWER" : (result.power !== null ? `POWER ${result.power}` : "POWER ---"));
+    if(resultAuto) resultAuto.textContent=editorPlaytestSession ? "EDITOR PLAYTEST · RECORD NOT SAVED" : (result.autoPlay ? "AUTO PLAY RESULT" : "PLAYER RESULT");
+    if(resultNewRecord) resultNewRecord.textContent=editorPlaytestSession ? "" : (recordInfo?.newPowerRecord ? "NEW POWER RECORD" : (recordInfo?.newRecord ? "NEW RECORD" : ""));
     if(resultBest){
-      const best=recordInfo?.newRecord ? {bestScore:result.finalScore,bestRank:result.rank,bestAccuracy:result.accuracyRatio,bestPower:recordInfo?.newPowerRecord ? result.power : recordInfo?.previous?.bestPower} : (recordInfo?.newPowerRecord ? {...(recordInfo?.previous||{}), bestPower:result.power} : recordInfo?.previous);
-      resultBest.textContent=best ? `BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")} / POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"} / ${best.bestRank || "---"} / ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}` : (result.autoPlay ? "AUTO PLAY is not saved" : "NO RECORD");
+      if(editorPlaytestSession) resultBest.textContent="PLAYTEST RESULT · OFFICIAL RECORDS UNCHANGED";
+      else{
+        const best=recordInfo?.newRecord ? {bestScore:result.finalScore,bestRank:result.rank,bestAccuracy:result.accuracyRatio,bestPower:recordInfo?.newPowerRecord ? result.power : recordInfo?.previous?.bestPower} : (recordInfo?.newPowerRecord ? {...(recordInfo?.previous||{}), bestPower:result.power} : recordInfo?.previous);
+        resultBest.textContent=best ? `BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")} / POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"} / ${best.bestRank || "---"} / ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}` : (result.autoPlay ? "AUTO PLAY is not saved" : "NO RECORD");
+      }
     }
-    if(resultOverlay){ resultOverlay.classList.toggle("newRecord", !!(recordInfo?.newRecord || recordInfo?.newPowerRecord)); resultOverlay.classList.add("show"); }
+    if(resultOverlay){ resultOverlay.classList.toggle("newRecord", !editorPlaytestSession && !!(recordInfo?.newRecord || recordInfo?.newPowerRecord)); resultOverlay.classList.add("show"); }
     notifyPwaGameplay();
     animateResultScore(result.finalScore);
   }
@@ -4577,9 +4580,9 @@ activePath.autoTraceProgress=progress;
     notifyPwaGameplay();
     const result=buildResultData();
     if(!result){ alert("결과를 계산할 수 없습니다. 채보가 비어 있거나 잘못되었습니다."); exitToMenu(); return; }
-    const recordInfo=saveBestRecord(result);
+    const recordInfo=editorPlaytestSession ? {playtest:true,newRecord:false,newPowerRecord:false,previous:null} : saveBestRecord(result);
     showResult(result, recordInfo);
-    try{ localStorage.setItem("circleMixPlayCount.v1", String(Number(localStorage.getItem("circleMixPlayCount.v1")||0)+1)); }catch(e){}
+    if(!editorPlaytestSession){ try{ localStorage.setItem("circleMixPlayCount.v1", String(Number(localStorage.getItem("circleMixPlayCount.v1")||0)+1)); }catch(e){} }
     updateButtons();
   }
 
