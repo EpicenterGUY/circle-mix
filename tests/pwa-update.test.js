@@ -17,7 +17,7 @@ test("release metadata loads in both window and service worker contexts", () => 
   vm.createContext(browser);
   vm.runInContext(versionSource, browser, {filename:"src/version.js"});
   assert.equal(browser.window.CircleMixVersion.version, "0.9.32");
-  assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260726-unified-settings-mobile-layout-v2");
+  assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260728-editor-playtest-v1");
   assert.equal(Object.isFrozen(browser.window.CircleMixVersion), true);
 
   const worker = {self:{}};
@@ -38,6 +38,7 @@ test("PWA and service worker consume the shared release metadata", () => {
   assert.doesNotMatch(serviceWorkerSource, /const VERSION\s*=\s*["'][0-9]/);
   assert.match(serviceWorkerSource, /cacheRevision/);
   assert.match(serviceWorkerSource, /versioned\("\.\/src\/game\.js"\)/);
+  assert.match(serviceWorkerSource, /versioned\("\.\/src\/editor-playtest\.js"\)/);
   assert.match(changelogSource, /window\.CircleMixChangelog\s*=\s*\[\s*\{ version: "0\.9\.32"/);
   assert.match(changelogSource, /AIM FLOW & PULSE GUIDANCE/);
 });
