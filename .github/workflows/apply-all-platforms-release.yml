@@ -46,14 +46,15 @@ jobs:
           path: artifacts/all-platform-release/
           if-no-files-found: warn
           retention-days: 7
-      - name: Commit clean all-platform release
+      - name: Commit non-workflow release files
         shell: bash
         run: |
           rm scripts/apply-all-platforms-release.py
           rm scripts/fix-all-platform-release-tests.py
-          rm .github/workflows/apply-all-platforms-release.yml
+          rm -rf artifacts desktop-dist android-dist
+          git checkout origin/main -- .github/workflows/android-release.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
+          git add -A -- ':!.github/workflows/apply-all-platforms-release.yml'
           git commit -m "release: align Windows Android and PWA versions"
           git push origin HEAD:release/all-platforms-0.9.46
