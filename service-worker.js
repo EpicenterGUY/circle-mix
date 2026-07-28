@@ -17,6 +17,7 @@ const APP_SHELL_URLS = [
   versioned("./pc-settings.css"),
   versioned("./trackpad-tablet-area.css"),
   versioned("./mobile-layout-v2.css"),
+  versioned("./song-select-fixes.css"),
   versioned("./src/editor.css"),
   "./manifest.webmanifest",
   "./icons/circle-mix-icon-192.png",
