@@ -38,10 +38,8 @@ async function installFixture(page){
       await window.CircleMixLocalSongs.put({id,source:'local',title:`OVERFLOW TRACK ${index+1}`,artist:'CIRCLE MIX TEST',bpm:120,offset:0,audioBlob:new Blob([new Uint8Array([82,73,70,70,0,0,0,0,87,65,86,69])],{type:'audio/wav'}),packageType:'full',packageVersion:1,charts,difficultyOrder:ids,difficulties,installedAt:now,updatedAt:now});
     }
     await window.CircleMixSongRegistry.refreshLocal();
-    await window.CircleMixOpenLocalSong('overflow-song-0');
   });
 }
-function rect(element){if(!element)return null;const box=element.getBoundingClientRect();return {top:box.top,bottom:box.bottom,left:box.left,right:box.right,height:box.height};}
 (async()=>{
   const server=await startServer(process.cwd());
   const port=server.address().port;
@@ -55,18 +53,21 @@ function rect(element){if(!element)return null;const box=element.getBoundingClie
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
       try{
         await page.goto(`http://127.0.0.1:${port}/index.html?browserTest=1&tab=local`,{waitUntil:'domcontentloaded'});
-        await page.waitForFunction(()=>window.CircleMixLocalSongs&&window.CircleMixSongRegistry&&window.CircleMixOpenLocalSong,{timeout:10000});
+        await page.waitForFunction(()=>window.CircleMixLocalSongs&&window.CircleMixSongRegistry,{timeout:10000});
         await dismiss(page);await installFixture(page);await dismiss(page);
         const local=page.locator('.songTab').filter({hasText:/LOCAL/i}).first();
         await local.click();
         await page.waitForFunction(()=>document.querySelectorAll('.songCard').length>=8&&document.querySelector('link[data-circle-mix-song-select-fixes]'),{timeout:5000});
+        const target=page.locator('.songCard').filter({hasText:'OVERFLOW TRACK 1'}).first();
+        await target.click();
+        await page.waitForFunction(()=>document.querySelectorAll('.songDiffBtn').length===4,{timeout:5000});
         await page.evaluate(()=>{const carousel=document.getElementById('songCarousel');carousel.scrollTop=0;});
         await page.waitForTimeout(100);
         const top=await page.evaluate(()=>{
           const carousel=document.getElementById('songCarousel'),tabs=document.querySelector('.songTabs'),cards=[...document.querySelectorAll('.songCard')];
           const style=getComputedStyle(carousel);
+          const rect=element=>{if(!element)return null;const box=element.getBoundingClientRect();return {top:box.top,bottom:box.bottom,left:box.left,right:box.right,height:box.height};};
           return {carousel:rect(carousel),tabs:rect(tabs),first:rect(cards[0]),second:rect(cards[1]),count:cards.length,scrollTop:carousel.scrollTop,clientHeight:carousel.clientHeight,scrollHeight:carousel.scrollHeight,alignContent:style.alignContent,overflowY:style.overflowY,difficulties:[...document.querySelectorAll('.songDiffBtn')].map(button=>(button.textContent||'').trim())};
-          function rect(element){if(!element)return null;const box=element.getBoundingClientRect();return {top:box.top,bottom:box.bottom,left:box.left,right:box.right,height:box.height};}
         });
         assert.equal(top.count,8,`${testCase.name} local card count`);
         assert.equal(top.scrollTop,0,`${testCase.name} list does not start at top`);
