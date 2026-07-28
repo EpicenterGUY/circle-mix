@@ -207,6 +207,7 @@
     function injectHub(){
       const hub=doc.getElementById("pcSettingsHub");
       if(!hub||hub.dataset.trackpadEnhanced==="true")return false;
+      if(hub.dataset.platform==="mobile"){hub.dataset.trackpadEnhanced="true";return false;}
       const inputGrid=hub.querySelector('.pcSettingsSection[data-group="input"] .pcSettingsGrid');
       if(!inputGrid)return false;
       hub.dataset.trackpadEnhanced="true";
