@@ -17,7 +17,7 @@ test("release metadata loads in both window and service worker contexts", () => 
   const browser = {window:{}};
   vm.createContext(browser);
   vm.runInContext(versionSource, browser, {filename:"src/version.js"});
-  assert.equal(browser.window.CircleMixVersion.version, "0.9.49");
+  assert.equal(browser.window.CircleMixVersion.version, "0.9.33");
   assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260728-library-scroll-sort-0.9.49");
   assert.equal(Object.isFrozen(browser.window.CircleMixVersion), true);
 
@@ -41,7 +41,7 @@ test("PWA and service worker consume the shared release metadata", () => {
   assert.match(serviceWorkerSource, /versioned\("\.\/src\/game\.js"\)/);
   assert.match(serviceWorkerSource, /versioned\("\.\/song-select-fixes\.css"\)/);
   assert.match(changelogSource, /window\.CircleMixChangelog\s*=\s*\[/);
-  assert.match(buildConfigSource, /version:"0\.9\.49"/);
+  assert.match(buildConfigSource, /version:"0\.9\.33"/);
   assert.match(buildConfigSource, /LIBRARY SCROLL & SORT/);
 });
 
