@@ -48,7 +48,7 @@ if(!desktopGame.includes('{type:"pulse",beat:18}'))throw new Error('final tutori
 if(!desktopGame.includes('addScratchCWBtn","addScratchCCWBtn')||!desktopGame.includes('legacyScratchButton.hidden=true'))throw new Error('desktop SCRATCH authoring or mobile controls were not retired');
 if(!desktopGame.includes('function checkScratch'))throw new Error('legacy SCRATCH playback compatibility is missing');
 const mobileLayout=fs.readFileSync(path.join(out,'src/mobile-layout-v2.js'),'utf8');
-for(const needle of ['mobilePulseX','mobilePulseY','mobilePulseSize','mobileScratchX','BUTTON LAYOUT · ACTION / PULSE'])if(!mobileLayout.includes(needle))throw new Error('mobile layout v2 migration or ACTION/PULSE editor is missing: '+needle);
+for(const needle of ['mobilePulseX','mobilePulseY','mobilePulseSize','mobileScratchX','mobile-input-v3','MOBILE INPUT V3','mobileAimPreset','mobileAimRecontactGuard','mobileGestureGuard'])if(!mobileLayout.includes(needle))throw new Error('mobile input v3 migration, aim controls, or ACTION/PULSE editor is missing: '+needle);
 const desktopBootstrap=fs.readFileSync(path.join(out,'src/build-config.js'),'utf8');
 for(const needle of ['pc-settings.css','src/pc-settings.js','mobile-layout-v2.css','src/mobile-layout-v2.js'])if(!desktopBootstrap.includes(needle))throw new Error('desktop settings bootstrap is missing: '+needle);
 const palette=desktopGame.match(/const COLORS = \{[\s\S]*?\n  \};/)?.[0] || '';

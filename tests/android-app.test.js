@@ -7,14 +7,14 @@ const Android=require('../src/android-platform');
 const Updater=require('../src/android-updater');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 
-test('Android platform configuration uses the 0.9.46 fullscreen local-library shell',()=>{
+test('Android platform configuration uses the 0.9.48 fullscreen local-library shell',()=>{
   const config=JSON.parse(read('src-tauri/tauri.android.conf.json'));
-  assert.equal(config.version,'0.9.46');
+  assert.equal(config.version,'0.9.48');
   assert.equal(config.build.frontendDist,'../android-dist');
   assert.equal(config.app.windows[0].fullscreen,true);
   assert.equal(config.app.windows[0].decorations,false);
   assert.equal(config.bundle.android.minSdkVersion,24);
-  assert.equal(config.bundle.android.versionCode,9046);
+  assert.equal(config.bundle.android.versionCode,9048);
   assert.match(config.app.security.csp,/connect-src 'self' https:\/\/api\.github\.com/);
 });
 
@@ -46,19 +46,19 @@ test('fold viewport classification and Android back policy are deterministic',()
 
 test('Android release metadata selects only a newer exact signed ARM64 APK',()=>{
   assert.equal(Updater.VERSION,'android-updater-v1');
-  assert.equal(Updater.compareVersions('0.9.46','0.9.45'),1);
-  assert.equal(Updater.compareVersions('0.9.46','0.9.46'),0);
-  assert.equal(Updater.releaseVersion('android-v0.9.47'),'0.9.47');
-  assert.equal(Updater.releaseVersion('v0.9.47'),'');
+  assert.equal(Updater.compareVersions('0.9.48','0.9.47'),1);
+  assert.equal(Updater.compareVersions('0.9.48','0.9.48'),0);
+  assert.equal(Updater.releaseVersion('android-v0.9.49'),'0.9.49');
+  assert.equal(Updater.releaseVersion('v0.9.49'),'');
   const release={
-    tag_name:'android-v0.9.47',draft:false,prerelease:false,body:'notes',published_at:'2026-07-28T00:00:00Z',
-    assets:[{name:'circle-mix-0.9.47-android-arm64-release.apk',state:'uploaded',size:123,digest:`sha256:${'a'.repeat(64)}`,browser_download_url:'https://github.com/EpicenterGUY/circle-mix/releases/download/android-v0.9.47/circle-mix-0.9.47-android-arm64-release.apk'}]
+    tag_name:'android-v0.9.49',draft:false,prerelease:false,body:'notes',published_at:'2026-07-28T00:00:00Z',
+    assets:[{name:'circle-mix-0.9.49-android-arm64-release.apk',state:'uploaded',size:123,digest:`sha256:${'a'.repeat(64)}`,browser_download_url:'https://github.com/EpicenterGUY/circle-mix/releases/download/android-v0.9.49/circle-mix-0.9.49-android-arm64-release.apk'}]
   };
-  const update=Updater.releaseToUpdate(release,'0.9.46');
-  assert.equal(update.version,'0.9.47');
+  const update=Updater.releaseToUpdate(release,'0.9.48');
+  assert.equal(update.version,'0.9.49');
   assert.equal(update.sha256,'a'.repeat(64));
-  assert.equal(Updater.releaseToUpdate(release,'0.9.47'),null);
-  assert.equal(Updater.releaseToUpdate({...release,assets:[{...release.assets[0],digest:null}]},'0.9.46'),null);
+  assert.equal(Updater.releaseToUpdate(release,'0.9.49'),null);
+  assert.equal(Updater.releaseToUpdate({...release,assets:[{...release.assets[0],digest:null}]},'0.9.48'),null);
   assert.match(Updater.RELEASE_API,/releases\?per_page=20/);
 });
 
@@ -116,8 +116,9 @@ test('Android distribution, updater bridge, native patch, and release workflow s
   const verificationWorkflow=read('.github/workflows/android-app.yml');
   const releaseWorkflow=read('.github/workflows/android-release.yml');
   for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js','src/android-updater.js','enableAndroidUpdater:true'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  assert.match(prepare,/ANDROID_VERSION='0\.9\.46'/);
-  assert.match(prepare,/ANDROID 0\.9\.46/);
+  assert.match(prepare,/ANDROID_VERSION='0\.9\.48'/);
+  assert.match(prepare,/ANDROID 0\.9\.48/);
+  assert.match(prepare,/BALANCED·PRECISION·SPEED/);
   assert.match(distAudit,/data:audio\//,'distribution audit rejects embedded audio');
   assert.match(distAudit,/src\/android-updater\.js/);
   assert.match(distAudit,/api\.github\.com/);
