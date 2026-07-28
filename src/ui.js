@@ -11,16 +11,18 @@
 
   const STORAGE_KEY="circleMixTrackpadSettings.v1";
   const INPUT_SETTINGS_KEY="circleMixInputSettings.v1";
-  const PRESET_ORDER=Object.freeze(["OFF","BALANCED","PRECISION","SPEED"]);
+  const PRESET_ORDER=Object.freeze(["OFF","BALANCED","PRECISION","TABLET_AREA","SPEED"]);
   const PRESETS=Object.freeze({
     OFF:Object.freeze({label:"OFF",pcAimMode:null,lockedAimSensitivity:null,aimStabilizer:null,aimVisual:null,aimVisualResponse:null,keyboardOnly:false,jumpGuard:false,gestureGuard:false}),
     BALANCED:Object.freeze({label:"BALANCED",pcAimMode:"LOCKED",lockedAimSensitivity:1,aimStabilizer:"LOW",aimVisual:"SMOOTH",aimVisualResponse:"FAST",keyboardOnly:true,jumpGuard:true,gestureGuard:true}),
     PRECISION:Object.freeze({label:"PRECISION",pcAimMode:"ABSOLUTE",lockedAimSensitivity:1,aimStabilizer:"LOW",aimVisual:"DIRECT",aimVisualResponse:"FAST",keyboardOnly:true,jumpGuard:true,gestureGuard:true}),
+    TABLET_AREA:Object.freeze({label:"TABLET_AREA",pcAimMode:"ABSOLUTE",lockedAimSensitivity:1,aimStabilizer:"OFF",aimVisual:"DIRECT",aimVisualResponse:"FAST",keyboardOnly:true,jumpGuard:false,gestureGuard:true}),
     SPEED:Object.freeze({label:"SPEED",pcAimMode:"LOCKED",lockedAimSensitivity:1.25,aimStabilizer:"OFF",aimVisual:"DIRECT",aimVisualResponse:"FAST",keyboardOnly:true,jumpGuard:false,gestureGuard:true})
   });
   const DEFAULT_STATE=Object.freeze({preset:"OFF",keyboardOnly:false,jumpGuard:false,gestureGuard:false});
 
   function normalizePreset(value){return PRESET_ORDER.includes(String(value||"").toUpperCase())?String(value).toUpperCase():"OFF";}
+  function displayPreset(value){return normalizePreset(value).replaceAll("_"," ");}
   function safeJsonParse(value,fallback={}){try{const parsed=JSON.parse(value||"{}");return parsed&&typeof parsed==="object"?parsed:fallback;}catch(_){return fallback;}}
   function sanitizeState(value={}){
     const preset=normalizePreset(value.preset);
@@ -82,7 +84,7 @@
     return !body.classList.contains("safeSettings")&&!body.classList.contains("pauseSettingsOpen");
   }
   function isUiTarget(target){
-    return !!(target?.closest&&target.closest("button,a,input,select,textarea,#safeMenu,#safeOverlay,.pcSettingsHub,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.editorPanel,.start,.quickMenu,.mobileControls,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay,.selfTestOverlay"));
+    return !!(target?.closest&&target.closest("button,a,input,select,textarea,#safeMenu,#safeOverlay,.pcSettingsHub,.trackpadTabletOverlay,.updateLogOverlay,.keymapOverlay,.pauseOverlay,.tutorialPrompt,.tutorialHud,.tutorialComplete,.tuner,.editorPanel,.start,.quickMenu,.mobileControls,.mobileGameplayControls,.mobileLayoutOverlay,.mobileInputTestOverlay,.selfTestOverlay"));
   }
   function createCard(doc,{id,group,title,description,keywords,onClick}){
     const card=doc.createElement("article");
@@ -173,11 +175,12 @@
 
     function refreshCards(status=""){
       if(cards.preset){
-        cards.preset._button.textContent=`TRACKPAD ${state.preset}`;
+        cards.preset._button.textContent=`TRACKPAD ${displayPreset(state.preset)}`;
         setCardChanged(cards.preset,state.preset!=="OFF");
         const p=cards.preset.querySelector("p");
-        if(p)p.textContent=status||"권장 에임 방식·감도·안정화를 한 번에 적용합니다.";
+        if(p)p.textContent=status||(state.preset==="TABLET_AREA"?"지정한 화면 영역을 원형 에임에 절대 대응합니다.":"권장 에임 방식·감도·안정화를 한 번에 적용합니다.");
       }
+      if(cards.tabletArea){cards.tabletArea._button.textContent=state.preset==="TABLET_AREA"?"EDIT ACTIVE AREA":"EDIT AREA";setCardChanged(cards.tabletArea,state.preset==="TABLET_AREA");}
       if(cards.keyboardOnly){cards.keyboardOnly._button.textContent=`CLICK JUDGEMENT ${state.keyboardOnly?"OFF":"ON"}`;setCardChanged(cards.keyboardOnly,state.keyboardOnly);}
       if(cards.jumpGuard){cards.jumpGuard._button.textContent=`RECONTACT GUARD ${state.jumpGuard?"ON":"OFF"}`;setCardChanged(cards.jumpGuard,state.jumpGuard);}
       if(cards.gestureGuard){cards.gestureGuard._button.textContent=`GESTURE GUARD ${state.gestureGuard?"ON":"OFF"}`;setCardChanged(cards.gestureGuard,state.gestureGuard);}
@@ -190,6 +193,7 @@
       refreshCards("적용 중…");
       const live=await syncRuntimePreset(win,doc,preset.label);
       refreshCards(live?"즉시 적용됨 · 판정키는 Z / X / SPACE":"저장됨 · 다음 게임 시작 또는 앱 재시작 후 완전 적용");
+      try{win.dispatchEvent(new win.CustomEvent("circlemix:trackpadpresetchange",{detail:{...state}}));}catch(_){}
       return state;
     }
     function toggle(key){
@@ -204,6 +208,11 @@
       if(button?.click)return button.click();
       win.alert?.("Windows 설치판에서만 업데이트를 확인할 수 있습니다.");
     }
+    function openTabletArea(){
+      const api=win.CircleMixTrackpadTabletArea;
+      if(api?.open)return api.open();
+      win.alert?.("태블릿 영역 편집기를 불러오는 중입니다. 설정을 다시 열어주세요.");
+    }
     function injectHub(){
       const hub=doc.getElementById("pcSettingsHub");
       if(!hub||hub.dataset.trackpadEnhanced==="true")return false;
@@ -211,11 +220,12 @@
       const inputGrid=hub.querySelector('.pcSettingsSection[data-group="input"] .pcSettingsGrid');
       if(!inputGrid)return false;
       hub.dataset.trackpadEnhanced="true";
-      cards.preset=createCard(doc,{id:"trackpadPreset",group:"input",title:"트랙패드 프리셋",description:"권장 에임 방식·감도·안정화를 한 번에 적용합니다.",keywords:"trackpad touchpad preset 트랙패드 터치패드",onClick:()=>{const next=PRESET_ORDER[(PRESET_ORDER.indexOf(state.preset)+1)%PRESET_ORDER.length];applyPreset(next);}});
+      cards.preset=createCard(doc,{id:"trackpadPreset",group:"input",title:"트랙패드 프리셋",description:"권장 에임 방식·감도·안정화를 한 번에 적용합니다.",keywords:"trackpad touchpad preset tablet area 트랙패드 터치패드 태블릿 영역",onClick:()=>{const next=PRESET_ORDER[(PRESET_ORDER.indexOf(state.preset)+1)%PRESET_ORDER.length];applyPreset(next);}});
+      cards.tabletArea=createCard(doc,{id:"trackpadTabletArea",group:"input",title:"트랙패드 태블릿 영역",description:"가상 사각형 안의 커서 위치를 원형 에임 각도에 절대 대응합니다.",keywords:"tablet absolute area osu 태블릿 절대좌표 영역",onClick:openTabletArea});
       cards.keyboardOnly=createCard(doc,{id:"trackpadKeyboardOnly",group:"input",title:"키보드 판정 전용",description:"트랙패드 클릭으로 CUT이 오입력되는 것을 막고 Z·X·SPACE만 사용합니다.",keywords:"keyboard click tap 키보드 클릭 탭 오입력",onClick:()=>toggle("keyboardOnly")});
       cards.jumpGuard=createCard(doc,{id:"trackpadJumpGuard",group:"input",title:"재접촉 튐 방지",description:"손가락을 떼었다 다시 놓을 때 발생하는 비정상적인 순간이동만 차단합니다.",keywords:"recontact jump teleport 튐 재접촉",onClick:()=>toggle("jumpGuard")});
       cards.gestureGuard=createCard(doc,{id:"trackpadGestureGuard",group:"input",title:"브라우저 제스처 차단",description:"플레이 중 스크롤·확대·뒤로가기 제스처 간섭을 줄입니다.",keywords:"gesture wheel scroll zoom 제스처 스크롤",onClick:()=>toggle("gestureGuard")});
-      inputGrid.append(cards.preset,cards.keyboardOnly,cards.jumpGuard,cards.gestureGuard);
+      inputGrid.append(cards.preset,cards.tabletArea,cards.keyboardOnly,cards.jumpGuard,cards.gestureGuard);
       refreshNavCount(hub,"input");
 
       const desktopEnabled=win.CircleMixBuildConfig?.target==="desktop"||win.CircleMixBuildConfig?.enableSignedUpdater===true||!!win.CircleMixDesktopUpdater;
@@ -279,6 +289,7 @@
       toggleKeyboardOnly:()=>toggle("keyboardOnly"),
       toggleJumpGuard:()=>toggle("jumpGuard"),
       toggleGestureGuard:()=>toggle("gestureGuard"),
+      openTabletArea,
       checkDesktopUpdate:desktopUpdateCheck,
       injectSettings:injectHub
     });
@@ -287,7 +298,7 @@
 
   return {
     STORAGE_KEY,INPUT_SETTINGS_KEY,PRESET_ORDER,PRESETS,
-    normalizePreset,sanitizeState,loadState,saveState,inputPatchForPreset,
+    normalizePreset,displayPreset,sanitizeState,loadState,saveState,inputPatchForPreset,
     mergePresetIntoInputSettings,seedStoredPreset,jumpThreshold,isRecontactJump,
     isGameplayActive,boot
   };
