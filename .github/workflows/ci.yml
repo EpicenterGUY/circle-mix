@@ -45,8 +45,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Verify editor playtest integration
+        shell: bash
         run: |
-          npm test
+          if ! npm test > /tmp/editor-playtest-test.log 2>&1; then
+            tail -n 140 /tmp/editor-playtest-test.log
+            exit 1
+          fi
           git diff --check
       - name: Commit clean editor playtest feature
         shell: bash
