@@ -32,6 +32,7 @@
     if(!hasPcSurface&&!hasMobileSurface)return;
     root.__circleMixSettingsAssetsLoaded=true;
     const revision=encodeURIComponent(String(root.CircleMixVersion?.cacheRevision||root.CircleMixVersion?.version||'settings-v2'));
+    appendStyle(`./song-select-fixes.css?v=${revision}`,'data-circle-mix-song-select-fixes');
     if(hasPcSurface){
       appendStyle(`./pc-settings.css?v=${revision}`,'data-circle-mix-pc-settings');
       appendScript(`./src/pc-settings.js?v=${revision}`,'data-circle-mix-pc-settings');
