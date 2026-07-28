@@ -1,6 +1,9 @@
 'use strict';
 const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
 const trackpad=require('../src/ui.js');
+const source=fs.readFileSync(path.join(__dirname,'../src/ui.js'),'utf8');
 
 assert.deepEqual(trackpad.PRESET_ORDER,['OFF','BALANCED','PRECISION','SPEED']);
 assert.equal(trackpad.normalizePreset('balanced'),'BALANCED');
@@ -41,5 +44,10 @@ assert.equal(trackpad.jumpThreshold({width:1280,height:720}),158.4);
 assert.equal(trackpad.isRecontactJump({x:100,y:100,time:0},{x:300,y:100,time:100},{width:1280,height:720}),true);
 assert.equal(trackpad.isRecontactJump({x:100,y:100,time:0},{x:300,y:100,time:30},{width:1280,height:720}),false);
 assert.equal(trackpad.isRecontactJump({x:100,y:100,time:0},{x:180,y:100,time:100},{width:1280,height:720}),false);
+
+assert.match(source,/hub\.dataset\.platform==="mobile"/,'trackpad cards must remain hidden from the mobile settings hub');
+assert.match(source,/Windows 업데이트 확인/,'desktop settings must expose the updater entry');
+assert.match(source,/CircleMixDesktopUpdater/,'desktop settings must call the signed updater API');
+assert.match(source,/stopImmediatePropagation\(\)/,'keyboard-only mode must block the existing click judgement listener');
 
 console.log('trackpad settings tests passed');
