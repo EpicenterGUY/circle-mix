@@ -2,6 +2,12 @@ name: Publish Android release
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - src-tauri/tauri.android.conf.json
+      - .github/workflows/android-release.yml
 
 permissions:
   contents: write

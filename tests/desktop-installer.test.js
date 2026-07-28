@@ -20,11 +20,11 @@ assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop bu
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
 assert.equal(pkg.version,tauri.version,'npm and desktop versions must match for updater releases');
-assert.equal(tauri.version,'0.9.41','Windows installer must publish the unified settings release');
-assert.match(prepare,/DESKTOP_VERSION='0\.9\.41'/,'desktop distribution must expose version 0.9.41');
+assert.equal(tauri.version,'0.9.46','Windows installer must publish the unified settings release');
+assert.match(prepare,/DESKTOP_VERSION='0\.9\.46'/,'desktop distribution must expose version 0.9.46');
 assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must normalize Windows CRLF line endings');
 assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must retain the dedicated visual pass');
-assert.match(prepare,/UNIFIED SETTINGS & MOBILE LAYOUT V2/,'desktop changelog must announce the unified settings release');
+assert.match(prepare,/ALL-PLATFORM 0.9.46/,'desktop changelog must announce the unified settings release');
 assert.match(prepare,/ACTION과 PULSE 버튼을 직접 드래그/,'desktop changelog must announce mobile layout editing');
 assert.match(prepare,/desktop-updater\.js/,'desktop build must inject the updater UI');
 assert.match(prepare,/DESKTOP_UPDATE_LOG_RETRY/,'desktop release metadata must retry the update log after title startup');
