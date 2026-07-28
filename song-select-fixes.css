@@ -1,0 +1,56 @@
+/* Song-select overflow and reachability fixes shared by web, Windows and Android. */
+body.safeSongSelect .songSelectShell{
+  min-height:0;
+  overflow:hidden;
+}
+body.safeSongSelect .songCarousel{
+  min-height:0;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  align-items:flex-start !important;
+  align-content:flex-start !important;
+  justify-content:center;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-gutter:stable both-edges;
+  scroll-padding-top:56px;
+  padding-top:0;
+}
+body.safeSongSelect .songTabs{
+  position:sticky;
+  top:0;
+  z-index:8;
+  flex:0 0 100%;
+  box-sizing:border-box;
+  margin:0 0 8px;
+  padding:6px 6px 10px;
+  background:linear-gradient(180deg,rgba(5,12,28,.98) 0 76%,rgba(5,12,28,0));
+  backdrop-filter:blur(8px);
+}
+body.safeSongSelect .songCard{
+  box-sizing:border-box;
+  max-width:100%;
+  flex:0 1 min(360px,86vw);
+}
+body.safeSongSelect .songManage{
+  flex:0 0 100%;
+  box-sizing:border-box;
+}
+@media (pointer:coarse), (max-width:932px){
+  body.safeSongSelect .songSelect{
+    align-items:stretch !important;
+    overflow:hidden !important;
+  }
+  body.safeSongSelect .songSelectShell{
+    height:100%;
+    max-height:100% !important;
+    grid-template-rows:auto minmax(0,1fr) auto;
+  }
+  body.safeSongSelect .songCarousel{
+    scroll-padding-top:48px;
+    padding-bottom:max(12px,env(safe-area-inset-bottom));
+  }
+}
+@media (orientation:landscape) and (max-height:700px){
+  body.safeSongSelect .songCarousel{scroll-padding-top:40px;}
+}

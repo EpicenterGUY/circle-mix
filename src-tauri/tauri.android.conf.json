@@ -1,5 +1,5 @@
 {
-  "version": "0.9.48",
+  "version": "0.9.49",
   "build": {
     "frontendDist": "../android-dist",
     "beforeDevCommand": "npm run android:prepare",
@@ -32,7 +32,7 @@
     ],
     "android": {
       "minSdkVersion": 24,
-      "versionCode": 9048
+      "versionCode": 9049
     }
   }
 }
