@@ -50,7 +50,11 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run browser regression tests
-        run: npm run test:browser
+        shell: bash
+        run: |
+          mkdir -p artifacts/browser-regression
+          set -o pipefail
+          npm run test:browser 2>&1 | tee artifacts/browser-regression/npm-browser-test.log
         env:
           BROWSER_ARTIFACTS_DIR: artifacts/browser-regression
       - name: Upload browser failure diagnostics
