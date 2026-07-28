@@ -52,6 +52,14 @@ jobs:
             exit 1
           fi
           git diff --check
+      - name: Upload editor playtest diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: editor-playtest-diagnostics-${{ github.run_attempt }}
+          path: /tmp/editor-playtest-test.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Commit clean editor playtest feature
         shell: bash
         run: |
