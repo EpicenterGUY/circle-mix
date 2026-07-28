@@ -7,7 +7,7 @@ const {execFileSync}=require('child_process');
 const root=path.resolve(__dirname,'..');
 const desktopOut=path.join(root,'desktop-dist');
 const out=path.join(root,'android-dist');
-const ANDROID_VERSION='0.9.46';
+const ANDROID_VERSION='0.9.48';
 const ANDROID_BUILD_DATE='2026-07-28';
 
 function run(script){execFileSync(process.execPath,[path.join(root,script)],{cwd:root,stdio:'inherit'});}
@@ -33,11 +33,11 @@ fs.writeFileSync(path.join(out,'src/build-config.js'),androidSeed+sharedBootstra
 
 const androidRelease=`(function(){
   "use strict";
-  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID 0.9.46",summary:"최신 모바일·PC 공통 본편과 PULSE 동시치기 가독성 개선을 Android 설치판에 반영했습니다.",changes:[
-    {category:"MOBILE",text:"접힘·펼침 자동 가로화면, 통합 설정 허브와 ACTION·PULSE 버튼 배치 편집을 포함합니다."},
-    {category:"PULSE",text:"PULSE 동시치기 CUT·HOLD·SLIDE·TRACE·SWING 계열을 주황색으로 명확히 구분합니다."},
-    {category:"UPDATE",text:"GitHub Release의 SHA-256을 검증한 뒤 Android PackageInstaller로 안전하게 업데이트합니다."},
-    {category:"COMPATIBILITY",text:"설정, 기록과 LOCAL .cmix 데이터 형식은 그대로 유지됩니다."}
+  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID 0.9.48",summary:"상대 이동 모바일 에임과 재접촉 보호를 적용한 Android 조작 개선판입니다.",changes:[
+    {category:"MOBILE AIM",text:"BALANCED·PRECISION·SPEED 상대 이동 프리셋과 기존 ABSOLUTE 모드를 설정에서 선택할 수 있습니다."},
+    {category:"INPUT",text:"손가락을 떼었다 다시 올려도 에임 각도를 유지하며, 비정상적으로 큰 재접촉 이동은 차단합니다."},
+    {category:"CONTROL",text:"에임 손가락과 ACTION·PULSE 손가락을 분리하고 플레이 중 브라우저 제스처 간섭을 억제합니다."},
+    {category:"COMPATIBILITY",text:"판정, 점수, 기록, 채보와 LOCAL .cmix 데이터 형식은 그대로 유지됩니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
   const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];
