@@ -20,7 +20,9 @@ jobs:
           node-version: 24
           cache: npm
       - name: Apply aligned Windows, Android, and PWA release metadata
-        run: python scripts/apply-all-platforms-release.py
+        run: |
+          python scripts/apply-all-platforms-release.py
+          python scripts/fix-all-platform-release-tests.py
       - name: Install dependencies
         run: npm ci
       - name: Verify release metadata and repository behavior
@@ -48,6 +50,7 @@ jobs:
         shell: bash
         run: |
           rm scripts/apply-all-platforms-release.py
+          rm scripts/fix-all-platform-release-tests.py
           rm .github/workflows/apply-all-platforms-release.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
