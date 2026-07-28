@@ -32,7 +32,7 @@ test("editor playtest is wired into editor, game, offline shell and packages",()
   assert.match(editor,/id="playtestBtn"/);
   assert.match(editor,/src="\.\/src\/editor-playtest\.js/);
   assert.match(editorJs,/beginSession\(/);
-  assert.match(editorJs,/editorPlaytest=1/);
+  assert.match(editorJs,/searchParams\.set\("editorPlaytest","1"\)/);
   assert.match(game,/editorPlaytestSession/);
   assert.match(game,/EDITOR_PLAYTEST_JUDGEMENT_SCALE/);
   assert.match(game,/hitR = baseR \* EDITOR_PLAYTEST_HIT_RADIUS_SCALE/);
