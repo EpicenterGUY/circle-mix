@@ -11,13 +11,14 @@ const versionSource = fs.readFileSync("src/version.js", "utf8");
 const pwaSource = fs.readFileSync("src/pwa.js", "utf8");
 const serviceWorkerSource = fs.readFileSync("service-worker.js", "utf8");
 const changelogSource = fs.readFileSync("src/changelog.js", "utf8");
+const buildConfigSource = fs.readFileSync("src/build-config.js", "utf8");
 
 test("release metadata loads in both window and service worker contexts", () => {
   const browser = {window:{}};
   vm.createContext(browser);
   vm.runInContext(versionSource, browser, {filename:"src/version.js"});
-  assert.equal(browser.window.CircleMixVersion.version, "0.9.33");
-  assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260728-all-platforms-0.9.46");
+  assert.equal(browser.window.CircleMixVersion.version, "0.9.49");
+  assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260728-library-scroll-sort-0.9.49");
   assert.equal(Object.isFrozen(browser.window.CircleMixVersion), true);
 
   const worker = {self:{}};
@@ -38,8 +39,10 @@ test("PWA and service worker consume the shared release metadata", () => {
   assert.doesNotMatch(serviceWorkerSource, /const VERSION\s*=\s*["'][0-9]/);
   assert.match(serviceWorkerSource, /cacheRevision/);
   assert.match(serviceWorkerSource, /versioned\("\.\/src\/game\.js"\)/);
-  assert.match(changelogSource, /window\.CircleMixChangelog\s*=\s*\[\s*\{ version: "0\.9\.33"/);
-  assert.match(changelogSource, /ALL-PLATFORM UPDATE/);
+  assert.match(serviceWorkerSource, /versioned\("\.\/song-select-fixes\.css"\)/);
+  assert.match(changelogSource, /window\.CircleMixChangelog\s*=\s*\[/);
+  assert.match(buildConfigSource, /version:"0\.9\.49"/);
+  assert.match(buildConfigSource, /LIBRARY SCROLL & SORT/);
 });
 
 test("online static assets refresh before cached fallback", () => {
