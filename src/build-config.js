@@ -35,6 +35,8 @@
     if(hasPcSurface){
       appendStyle(`./pc-settings.css?v=${revision}`,'data-circle-mix-pc-settings');
       appendScript(`./src/pc-settings.js?v=${revision}`,'data-circle-mix-pc-settings');
+      appendStyle(`./trackpad-tablet-area.css?v=${revision}`,'data-circle-mix-trackpad-tablet-area');
+      appendScript(`./src/trackpad-tablet-area.js?v=${revision}`,'data-circle-mix-trackpad-tablet-area');
     }
     if(hasMobileSurface){
       appendStyle(`./mobile-layout-v2.css?v=${revision}`,'data-circle-mix-mobile-layout-v2');
@@ -46,4 +48,4 @@
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadSettingsAssets,{once:true});
     else loadSettingsAssets();
   }
-})(typeof globalThis!=="undefined"?globalThis:this);
+})(typeof globalThis==="undefined"?this:globalThis);
