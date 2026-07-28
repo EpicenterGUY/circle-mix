@@ -49,6 +49,7 @@ if(desktopGame.includes('name:"SCRATCH · 가이드"')||desktopGame.includes('ki
 if(!desktopGame.includes('{type:"pulse",beat:18}'))throw new Error('final tutorial mix did not replace SCRATCH with PULSE');
 if(!desktopGame.includes('addScratchCWBtn","addScratchCCWBtn')||!desktopGame.includes('legacyScratchButton.hidden=true'))throw new Error('desktop SCRATCH authoring or mobile controls were not retired');
 if(!desktopGame.includes('function checkScratch'))throw new Error('legacy SCRATCH playback compatibility is missing');
+// TABLET AREA ships on top of the Mobile Input V3 layer merged before this feature.
 const mobileLayout=fs.readFileSync(path.join(out,'src/mobile-layout-v2.js'),'utf8');
 for(const needle of ['mobilePulseX','mobilePulseY','mobilePulseSize','mobileScratchX','mobile-input-v3','MOBILE INPUT V3','mobileAimPreset','mobileAimRecontactGuard','mobileGestureGuard'])if(!mobileLayout.includes(needle))throw new Error('mobile input v3 migration, aim controls, or ACTION/PULSE editor is missing: '+needle);
 const desktopBootstrap=fs.readFileSync(path.join(out,'src/build-config.js'),'utf8');
