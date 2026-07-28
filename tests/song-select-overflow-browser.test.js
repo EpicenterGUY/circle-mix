@@ -53,7 +53,7 @@ async function snapshot(page){
     browser=await chromium.launch({headless:true});
     for(const testCase of CASES){
       const context=await browser.newContext({viewport:testCase.viewport,isMobile:testCase.isMobile,hasTouch:testCase.hasTouch,deviceScaleFactor:1,serviceWorkers:'block'});
-      await context.addInitScript(()=>{try{localStorage.setItem('circleMixLastSeenVersion','0.9.49');}catch(_){}});
+      await context.addInitScript(()=>{try{localStorage.setItem('circleMixLastSeenVersion','0.9.33');}catch(_){}});
       const page=await context.newPage();
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
       try{
@@ -63,13 +63,14 @@ async function snapshot(page){
         assert.deepEqual(order,['basic','advanced','expert','master'],`${testCase.name} LOCAL difficulty order`);
         await page.waitForTimeout(100);
         const top=await snapshot(page);
+        const visibleTop=top.tabs?.bottom??top.carousel.top;
         assert.equal(top.count,8,`${testCase.name} card count`);
         assert.equal(top.scrollTop,0,`${testCase.name} list does not start at top`);
         assert.equal(top.alignContent,'flex-start',`${testCase.name} rows are still vertically centered`);
         assert.match(top.overflowY,/auto|scroll/,`${testCase.name} list is not vertically scrollable`);
         assert(top.scrollHeight>top.clientHeight,`${testCase.name} fixture should overflow: ${JSON.stringify(top)}`);
-        assert(top.first.top>=top.tabs.bottom-2,`${testCase.name} first song is clipped: ${JSON.stringify(top)}`);
-        assert(top.second.top>=top.tabs.bottom-2,`${testCase.name} second song is clipped: ${JSON.stringify(top)}`);
+        assert(top.first.top>=visibleTop-2,`${testCase.name} first song is clipped: ${JSON.stringify(top)}`);
+        assert(top.second.top>=visibleTop-2,`${testCase.name} second song is clipped: ${JSON.stringify(top)}`);
         await page.evaluate(()=>{const carousel=document.getElementById('songCarousel');carousel.scrollTop=carousel.scrollHeight;});
         await page.waitForTimeout(100);
         const bottom=await snapshot(page);
