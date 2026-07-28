@@ -185,7 +185,7 @@
     overlay.addEventListener("keydown",event=>{if(event.key==="Escape"){event.preventDefault();close(false);}});
     state.pointer=installPointerMapping(win,doc,()=>state.open&&state.draft?state.draft:state.saved);
     const api={open,close,render,state:()=>({open:state.open,saved:{...state.saved},draft:state.draft?{...state.draft}:null,active:activePreset(win),pointer:state.pointer?.state?.()||null}),setDraft};
-    win.CircleMixTrackpadTabletArea=Object.assign(win.CircleMixTrackpadTabletArea||{},api);return api;
+    win.CircleMixTrackpadTabletArea={...win.CircleMixTrackpadTabletArea,...api};return api;
   }
 
   return Object.freeze({VERSION,STORAGE_KEY,TRACKPAD_STORAGE_KEY,INPUT_SETTINGS_KEY,TABLET_PRESET,DEFAULTS,sanitizeSettings,readSettings,writeSettings,presetFromStorage,activePreset,viewportSize,areaRect,mapPointToAngle,virtualAimPoint,isDesktopEnvironment,isGameplayActive,installPointerMapping,boot});
