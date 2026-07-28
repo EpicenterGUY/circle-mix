@@ -40,7 +40,7 @@ const updater=fs.readFileSync(path.join(out,'src/desktop-updater.js'),'utf8');
 for(const needle of ['check_desktop_update','install_desktop_update','downloadAndInstall','TAURI_SIGNING_PRIVATE_KEY'])if(needle==='downloadAndInstall'||needle==='TAURI_SIGNING_PRIVATE_KEY'?updater.includes(needle):!updater.includes(needle))throw new Error(`desktop updater bridge audit failed: ${needle}`);
 if(!updater.includes('UPDATE CHECK')||!updater.includes('게임과 로컬 데이터에는 영향이 없습니다'))throw new Error('desktop updater non-blocking UI is missing');
 const trackpad=fs.readFileSync(path.join(out,'src/ui.js'),'utf8');
-for(const needle of ['circleMixTrackpadSettings.v1','TRACKPAD BALANCED','RECONTACT GUARD','Windows 업데이트 확인','CircleMixDesktopUpdater'])if(!trackpad.includes(needle))throw new Error(`desktop trackpad settings or updater entry is missing: ${needle}`);
+for(const needle of ['circleMixTrackpadSettings.v1','BALANCED:Object.freeze','RECONTACT GUARD','Windows 업데이트 확인','CircleMixDesktopUpdater'])if(!trackpad.includes(needle))throw new Error(`desktop trackpad settings or updater entry is missing: ${needle}`);
 const desktopGame=fs.readFileSync(path.join(out,'src/game.js'),'utf8');
 if(!desktopGame.includes('TRACE_PROFILES.tutorial.endpointGrace+.05'))throw new Error('tutorial TRACE finalization still ignores endpoint grace');
 if(desktopGame.includes('name:"SCRATCH · 가이드"')||desktopGame.includes('kind:"scratch",phase:"guided"')||desktopGame.includes('{type:"scratchCCW",beat:18'))throw new Error('desktop tutorial still exposes SCRATCH');
