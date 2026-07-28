@@ -26,10 +26,24 @@ jobs:
       - name: Verify release metadata and repository behavior
         shell: bash
         run: |
-          set -o pipefail
-          npm test
-          npm run desktop:check
-          git diff --check
+          mkdir -p artifacts/all-platform-release
+          if ! npm test > artifacts/all-platform-release/npm-test.log 2>&1; then
+            tail -n 180 artifacts/all-platform-release/npm-test.log
+            exit 1
+          fi
+          if ! npm run desktop:check > artifacts/all-platform-release/desktop-check.log 2>&1; then
+            tail -n 180 artifacts/all-platform-release/desktop-check.log
+            exit 1
+          fi
+          git diff --check 2>&1 | tee artifacts/all-platform-release/git-diff-check.log
+      - name: Upload release preparation diagnostics
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-platform-release-diagnostics-${{ github.run_attempt }}
+          path: artifacts/all-platform-release/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Commit clean all-platform release
         shell: bash
         run: |
