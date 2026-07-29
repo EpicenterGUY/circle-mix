@@ -1,6 +1,6 @@
 [package]
 name = "circle-mix"
-version = "0.9.49"
+version = "0.9.50"
 description = "CIRCLE MIX desktop and Android application"
 authors = ["CIRCLE MIX"]
 edition = "2021"
