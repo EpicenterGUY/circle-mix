@@ -6,6 +6,12 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.33", date: "2026-07-28", title: "ALL-PLATFORM UPDATE", summary: "모바일·PC·PWA에 최신 본편 개선과 통합 설정, Android 업데이트와 PULSE 동시치기 가독성을 배포했습니다.", changes: [
+    { category: "PLATFORM", text: "Windows와 Android 설치판을 0.9.46, 웹/PWA를 0.9.33으로 갱신" },
+    { category: "MOBILE", text: "폴더블 자동 가로화면, 통합 설정 허브, ACTION·PULSE 배치와 Android 앱 내 업데이트 포함" },
+    { category: "PULSE", text: "동시치기 CUT·HOLD·SLIDE·TRACE·SWING 계열을 방향성이 살아 있는 주황색으로 통일" },
+    { category: "DATA", text: "기존 설정, 점수 기록과 LOCAL .cmix 라이브러리를 유지" }
+  ] },
   { version: "0.9.32", date: "2026-07-25", title: "AIM FLOW & PULSE GUIDANCE", summary: "PULSE 다음 에임 안내와 AUTO·큰 각도 마우스 이동의 시각 흐름을 개선했습니다.", changes: [
     { category: "PULSE", text: "PULSE 뒤 가장 이른 동시치기 에임을 최대 두 방향 화살표와 ×N 표시로 안내" },
     { category: "AUTO", text: "판정은 즉시 PERFECT를 유지하면서 화면의 AUTO 에임 팔만 최단 원형 경로로 자연스럽게 이동" },

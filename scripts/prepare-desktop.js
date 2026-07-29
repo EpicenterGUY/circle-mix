@@ -2,8 +2,8 @@
 'use strict';
 const fs=require('fs'), path=require('path');
 const root=path.resolve(__dirname,'..'), out=path.join(root,'desktop-dist');
-const DESKTOP_VERSION='0.9.41';
-const DESKTOP_BUILD_DATE='2026-07-26';
+const DESKTOP_VERSION='0.9.46';
+const DESKTOP_BUILD_DATE='2026-07-28';
 const files=['style.css','orbit.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/orbit.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
 fs.rmSync(out,{recursive:true,force:true});
@@ -63,10 +63,10 @@ songs=songs.replaceAll('CircleMixGhostRuleBundle','ExcludedBundle').replaceAll('
 fs.writeFileSync(desktopSongs,songs);
 const desktopRelease=`(function(){
   "use strict";
-  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"UNIFIED SETTINGS & MOBILE LAYOUT V2",summary:"PC 설정을 한 화면으로 통합하고 모바일 ACTION·PULSE 버튼 위치를 직접 조정할 수 있게 했습니다.",changes:[
-    {category:"SETTINGS",text:"플레이·입력·오디오·화면·접근성·고급 설정을 검색 가능한 PC 설정 허브로 통합했습니다."},
+  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"ALL-PLATFORM 0.9.46",summary:"모바일·PC 공통 본편 개선과 통합 설정, PULSE 동시치기 가독성을 최신 설치판에 반영했습니다.",changes:[
+    {category:"SETTINGS",text:"플레이·입력·오디오·화면·접근성·시스템 설정을 모바일과 PC에서 같은 구조로 사용할 수 있습니다."},
+    {category:"PULSE",text:"PULSE와 동시에 등장하는 CUT·HOLD·SLIDE·TRACE·SWING 계열을 주황색 언어로 명확히 구분합니다."},
     {category:"MOBILE",text:"ACTION과 PULSE 버튼을 직접 드래그하고 크기·투명도·프리셋을 저장할 수 있습니다."},
-    {category:"MIGRATION",text:"기존 커스텀 SCRATCH 좌표가 있으면 PULSE 위치로 자동 이전해 모바일 배치를 보존합니다."},
     {category:"COMPATIBILITY",text:"판정, 점수, 기록, 채보와 LOCAL .cmix 라이브러리는 그대로 유지됩니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});

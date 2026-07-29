@@ -7,8 +7,8 @@ const {execFileSync}=require('child_process');
 const root=path.resolve(__dirname,'..');
 const desktopOut=path.join(root,'desktop-dist');
 const out=path.join(root,'android-dist');
-const ANDROID_VERSION='0.9.45';
-const ANDROID_BUILD_DATE='2026-07-27';
+const ANDROID_VERSION='0.9.48';
+const ANDROID_BUILD_DATE='2026-07-28';
 
 function run(script){execFileSync(process.execPath,[path.join(root,script)],{cwd:root,stdio:'inherit'});}
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
@@ -33,11 +33,11 @@ fs.writeFileSync(path.join(out,'src/build-config.js'),androidSeed+sharedBootstra
 
 const androidRelease=`(function(){
   "use strict";
-  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID AUTO UPDATE",summary:"GitHub Releases 기반 Android 앱 업데이트 확인과 안전한 APK 설치 흐름을 추가했습니다.",changes:[
-    {category:"UPDATE",text:"앱 실행 시 최신 Android Release를 확인하고 설정의 시스템 카테고리에서도 수동 확인할 수 있습니다."},
-    {category:"VERIFY",text:"GitHub Release asset의 SHA-256 digest와 다운로드한 APK를 대조한 뒤에만 설치를 진행합니다."},
-    {category:"INSTALL",text:"Android PackageInstaller를 사용하며 최초 한 번은 ‘이 출처의 앱 설치 허용’ 승인이 필요합니다."},
-    {category:"SIGNING",text:"정식 업데이트 Release는 GitHub Secrets에 저장된 동일한 영구 서명키로만 게시합니다."}
+  const release={version:"${ANDROID_VERSION}",date:"${ANDROID_BUILD_DATE}",title:"ANDROID 0.9.48",summary:"상대 이동 모바일 에임과 재접촉 보호를 적용한 Android 조작 개선판입니다.",changes:[
+    {category:"MOBILE AIM",text:"BALANCED·PRECISION·SPEED 상대 이동 프리셋과 기존 ABSOLUTE 모드를 설정에서 선택할 수 있습니다."},
+    {category:"INPUT",text:"손가락을 떼었다 다시 올려도 에임 각도를 유지하며, 비정상적으로 큰 재접촉 이동은 차단합니다."},
+    {category:"CONTROL",text:"에임 손가락과 ACTION·PULSE 손가락을 분리하고 플레이 중 브라우저 제스처 간섭을 억제합니다."},
+    {category:"COMPATIBILITY",text:"판정, 점수, 기록, 채보와 LOCAL .cmix 데이터 형식은 그대로 유지됩니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
   const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];

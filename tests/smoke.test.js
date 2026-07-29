@@ -506,13 +506,13 @@ const version = fs.readFileSync("src/version.js", "utf8");
 const pwa = fs.readFileSync("src/pwa.js", "utf8");
 const sw = fs.readFileSync("service-worker.js", "utf8");
 const changelog = fs.readFileSync("src/changelog.js", "utf8");
-assert.match(version, /version:\s*"0\.9\.32"/);
+assert.match(version, /version:\s*"0\.9\.33"/);
 assert.match(version, /cacheRevision:/);
 assert.match(pwa, /const RELEASE=window\.CircleMixVersion/);
 assert.match(sw, /^importScripts\("\.\/src\/version\.js"\);/);
-assert.doesNotMatch(pwa, /const VERSION="0\.9\.32"/);
-assert.doesNotMatch(sw, /const VERSION = "0\.9\.32"/);
-assert.match(changelog, /version:\s*"0\.9\.32"/);
+assert.doesNotMatch(pwa, /const VERSION="0\.9\.33"/);
+assert.doesNotMatch(sw, /const VERSION = "0\.9\.33"/);
+assert.match(changelog, /version:\s*"0\.9\.33"/);
 });
 
 test("service worker derives app shell cache-bust URLs from cache revision", () => {
