@@ -1,4 +1,4 @@
-name: PR 158 local difficulty anchor diagnostic
+name: PR 158 tested local difficulty fix
 
 on:
   push:
@@ -10,35 +10,156 @@ permissions:
   contents: write
 
 jobs:
-  diagnose:
+  patch-test-commit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Record patch anchors
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Patch difficulty ordering and editor preservation
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          checks={
-            'song-sort':('src/song-record.js','  function difficultySortValue(id,meta={},chart={}){'),
-            'song-export':('src/song-record.js','numericDifficulty,difficultySortValue,sortLocalDifficultyOrder'),
-            'game-hud':('src/game.js','if(isLocalSong(selectedSong)){ const c=selectedSong.charts?.[mode]; return c ? chartDifficulty.calculate(c) : null; }'),
-            'game-select':('src/game.js','const chart=songData.charts?.[difficultyId]; let stars;'),
-            'editor-export':('src/editor-playtest.js','previewMetrics,summary,mountBadge'),
-            'editor-record':('src/editor.js','const diffKey=difficultyKey();'),
-            'song-test':('tests/song-record.test.js',"assert.deepEqual(R.normalize({id:'numeric'"),
-            'editor-test':('tests/editor-playtest.test.js','editor playtest is wired into editor')
-          }
-          lines=[]
-          for name,(path,needle) in checks.items():
-              text=Path(path).read_text(encoding='utf-8')
-              lines.append(f'{name}: {needle in text} index={text.find(needle)}')
-          Path('pr158-fix-anchor-report.txt').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          import re
+
+          # Shared stable sorter for the actual star values shown in song select.
+          p=Path('src/song-record.js')
+          text=p.read_text(encoding='utf-8')
+          anchor='  function sortLocalDifficultyOrder(order,rawDiffs={},charts={}){'
+          helper="""  function sortDifficultyEntriesByStars(entries=[]){
+              return entries.map((entry,index)=>({entry,index,value:Number(entry?.stars)})).sort((a,b)=>{
+                const aFinite=Number.isFinite(a.value), bFinite=Number.isFinite(b.value);
+                if(aFinite&&bFinite&&a.value!==b.value)return a.value-b.value;
+                if(aFinite!==bFinite)return aFinite?-1:1;
+                return a.index-b.index;
+              }).map(item=>item.entry);
+            }
+          """
+          if 'function sortDifficultyEntriesByStars(' not in text:
+              if anchor not in text: raise SystemExit('song-record sort anchor missing')
+              text=text.replace(anchor,helper+anchor,1)
+          old='return Object.freeze({SOURCE_BUNDLED,SOURCE_LOCAL,sourceOf,keyOf,numericDifficulty,difficultySortValue,sortLocalDifficultyOrder,resolveDifficultyOrder,normalize});'
+          new='return Object.freeze({SOURCE_BUNDLED,SOURCE_LOCAL,sourceOf,keyOf,numericDifficulty,difficultySortValue,sortDifficultyEntriesByStars,sortLocalDifficultyOrder,resolveDifficultyOrder,normalize});'
+          if old in text:text=text.replace(old,new,1)
+          elif 'sortDifficultyEntriesByStars,sortLocalDifficultyOrder' not in text:raise SystemExit('song-record export anchor missing')
+          p.write_text(text,encoding='utf-8')
+
+          # LOCAL difficulty buttons and summaries are ordered by the same auto stars they display.
+          p=Path('src/game.js')
+          text=p.read_text(encoding='utf-8')
+          pattern=r'''  function localChartEntries\(songData=selectedSong\)\{\n.*?\n  \}\n  function getActiveDifficultyLabel'''
+          replacement="""  function localChartEntries(songData=selectedSong){
+              const charts=songData?.charts||{};
+              const entries=difficultyIds(songData).filter(id=>charts[id]?.notes?.length).map(id=>{
+                const chart=charts[id], meta=songData?.difficulties?.[id]||chart?.meta||{};
+                let stars;
+                try{ stars=difficultyViewForSong(songData,id)?.stars; }catch(error){ console.error("[Difficulty Ordering Failed]",error); }
+                return {id,chart,meta,stars};
+              });
+              const ordered=window.CircleMixSongRecord?.sortDifficultyEntriesByStars?.(entries)||entries;
+              return ordered.map(({stars,...entry})=>entry);
+            }
+            function getActiveDifficultyLabel"""
+          text,count=re.subn(pattern,replacement,text,count=1,flags=re.S)
+          if count!=1:raise SystemExit(f'game localChartEntries replacement count={count}')
+          p.write_text(text,encoding='utf-8')
+
+          # Merge only the edited chart into an existing LOCAL record instead of deleting siblings.
+          p=Path('src/editor-playtest.js')
+          text=p.read_text(encoding='utf-8')
+          anchor='  function mountBadge(session,doc=typeof document!=="undefined"?document:null){'
+          helper="""  function mergeLocalDifficulty(existing,incoming,diffKey){
+              const id=String(diffKey||'').trim();
+              if(!id||!incoming||typeof incoming!=='object')throw new Error('A local difficulty record and id are required.');
+              const previous=existing&&typeof existing==='object'?existing:{};
+              const difficulties={...(previous.difficulties||{}),...(incoming.difficulties||{})};
+              const charts={...(previous.charts||{}),...(incoming.charts||{})};
+              const available=new Set([...Object.keys(difficulties),...Object.keys(charts)]),difficultyOrder=[],seen=new Set();
+              const candidates=[...(Array.isArray(previous.difficultyOrder)?previous.difficultyOrder:[]),...Object.keys(previous.difficulties||{}),...Object.keys(previous.charts||{}),...(Array.isArray(incoming.difficultyOrder)?incoming.difficultyOrder:[]),...Object.keys(incoming.difficulties||{}),...Object.keys(incoming.charts||{}),id];
+              for(const candidate of candidates)if(typeof candidate==='string'&&available.has(candidate)&&!seen.has(candidate)){seen.add(candidate);difficultyOrder.push(candidate);}
+              return {...previous,...incoming,difficultyOrder,difficulties,charts};
+            }
+          """
+          if 'function mergeLocalDifficulty(' not in text:
+              if anchor not in text:raise SystemExit('editor-playtest helper anchor missing')
+              text=text.replace(anchor,helper+anchor,1)
+          old='previewMetrics,summary,mountBadge});'
+          new='previewMetrics,summary,mergeLocalDifficulty,mountBadge});'
+          if old in text:text=text.replace(old,new,1)
+          elif 'summary,mergeLocalDifficulty,mountBadge' not in text:raise SystemExit('editor-playtest export anchor missing')
+          p.write_text(text,encoding='utf-8')
+
+          p=Path('src/editor.js')
+          text=p.read_text(encoding='utf-8')
+          start=text.find('      const diffKey=difficultyKey();')
+          end=text.find('      await store.install(record',start)
+          if start<0 or end<0:raise SystemExit('editor record construction anchors missing')
+          block="""      const diffKey=difficultyKey(), now=new Date().toISOString();
+              const incoming={ id:m.songId, source:'local', title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, installedAt:existing?.installedAt||now, updatedAt:now, audioBlob:state.audioFile||existing?.audioBlob, audioType:state.audioFile?.type||existing?.audioType||null, jacketBlob:state.jacketFile||existing?.jacketBlob||null, jacketData:state.jacketData||existing?.jacketData||null, difficultyOrder:[diffKey], difficulties:{ [diffKey]:{ label:m.difficulty||'CUSTOM', chart:`local:${m.songId}:${diffKey}`, stars:tools.calculateStars(chart) } }, charts:{ [diffKey]:chart } };
+              const record=playtestApi?.mergeLocalDifficulty(existing,incoming,diffKey)||incoming;
+          """
+          text=text[:start]+block+text[end:]
+          p.write_text(text,encoding='utf-8')
+
+          # Regression tests for stable visible order and sibling preservation.
+          p=Path('tests/song-record.test.js')
+          text=p.read_text(encoding='utf-8')
+          marker="assert.deepEqual(R.normalize({id:'stable',difficultyOrder:['custom-b','custom-a'],difficulties:{'custom-b':{},'custom-a':{}}},'local').difficultyOrder,['custom-b','custom-a']);\n"
+          test="""assert.deepEqual(R.sortDifficultyEntriesByStars([{id:'declared-easy-but-runtime-hard',stars:9.2},{id:'declared-hard-but-runtime-easy',stars:4.8},{id:'unknown'},{id:'unknown-2'}]).map(entry=>entry.id),['declared-hard-but-runtime-easy','declared-easy-but-runtime-hard','unknown','unknown-2']);
+          assert.match(require('fs').readFileSync('src/game.js','utf8'),/sortDifficultyEntriesByStars/);
+          """
+          if 'declared-easy-but-runtime-hard' not in text:
+              if marker not in text:raise SystemExit('song-record test anchor missing')
+              text=text.replace(marker,marker+test,1)
+          p.write_text(text,encoding='utf-8')
+
+          p=Path('tests/editor-playtest.test.js')
+          text=p.read_text(encoding='utf-8')
+          anchor='test("editor playtest is wired into editor, game, offline shell and packages",()=>{'
+          test="""test('editor playtest save preserves sibling LOCAL difficulties',()=>{
+              const existing={id:'song',difficultyOrder:['easy','hard'],difficulties:{easy:{stars:2},hard:{stars:8}},charts:{easy:{notes:[1]},hard:{notes:[2]}}};
+              const incoming={id:'song',difficultyOrder:['hard'],difficulties:{hard:{stars:9}},charts:{hard:{notes:[3]}}};
+              const merged=api.mergeLocalDifficulty(existing,incoming,'hard');
+              assert.deepEqual(merged.difficultyOrder,['easy','hard']);
+              assert.equal(merged.difficulties.easy.stars,2);
+              assert.equal(merged.difficulties.hard.stars,9);
+              assert.deepEqual(merged.charts.easy.notes,[1]);
+            });
+
+          """
+          if 'preserves sibling LOCAL difficulties' not in text:
+              if anchor not in text:raise SystemExit('editor-playtest test anchor missing')
+              text=text.replace(anchor,test+anchor,1)
+          p.write_text(text,encoding='utf-8')
           PY
-          cat pr158-fix-anchor-report.txt
+          git diff --check
+      - name: Install and run unit safety net
+        shell: bash
+        run: |
+          set +e
+          npm ci > /tmp/pr158-test.log 2>&1 && npm test >> /tmp/pr158-test.log 2>&1
+          status=$?
+          cat /tmp/pr158-test.log
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/pr158-test.log pr158-fix-failure.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add pr158-fix-failure.txt
+            git commit -m "chore: record PR 158 fix failure" || true
+            git push origin HEAD:agent/editor-playtest-controls
+            exit "$status"
+          fi
+      - name: Commit verified fixes
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pr158-fix-anchor-report.txt
-          git commit -m "chore: record PR 158 fix anchors" || true
+          rm -f .github/workflows/pr158-local-difficulty-fix.yml pr158-fix-anchor-report.txt pr158-fix-failure.txt
+          git add -A
+          git commit -m "fix: preserve and consistently order local difficulties"
           git push origin HEAD:agent/editor-playtest-controls
