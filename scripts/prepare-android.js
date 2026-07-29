@@ -19,12 +19,17 @@ fs.rmSync(out,{recursive:true,force:true});
 fs.cpSync(desktopOut,out,{recursive:true});
 
 for(const file of ['src/desktop-release.js','src/desktop-updater.js'])fs.rmSync(path.join(out,file),{force:true});
-for(const file of ['src/android-platform.js','src/android-updater.js'])fs.copyFileSync(path.join(root,file),path.join(out,file));
+for(const file of ['src/android-platform.js','src/android-updater.js','src/editor-playtest.js']){
+  const target=path.join(out,file);
+  fs.mkdirSync(path.dirname(target),{recursive:true});
+  fs.copyFileSync(path.join(root,file),target);
+}
 
 let index=fs.readFileSync(path.join(out,'index.html'),'utf8').replace(/\r\n/g,'\n');
 index=replaceOrThrow(index,'<script src="./src/desktop-release.js"></script>','<script src="./src/android-release.js"></script>','replace desktop release metadata');
 index=replaceOrThrow(index,'<script src="./src/desktop-updater.js"></script>','<script src="./src/android-platform.js"></script>\n<script src="./src/android-updater.js"></script>','inject the Android platform and updater bridges');
 if(index.includes('desktop-updater.js')||index.includes('desktop-release.js'))throw new Error('Android index still loads desktop-only scripts.');
+if(!index.includes('./src/editor-playtest.js'))throw new Error('Android index does not load the editor playtest runtime.');
 fs.writeFileSync(path.join(out,'index.html'),index);
 
 const sharedBootstrap=fs.readFileSync(path.join(root,'src/build-config.js'),'utf8');
@@ -65,5 +70,5 @@ fs.writeFileSync(path.join(out,'src/pwa.js'),androidPwa);
 
 const forbidden=['src/desktop-release.js','src/desktop-updater.js','service-worker.js','manifest.webmanifest'];
 for(const relative of forbidden)if(fs.existsSync(path.join(out,relative)))throw new Error(`Android distribution contains forbidden file: ${relative}`);
-for(const required of ['index.html','src/android-release.js','src/android-platform.js','src/android-updater.js','src/build-config.js','src/pwa.js','src/mobile-layout-v2.js','mobile-layout-v2.css'])if(!fs.existsSync(path.join(out,required)))throw new Error(`Android distribution is missing ${required}`);
+for(const required of ['index.html','src/android-release.js','src/android-platform.js','src/android-updater.js','src/editor-playtest.js','src/build-config.js','src/pwa.js','src/mobile-layout-v2.js','mobile-layout-v2.css'])if(!fs.existsSync(path.join(out,required)))throw new Error(`Android distribution is missing ${required}`);
 console.log(`Prepared copyright-safe android-dist v${ANDROID_VERSION}.`);
