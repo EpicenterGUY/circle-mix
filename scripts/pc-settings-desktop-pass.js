@@ -14,7 +14,8 @@ const required=[
   ['src/trackpad-tablet-area.js','src/trackpad-tablet-area.js'],
   ['mobile-layout-v2.css','mobile-layout-v2.css'],
   ['src/mobile-layout-v2.js','src/mobile-layout-v2.js'],
-  ['song-select-fixes.css','song-select-fixes.css']
+  ['song-select-fixes.css','song-select-fixes.css'],
+  ['src/editor-playtest.js','src/editor-playtest.js']
 ];
 if(!fs.existsSync(path.join(out,'index.html')))throw new Error('desktop-dist must be prepared before the settings asset pass');
 if(!/^\d+\.\d+\.\d+$/.test(desktopVersion))throw new Error('package.json must contain a desktop SemVer');
@@ -37,16 +38,18 @@ const releasePath=path.join(out,'src/desktop-release.js');
 let desktopRelease=fs.readFileSync(releasePath,'utf8');
 desktopRelease=desktopRelease
   .replace(/version:"[^"]+"/,`version:"${desktopVersion}"`)
-  .replace(/title:"[^"]+"/,`title:"LIBRARY FIXES ${desktopVersion}"`)
-  .replace(/summary:"[^"]+"/,'summary:"곡 목록 스크롤과 LOCAL 난이도 정렬을 수정하고 트랙패드 TABLET AREA를 포함한 최신 Windows판입니다."')
+  .replace(/title:"[^"]+"/,`title:"WINDOWS ${desktopVersion}"`)
+  .replace(/summary:"[^"]+"/,'summary:"LOCAL 난이도를 실제 표시 별 기준으로 정렬하고 에디터 플레이테스트 저장 안전성을 반영한 Windows 업데이트입니다."')
   .replace(/changes:\[[\s\S]*?\]\};/,`changes:[
-    {category:"SONG SELECT",text:"곡이 많아져도 첫 곡부터 마지막 곡까지 위아래 스크롤로 모두 접근할 수 있습니다."},
-    {category:"LOCAL",text:"LOCAL .cmix의 난이도 버튼을 숫자 레벨 기준 쉬운 순서부터 어려운 순서로 정렬합니다."},
-    {category:"TRACKPAD",text:"BALANCED·PRECISION·SPEED와 TABLET AREA 입력 모드를 Windows 설정에서 사용할 수 있습니다."},
-    {category:"COMPATIBILITY",text:"판정, 점수, 기록, 채보와 기존 LOCAL .cmix 저장 데이터는 그대로 유지됩니다."}
+    {category:"LOCAL ORDER",text:"LOCAL 난이도를 화면에 표시되는 자동 계산 별 기준으로 쉬운 순서부터 어려운 순서로 정렬합니다."},
+    {category:"EDITOR",text:"한 난이도를 저장하거나 플레이테스트해도 같은 곡의 다른 난이도와 채보를 그대로 보존합니다."},
+    {category:"PLAYTEST",text:"에디터에서 현재 채보를 공식 게임 판정으로 바로 열고 테스트 전용 설정을 사용할 수 있습니다."},
+    {category:"COMPATIBILITY",text:"판정, 점수, 기록, 기존 LOCAL .cmix와 Windows 설정은 그대로 유지됩니다."}
   ]};`);
-if(!desktopRelease.includes(`version:"${desktopVersion}"`)||!desktopRelease.includes(`LIBRARY FIXES ${desktopVersion}`))throw new Error('unable to stamp desktop release metadata');
+if(!desktopRelease.includes(`version:"${desktopVersion}"`)||!desktopRelease.includes(`WINDOWS ${desktopVersion}`))throw new Error('unable to stamp desktop release metadata');
 fs.writeFileSync(releasePath,desktopRelease);
 
+const editorPlaytest=fs.readFileSync(path.join(out,'src/editor-playtest.js'),'utf8');
+if(!editorPlaytest.includes('mergeLocalDifficulty'))throw new Error('desktop editor playtest lost sibling difficulty preservation');
 for(const [,targetRelative] of required)if(!fs.existsSync(path.join(out,targetRelative)))throw new Error(`settings desktop copy failed: ${targetRelative}`);
-console.log(`Applied unified settings, library and trackpad desktop pass v${desktopVersion}.`);
+console.log(`Applied unified settings, LOCAL difficulty and editor playtest desktop pass v${desktopVersion}.`);

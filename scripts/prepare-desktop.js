@@ -2,9 +2,9 @@
 'use strict';
 const fs=require('fs'), path=require('path');
 const root=path.resolve(__dirname,'..'), out=path.join(root,'desktop-dist');
-const DESKTOP_VERSION='0.9.46';
-const DESKTOP_BUILD_DATE='2026-07-28';
-const files=['style.css','orbit.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/game.js','src/orbit.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
+const DESKTOP_VERSION='0.9.50';
+const DESKTOP_BUILD_DATE='2026-07-29';
+const files=['style.css','orbit.css','icons/circle-mix-icon-192.png','icons/circle-mix-icon-512.png','src/version.js','src/changelog.js','src/song-record.js','src/song-package-adapter.js','src/local-library.js','src/player-profile.js','src/player-profile-ui.js','src/chart-difficulty.js','src/songs.js','src/chart.js','src/audio.js','src/effects.js','src/ui.js','src/input.js','src/cmix-validator.js','src/cmix-audio.js','src/cmix-zip.js','src/cmix-exporter.js','src/cmix-importer.js','src/cmix-local-install.js','src/editor-playtest.js','src/game.js','src/orbit.js','src/cmix-import-ui.js','src/pwa.js','src/desktop-updater.js'];
 function replaceOrThrow(source,search,replacement,label){const next=source.replace(search,replacement);if(next===source)throw new Error(`Unable to ${label}.`);return next;}
 fs.rmSync(out,{recursive:true,force:true});
 for(const file of files){const from=path.join(root,file), to=path.join(out,file); fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(from,to);}
@@ -15,6 +15,7 @@ let index=fs.readFileSync(path.join(root,'index.html'),'utf8')
  .replace(/<script src="\.\/src\/build-config\.js[^>]*><\/script>/,'<script src="./src/build-config.js"></script>')
  .replace(/(<script src="\.\/src\/changelog\.js[^>]*><\/script>)/,'$1\n<script src="./src/desktop-release.js"></script>\n<script src="./src/desktop-updater.js"></script>');
 if(!index.includes('./src/desktop-release.js')||!index.includes('./src/desktop-updater.js')) throw new Error('Unable to inject desktop release and updater metadata.');
+if(!index.includes('./src/editor-playtest.js'))throw new Error('Desktop index does not load the editor playtest runtime.');
 fs.writeFileSync(path.join(out,'index.html'),index);
 let orbit=fs.readFileSync(path.join(root,'orbit.html'),'utf8').replace('src="./assets/audio/ghost-rule.mp3"','src=""');
 fs.writeFileSync(path.join(out,'orbit.html'),orbit);
@@ -63,11 +64,11 @@ songs=songs.replaceAll('CircleMixGhostRuleBundle','ExcludedBundle').replaceAll('
 fs.writeFileSync(desktopSongs,songs);
 const desktopRelease=`(function(){
   "use strict";
-  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"ALL-PLATFORM 0.9.46",summary:"모바일·PC 공통 본편 개선과 통합 설정, PULSE 동시치기 가독성을 최신 설치판에 반영했습니다.",changes:[
-    {category:"SETTINGS",text:"플레이·입력·오디오·화면·접근성·시스템 설정을 모바일과 PC에서 같은 구조로 사용할 수 있습니다."},
-    {category:"PULSE",text:"PULSE와 동시에 등장하는 CUT·HOLD·SLIDE·TRACE·SWING 계열을 주황색 언어로 명확히 구분합니다."},
-    {category:"MOBILE",text:"ACTION과 PULSE 버튼을 직접 드래그하고 크기·투명도·프리셋을 저장할 수 있습니다."},
-    {category:"COMPATIBILITY",text:"판정, 점수, 기록, 채보와 LOCAL .cmix 라이브러리는 그대로 유지됩니다."}
+  const release={version:"${DESKTOP_VERSION}",date:"${DESKTOP_BUILD_DATE}",title:"WINDOWS 0.9.50",summary:"LOCAL 난이도 정렬과 에디터 플레이테스트 저장 안전성을 반영한 Windows 업데이트입니다.",changes:[
+    {category:"LOCAL ORDER",text:"LOCAL 난이도를 화면에 표시되는 자동 계산 별 기준으로 쉬운 순서부터 정렬합니다."},
+    {category:"EDITOR",text:"한 난이도를 저장하거나 플레이테스트해도 같은 곡의 다른 난이도와 채보를 보존합니다."},
+    {category:"PLAYTEST",text:"에디터에서 현재 채보를 공식 게임 판정으로 바로 열어 테스트할 수 있습니다."},
+    {category:"COMPATIBILITY",text:"기존 LOCAL 곡·채보·기록과 Windows 설정은 그대로 유지됩니다."}
   ]};
   window.CircleMixVersion=Object.freeze({version:release.version,buildDate:release.date});
   const previous=Array.isArray(window.CircleMixChangelog)?window.CircleMixChangelog:[];

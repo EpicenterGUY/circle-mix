@@ -11,7 +11,7 @@ test('Android platform configuration uses the 0.9.50 fullscreen local-library sh
   const config=JSON.parse(read('src-tauri/tauri.android.conf.json'));
   const packageJson=JSON.parse(read('package.json'));
   assert.equal(config.version,'0.9.50');
-  assert.equal(packageJson.version,'0.9.49','Android-only releases must not advance the desktop package version');
+  assert.equal(packageJson.version,'0.9.50','the Windows package may catch up to the already published Android version');
   assert.equal(config.build.frontendDist,'../android-dist');
   assert.equal(config.app.windows[0].fullscreen,true);
   assert.equal(config.app.windows[0].decorations,false);
