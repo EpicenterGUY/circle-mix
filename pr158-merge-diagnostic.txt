@@ -1,4 +1,199 @@
-MERGE_EXIT=128
+MERGE_EXIT=1
+=== MERGE OUTPUT ===
+Auto-merging editor.html
+CONFLICT (content): Merge conflict in editor.html
+Auto-merging package.json
+CONFLICT (content): Merge conflict in package.json
+Auto-merging service-worker.js
+Auto-merging src/version.js
+CONFLICT (content): Merge conflict in src/version.js
+Auto-merging tests/pwa-update.test.js
+CONFLICT (content): Merge conflict in tests/pwa-update.test.js
+Automatic merge failed; fix conflicts and then commit the result.
 === UNMERGED FILES ===
+editor.html
+package.json
+src/version.js
+tests/pwa-update.test.js
 === CONFLICT MARKERS ===
+--- editor.html ---
+1-<!DOCTYPE html>
+2-<html lang="ko">
+3-<head>
+4-<meta charset="UTF-8" />
+5-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+6-<title>CIRCLE MIX Chart Editor</title>
+7:<<<<<<< HEAD
+8-<link rel="stylesheet" href="./src/editor.css?v=20260728-editor-playtest-v1" />
+9:=======
+10-<link rel="stylesheet" href="./src/editor.css?v=20260728-library-scroll-sort-0.9.49" />
+11:>>>>>>> origin/main
+12-</head>
+13-<body>
+14-<header class="topbar">
+15-  <a class="back" href="./index.html">← TITLE</a>
+16-  <div><strong>CIRCLE MIX CHART EDITOR</strong><span>local files only · PC recommended</span></div>
+17-  <button id="exportBtn" type="button">Export Chart JSON</button><button id="exportCmixBtn" type="button">EXPORT CHART .CMIX</button><button id="exportFullCmixBtn" type="button">EXPORT FULL .CMIX</button><button id="exportAllCmixBtn" type="button" hidden>EXPORT ALL DIFFICULTIES AS CHART .CMIX</button><button id="exportAllFullCmixBtn" type="button" hidden>EXPORT ALL DIFFICULTIES AS FULL .CMIX</button>
+18-</header>
+19-<main class="layout">
+--
+85-    <input id="importFile" type="file" accept="application/json,.json" />
+86-    <div class="actions"><button id="exportMetaBtn">Export Metadata JSON</button><button id="validateBtn">Validate</button><button id="physicalCheckBtn" type="button">PHYSICAL CHECK</button><button id="autoPreviewBtn">AUTO Preview</button></div>
+87-    <h3>Local Projects</h3><div id="projects" class="projects"></div>
+88-    <h3>Validation</h3><div id="validation" class="validation">No checks yet.</div>
+89-    <h3>Events</h3><div id="noteList" class="noteList"></div>
+90-  </aside>
+91-</main>
+92-<audio id="audio" preload="metadata"></audio>
+93:<<<<<<< HEAD
+94-<script src="./src/song-record.js?v=20260728-editor-playtest-v1"></script>
+95-<script src="./src/song-package-adapter.js?v=20260728-editor-playtest-v1"></script>
+96-<script src="./src/local-library.js?v=20260728-editor-playtest-v1"></script>
+97-<script src="./src/chart-difficulty.js?v=20260728-editor-playtest-v1"></script>
+98-<script src="./src/chart-feasibility.js?v=20260728-editor-playtest-v1"></script>
+99-<script src="./src/songs.js?v=20260728-editor-playtest-v1"></script>
+100-<script src="./src/cmix-validator.js?v=20260728-editor-playtest-v1"></script>
+101-<script src="./src/cmix-audio.js?v=20260728-editor-playtest-v1"></script>
+102-<script src="./src/cmix-zip.js?v=20260728-editor-playtest-v1"></script>
+103-<script src="./src/cmix-exporter.js?v=20260728-editor-playtest-v1"></script>
+104-<script src="./src/editor-playtest.js?v=20260728-editor-playtest-v1"></script>
+105-<script src="./src/editor.js?v=20260728-editor-playtest-v1"></script>
+106-<script src="./src/editor-feasibility.js?v=20260728-editor-playtest-v1"></script>
+107:=======
+108-<script src="./src/song-record.js?v=20260728-library-scroll-sort-0.9.49"></script>
+109-<script src="./src/song-package-adapter.js?v=20260728-library-scroll-sort-0.9.49"></script>
+110-<script src="./src/local-library.js?v=20260728-library-scroll-sort-0.9.49"></script>
+111-<script src="./src/chart-difficulty.js?v=20260728-library-scroll-sort-0.9.49"></script>
+112-<script src="./src/chart-feasibility.js?v=20260728-library-scroll-sort-0.9.49"></script>
+113-<script src="./src/songs.js?v=20260728-library-scroll-sort-0.9.49"></script>
+114-<script src="./src/cmix-validator.js?v=20260728-library-scroll-sort-0.9.49"></script>
+115-<script src="./src/cmix-audio.js?v=20260728-library-scroll-sort-0.9.49"></script>
+116-<script src="./src/cmix-zip.js?v=20260728-library-scroll-sort-0.9.49"></script>
+117-<script src="./src/cmix-exporter.js?v=20260728-library-scroll-sort-0.9.49"></script>
+118-<script src="./src/editor.js?v=20260728-library-scroll-sort-0.9.49"></script>
+119-<script src="./src/editor-feasibility.js?v=20260728-library-scroll-sort-0.9.49"></script>
+120:>>>>>>> origin/main
+121-</body>
+122-</html>
+--- package.json ---
+1-{
+2-  "scripts": {
+3-    "tauri": "tauri",
+4:<<<<<<< HEAD
+5-    "test": "node --check src/chart-difficulty.js && node --check src/chart-feasibility.js && node --check src/build-config.js && node --check src/pc-settings.js && node --check src/mobile-layout-v2.js && node --check src/android-platform.js && node --check src/song-record.js && node --check src/song-package-adapter.js && node --check src/local-library.js && node --check src/player-profile.js && node --check src/player-profile-ui.js && node --check src/input.js && node --check src/game.js && node --check src/orbit.js && node --check src/version.js && node --check src/changelog.js && node --check src/pwa.js && node --check src/desktop-updater.js && node --check src/cmix-validator.js && node --check src/cmix-zip.js && node --check src/cmix-audio.js && node --check src/cmix-exporter.js && node --check src/cmix-importer.js && node --check src/cmix-import-ui.js && node --check src/cmix-local-install.js && node --check src/editor-playtest.js && node --check src/editor.js && node --check src/editor-feasibility.js && node --check scripts/pc-settings-desktop-pass.js && node --check scripts/prepare-android.js && node --check scripts/patch-android-project.js && node --check scripts/audit-android-dist.js && node --check scripts/audit-android-project.js && node --check service-worker.js && node tests/smoke.test.js && node tests/orbit-mode.test.js && node tests/pc-settings.test.js && node tests/mobile-layout-v2.test.js && node tests/android-app.test.js && node tests/hit-sound.test.js && node tests/song-record.test.js && node tests/local-library.test.js && node tests/player-profile.test.js && node tests/pulse-input.test.js && node tests/pulse-game-input.test.js && node tests/cmix-validator.test.js && node tests/cmix-importer.test.js && node tests/cmix-exporter.test.js && node tests/chart-difficulty.test.js && node tests/chart-feasibility.test.js && node tests/editor-feasibility.test.js && node tests/editor-playtest.test.js && node tests/local-auto-toggle.test.js && node tests/desktop-installer.test.js && node tests/desktop-visual-pass.test.js && node tests/desktop-updater.test.js && node tests/pwa-update.test.js",
+6-    "test:browser": "node tests/editor-feasibility-browser.test.js && node tests/editor-playtest-browser.test.js && node tests/browser-regression.test.js && node tests/orbit-browser.test.js && node tests/pc-settings-browser.test.js && node tests/mobile-layout-v2-browser.test.js && node tests/local-auto-browser.test.js && node tests/mobile-song-select-layout.test.js && node tests/mobile-viewport-browser.test.js && node tests/player-profile-browser.test.js && node tests/player-profile-ui-browser.test.js",
+7:=======
+8-    "test": "node --check src/chart-difficulty.js && node --check src/chart-feasibility.js && node --check src/build-config.js && node --check src/pc-settings.js && node --check src/mobile-layout-v2.js && node --check src/trackpad-tablet-area.js && node --check src/android-platform.js && node --check src/song-record.js && node --check src/song-package-adapter.js && node --check src/local-library.js && node --check src/player-profile.js && node --check src/player-profile-ui.js && node --check src/input.js && node --check src/ui.js && node --check src/game.js && node --check src/orbit.js && node --check src/version.js && node --check src/changelog.js && node --check src/pwa.js && node --check src/desktop-updater.js && node --check src/cmix-validator.js && node --check src/cmix-zip.js && node --check src/cmix-audio.js && node --check src/cmix-exporter.js && node --check src/cmix-importer.js && node --check src/cmix-import-ui.js && node --check src/cmix-local-install.js && node --check src/editor.js && node --check src/editor-feasibility.js && node --check scripts/pc-settings-desktop-pass.js && node --check scripts/prepare-android.js && node --check scripts/prepare-android-0.9.49.js && node --check scripts/patch-android-project.js && node --check scripts/audit-android-dist.js && node --check scripts/audit-android-project.js && node --check service-worker.js && node tests/smoke.test.js && node tests/orbit-mode.test.js && node tests/pc-settings.test.js && node tests/trackpad-settings.test.js && node tests/trackpad-tablet-area.test.js && node tests/mobile-layout-v2.test.js && node tests/android-app.test.js && node tests/hit-sound.test.js && node tests/song-record.test.js && node tests/local-library.test.js && node tests/player-profile.test.js && node tests/pulse-input.test.js && node tests/pulse-game-input.test.js && node tests/cmix-validator.test.js && node tests/cmix-importer.test.js && node tests/cmix-exporter.test.js && node tests/chart-difficulty.test.js && node tests/chart-feasibility.test.js && node tests/editor-feasibility.test.js && node tests/local-auto-toggle.test.js && node tests/desktop-installer.test.js && node tests/desktop-visual-pass.test.js && node tests/desktop-updater.test.js && node tests/pwa-update.test.js",
+9-    "test:browser": "node tests/song-select-overflow-browser.test.js && node tests/editor-feasibility-browser.test.js && node tests/browser-regression.test.js && node tests/orbit-browser.test.js && node tests/pc-settings-browser.test.js && node tests/trackpad-tablet-area-browser.test.js && node tests/mobile-layout-v2-browser.test.js && node tests/local-auto-browser.test.js && node tests/mobile-song-select-layout.test.js && node tests/mobile-viewport-browser.test.js && node tests/player-profile-browser.test.js && node tests/player-profile-ui-browser.test.js",
+10:>>>>>>> origin/main
+11-    "test:osu-to-cmix": "node --check scripts/osu-to-cmix.js && node --check scripts/osu-to-cmix-lib.js && node tests/osu-to-cmix.test.js",
+12-    "verify": "node scripts/verify.js",
+13-    "desktop:prepare": "node scripts/prepare-desktop.js && node scripts/pc-settings-desktop-pass.js",
+14-    "desktop:audit": "node scripts/audit-desktop-dist.js",
+15-    "desktop:check": "npm run desktop:prepare && npm run desktop:audit",
+16-    "desktop:dev": "npm run desktop:icons && cargo tauri dev",
+17-    "desktop:build": "npm run desktop:icons && cargo tauri build",
+18-    "desktop:release-build": "npm run desktop:icons && cargo tauri build --config src-tauri/tauri.release.conf.json",
+--- src/version.js ---
+1-(function(root){
+2-  "use strict";
+3-  root.CircleMixVersion = Object.freeze({
+4:<<<<<<< HEAD
+5-    version: "0.9.32",
+6-    buildDate: "2026-07-26",
+7-    cacheRevision: "20260728-editor-playtest-v1"
+8:=======
+9-    version: "0.9.33",
+10-    buildDate: "2026-07-28",
+11-    cacheRevision: "20260728-library-scroll-sort-0.9.49"
+12:>>>>>>> origin/main
+13-  });
+14-})(typeof window !== "undefined" ? window : self);
+--- tests/pwa-update.test.js ---
+12-const serviceWorkerSource = fs.readFileSync("service-worker.js", "utf8");
+13-const changelogSource = fs.readFileSync("src/changelog.js", "utf8");
+14-const buildConfigSource = fs.readFileSync("src/build-config.js", "utf8");
+15-
+16-test("release metadata loads in both window and service worker contexts", () => {
+17-  const browser = {window:{}};
+18-  vm.createContext(browser);
+19-  vm.runInContext(versionSource, browser, {filename:"src/version.js"});
+20:<<<<<<< HEAD
+21-  assert.equal(browser.window.CircleMixVersion.version, "0.9.32");
+22-  assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260728-editor-playtest-v1");
+23:=======
+24-  assert.equal(browser.window.CircleMixVersion.version, "0.9.33");
+25-  assert.equal(browser.window.CircleMixVersion.cacheRevision, "20260728-library-scroll-sort-0.9.49");
+26:>>>>>>> origin/main
+27-  assert.equal(Object.isFrozen(browser.window.CircleMixVersion), true);
+28-
+29-  const worker = {self:{}};
+30-  vm.createContext(worker);
+31-  vm.runInContext(versionSource, worker, {filename:"src/version.js"});
+32-  assert.equal(worker.self.CircleMixVersion.version, browser.window.CircleMixVersion.version);
+33-  assert.equal(worker.self.CircleMixVersion.cacheRevision, browser.window.CircleMixVersion.cacheRevision);
+34-});
+--
+39-  assert.doesNotMatch(pwaSource, /const VERSION\s*=\s*["'][0-9]/);
+40-  assert.match(serviceWorkerSource, /^importScripts\("\.\/src\/version\.js"\);/);
+41-  assert.match(serviceWorkerSource, /const RELEASE = self\.CircleMixVersion/);
+42-  assert.match(serviceWorkerSource, /\$\{CACHE_PREFIX\}\$\{VERSION\}-\$\{CACHE_REVISION\}-app/);
+43-  assert.match(serviceWorkerSource, /return \{ready:missing\.length===0, version:VERSION, revision:CACHE_REVISION/);
+44-  assert.doesNotMatch(serviceWorkerSource, /const VERSION\s*=\s*["'][0-9]/);
+45-  assert.match(serviceWorkerSource, /cacheRevision/);
+46-  assert.match(serviceWorkerSource, /versioned\("\.\/src\/game\.js"\)/);
+47:<<<<<<< HEAD
+48-  assert.match(serviceWorkerSource, /versioned\("\.\/src\/editor-playtest\.js"\)/);
+49-  assert.match(changelogSource, /window\.CircleMixChangelog\s*=\s*\[\s*\{ version: "0\.9\.32"/);
+50-  assert.match(changelogSource, /AIM FLOW & PULSE GUIDANCE/);
+51:=======
+52-  assert.match(serviceWorkerSource, /versioned\("\.\/song-select-fixes\.css"\)/);
+53-  assert.match(changelogSource, /window\.CircleMixChangelog\s*=\s*\[/);
+54-  assert.match(buildConfigSource, /version:"0\.9\.33"/);
+55-  assert.match(buildConfigSource, /LIBRARY SCROLL & SORT/);
+56:>>>>>>> origin/main
+57-});
+58-
+59-test("online static assets refresh before cached fallback", () => {
+60-  assert.match(serviceWorkerSource, /async function networkFirstStatic\(request\)/);
+61-  assert.match(serviceWorkerSource, /fetch\(new Request\(request, \{cache:"no-cache"\}\)\)/);
+62-  assert.match(serviceWorkerSource, /if\(isStatic\)\{ event\.respondWith\(networkFirstStatic\(request\)\); return; \}/);
+63-  assert.doesNotMatch(serviceWorkerSource, /cached=>cached \?\? fetch|cached=>cached \|\| fetch/);
+64-});
 === STATUS ===
+M  .github/workflows/android-release.yml
+M  .github/workflows/ci.yml
+UU editor.html
+M  package-lock.json
+UU package.json
+M  scripts/audit-android-dist.js
+M  scripts/audit-desktop-dist.js
+M  scripts/pc-settings-desktop-pass.js
+A  scripts/prepare-android-0.9.49.js
+M  scripts/prepare-android.js
+M  scripts/prepare-desktop.js
+M  service-worker.js
+A  song-select-fixes.css
+M  src-tauri/Cargo.toml
+M  src-tauri/tauri.android.conf.json
+M  src-tauri/tauri.conf.json
+M  src/build-config.js
+M  src/changelog.js
+M  src/mobile-layout-v2.js
+M  src/song-record.js
+A  src/trackpad-tablet-area.js
+M  src/ui.js
+UU src/version.js
+M  tests/android-app.test.js
+M  tests/desktop-installer.test.js
+M  tests/desktop-updater.test.js
+M  tests/mobile-layout-v2-browser.test.js
+M  tests/mobile-layout-v2.test.js
+UU tests/pwa-update.test.js
+M  tests/smoke.test.js
+M  tests/song-record.test.js
+A  tests/song-select-overflow-browser.test.js
+A  tests/trackpad-settings.test.js
+A  tests/trackpad-tablet-area-browser.test.js
+A  tests/trackpad-tablet-area.test.js
+A  trackpad-tablet-area.css
