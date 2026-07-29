@@ -7,14 +7,14 @@ const Android=require('../src/android-platform');
 const Updater=require('../src/android-updater');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 
-test('Android platform configuration uses the 0.9.49 fullscreen local-library shell',()=>{
+test('Android platform configuration uses the 0.9.50 fullscreen local-library shell',()=>{
   const config=JSON.parse(read('src-tauri/tauri.android.conf.json'));
-  assert.equal(config.version,'0.9.49');
+  assert.equal(config.version,'0.9.50');
   assert.equal(config.build.frontendDist,'../android-dist');
   assert.equal(config.app.windows[0].fullscreen,true);
   assert.equal(config.app.windows[0].decorations,false);
   assert.equal(config.bundle.android.minSdkVersion,24);
-  assert.equal(config.bundle.android.versionCode,9049);
+  assert.equal(config.bundle.android.versionCode,9050);
   assert.match(config.app.security.csp,/connect-src 'self' https:\/\/api\.github\.com/);
 });
 
@@ -46,19 +46,19 @@ test('fold viewport classification and Android back policy are deterministic',()
 
 test('Android release metadata selects only a newer exact signed ARM64 APK',()=>{
   assert.equal(Updater.VERSION,'android-updater-v1');
-  assert.equal(Updater.compareVersions('0.9.49','0.9.48'),1);
-  assert.equal(Updater.compareVersions('0.9.49','0.9.49'),0);
-  assert.equal(Updater.releaseVersion('android-v0.9.50'),'0.9.50');
-  assert.equal(Updater.releaseVersion('v0.9.50'),'');
+  assert.equal(Updater.compareVersions('0.9.50','0.9.49'),1);
+  assert.equal(Updater.compareVersions('0.9.50','0.9.50'),0);
+  assert.equal(Updater.releaseVersion('android-v0.9.51'),'0.9.51');
+  assert.equal(Updater.releaseVersion('v0.9.51'),'');
   const release={
-    tag_name:'android-v0.9.50',draft:false,prerelease:false,body:'notes',published_at:'2026-07-28T00:00:00Z',
-    assets:[{name:'circle-mix-0.9.50-android-arm64-release.apk',state:'uploaded',size:123,digest:`sha256:${'a'.repeat(64)}`,browser_download_url:'https://github.com/EpicenterGUY/circle-mix/releases/download/android-v0.9.50/circle-mix-0.9.50-android-arm64-release.apk'}]
+    tag_name:'android-v0.9.51',draft:false,prerelease:false,body:'notes',published_at:'2026-07-29T00:00:00Z',
+    assets:[{name:'circle-mix-0.9.51-android-arm64-release.apk',state:'uploaded',size:123,digest:`sha256:${'a'.repeat(64)}`,browser_download_url:'https://github.com/EpicenterGUY/circle-mix/releases/download/android-v0.9.51/circle-mix-0.9.51-android-arm64-release.apk'}]
   };
-  const update=Updater.releaseToUpdate(release,'0.9.49');
-  assert.equal(update.version,'0.9.50');
+  const update=Updater.releaseToUpdate(release,'0.9.50');
+  assert.equal(update.version,'0.9.51');
   assert.equal(update.sha256,'a'.repeat(64));
-  assert.equal(Updater.releaseToUpdate(release,'0.9.50'),null);
-  assert.equal(Updater.releaseToUpdate({...release,assets:[{...release.assets[0],digest:null}]},'0.9.49'),null);
+  assert.equal(Updater.releaseToUpdate(release,'0.9.51'),null);
+  assert.equal(Updater.releaseToUpdate({...release,assets:[{...release.assets[0],digest:null}]},'0.9.50'),null);
   assert.match(Updater.RELEASE_API,/releases\?per_page=20/);
 });
 
@@ -107,24 +107,26 @@ test('Android production release uses persistent secrets and does not replace de
   assert.doesNotMatch(workflow,/keytool -genkeypair/,'production workflow must never generate a replacement signing key');
 });
 
-test('Android distribution, updater bridge, native patch, and release workflow stay wired together',()=>{
+test('Android distribution, editor safety, updater bridge, native patch, and release workflow stay wired together',()=>{
   const packageJson=JSON.parse(read('package.json'));
   const prepare=read('scripts/prepare-android.js');
-  const releasePass=read('scripts/prepare-android-0.9.49.js');
+  const releasePass=read('scripts/prepare-android-0.9.50.js');
   const patch=read('scripts/patch-android-project.js');
   const distAudit=read('scripts/audit-android-dist.js');
   const projectAudit=read('scripts/audit-android-project.js');
   const verificationWorkflow=read('.github/workflows/android-app.yml');
   const releaseWorkflow=read('.github/workflows/android-release.yml');
   for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js','src/android-updater.js','enableAndroidUpdater:true'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  assert.match(releasePass,/VERSION='0\.9\.49'/);
-  assert.match(releasePass,/ANDROID 0\.9\.49/);
+  assert.match(releasePass,/VERSION='0\.9\.50'/);
+  assert.match(releasePass,/ANDROID 0\.9\.50/);
   assert.match(releasePass,/song-select-fixes\.css/);
-  assert.match(releasePass,/sortLocalDifficultyOrder/);
+  assert.match(releasePass,/sortDifficultyEntriesByStars/);
+  assert.match(releasePass,/mergeLocalDifficulty/);
   assert.match(distAudit,/data:audio\//,'distribution audit rejects embedded audio');
   assert.match(distAudit,/src\/android-updater\.js/);
   assert.match(distAudit,/api\.github\.com/);
-  assert.match(distAudit,/version:"0\.9\.49"/);
+  assert.match(distAudit,/version:"0\.9\.50"/);
+  assert.match(distAudit,/mergeLocalDifficulty/);
   for(const needle of ['android:appCategory','sensorLandscape','FLAG_KEEP_SCREEN_ON','androidBackCallback','NATIVE_STARTUP_FAIL_OPEN','PackageInstaller.SessionParams'])assert.ok(patch.includes(needle),`patch contains ${needle}`);
   assert.doesNotMatch(patch,/import app\.tauri\.TauriActivity/);
   assert.match(patch,/setGradleSdk\(gradle,'compileSdk',36\)/);
@@ -133,7 +135,7 @@ test('Android distribution, updater bridge, native patch, and release workflow s
   assert.match(distAudit,/Android distribution audit passed/);
   assert.match(projectAudit,/Generated Android project audit passed/);
   assert.equal(packageJson.scripts.tauri,'tauri');
-  assert.match(packageJson.scripts['android:prepare'],/prepare-android-0\.9\.49\.js/);
+  assert.match(packageJson.scripts['android:prepare'],/prepare-android-0\.9\.50\.js/);
   assert.match(packageJson.scripts['android:icons'],/tauri icon src-tauri\/app-icon\.svg -o src-tauri\/icons/);
   assert.match(packageJson.scripts['android:init'],/^npm run android:icons/);
   assert.match(packageJson.scripts['android:build:apk'],/^npm run android:icons/);
