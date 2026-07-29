@@ -1,0 +1,51 @@
+{
+  "checkedAt": "2026-07-29T13:50:42Z",
+  "run": {
+    "conclusion": "success",
+    "createdAt": "2026-07-29T13:43:20Z",
+    "databaseId": 30457326005,
+    "headSha": "210a7d0f052a9e70aad02163f944ae5bd1814a3b",
+    "status": "completed",
+    "updatedAt": "2026-07-29T13:50:21Z",
+    "url": "https://github.com/EpicenterGUY/circle-mix/actions/runs/30457326005"
+  },
+  "release": {
+    "assets": [
+      {
+        "apiUrl": "https://api.github.com/repos/EpicenterGUY/circle-mix/releases/assets/494096305",
+        "contentType": "application/vnd.android.package-archive",
+        "createdAt": "2026-07-29T13:50:12Z",
+        "digest": "sha256:adb575036a6bca1739f7fb503e2f60bc62f7de4e865cb3215d9ed787c2d31528",
+        "downloadCount": 0,
+        "id": "RA_kwDOTYZOy84dc0-x",
+        "label": "",
+        "name": "circle-mix-0.9.50-android-arm64-release.apk",
+        "size": 13182351,
+        "state": "uploaded",
+        "updatedAt": "2026-07-29T13:50:13Z",
+        "url": "https://github.com/EpicenterGUY/circle-mix/releases/download/android-v0.9.50/circle-mix-0.9.50-android-arm64-release.apk"
+      },
+      {
+        "apiUrl": "https://api.github.com/repos/EpicenterGUY/circle-mix/releases/assets/494096306",
+        "contentType": "text/plain; charset=utf-8",
+        "createdAt": "2026-07-29T13:50:12Z",
+        "digest": "sha256:6d6ba1c5b513370bcf8fa62c169cee0044035eacfc23c66e6df6acc7e92c2136",
+        "downloadCount": 0,
+        "id": "RA_kwDOTYZOy84dc0-y",
+        "label": "",
+        "name": "sha256.txt",
+        "size": 136,
+        "state": "uploaded",
+        "updatedAt": "2026-07-29T13:50:12Z",
+        "url": "https://github.com/EpicenterGUY/circle-mix/releases/download/android-v0.9.50/sha256.txt"
+      }
+    ],
+    "isDraft": false,
+    "isPrerelease": false,
+    "name": "CIRCLE MIX Android 0.9.50",
+    "tagName": "android-v0.9.50",
+    "targetCommitish": "210a7d0f052a9e70aad02163f944ae5bd1814a3b",
+    "url": "https://github.com/EpicenterGUY/circle-mix/releases/tag/android-v0.9.50"
+  },
+  "releaseError": ""
+}
