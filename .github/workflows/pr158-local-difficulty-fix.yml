@@ -26,7 +26,13 @@ jobs:
           from pathlib import Path
           import re
 
-          # Shared stable sorter for the actual star values shown in song select.
+          revision='20260728-library-scroll-sort-0.9.49'
+          for html_path in ('editor.html','index.html'):
+              p=Path(html_path)
+              text=p.read_text(encoding='utf-8')
+              text=text.replace('20260728-editor-playtest-v1',revision)
+              p.write_text(text,encoding='utf-8')
+
           p=Path('src/song-record.js')
           text=p.read_text(encoding='utf-8')
           anchor='  function sortLocalDifficultyOrder(order,rawDiffs={},charts={}){'
@@ -48,7 +54,6 @@ jobs:
           elif 'sortDifficultyEntriesByStars,sortLocalDifficultyOrder' not in text:raise SystemExit('song-record export anchor missing')
           p.write_text(text,encoding='utf-8')
 
-          # LOCAL difficulty buttons and summaries are ordered by the same auto stars they display.
           p=Path('src/game.js')
           text=p.read_text(encoding='utf-8')
           pattern=r'''  function localChartEntries\(songData=selectedSong\)\{\n.*?\n  \}\n  function getActiveDifficultyLabel'''
@@ -68,7 +73,6 @@ jobs:
           if count!=1:raise SystemExit(f'game localChartEntries replacement count={count}')
           p.write_text(text,encoding='utf-8')
 
-          # Merge only the edited chart into an existing LOCAL record instead of deleting siblings.
           p=Path('src/editor-playtest.js')
           text=p.read_text(encoding='utf-8')
           anchor='  function mountBadge(session,doc=typeof document!=="undefined"?document:null){'
@@ -105,7 +109,6 @@ jobs:
           text=text[:start]+block+text[end:]
           p.write_text(text,encoding='utf-8')
 
-          # Regression tests for stable visible order and sibling preservation.
           p=Path('tests/song-record.test.js')
           text=p.read_text(encoding='utf-8')
           marker="assert.deepEqual(R.normalize({id:'stable',difficultyOrder:['custom-b','custom-a'],difficulties:{'custom-b':{},'custom-a':{}}},'local').difficultyOrder,['custom-b','custom-a']);\n"
@@ -149,7 +152,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add pr158-fix-failure.txt
-            git commit -m "chore: record PR 158 fix failure" || true
+            git commit -m "chore: update PR 158 fix failure" || true
             git push origin HEAD:agent/editor-playtest-controls
             exit "$status"
           fi
