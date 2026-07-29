@@ -1,0 +1,203 @@
+name: PR 158 sync and repair
+
+on:
+  push:
+    branches:
+      - agent/editor-playtest-controls
+    paths:
+      - .github/workflows/pr158-sync-fix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-fix-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Merge current main and apply fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_status=$?
+          set -e
+
+          conflicts="$(git diff --name-only --diff-filter=U | sort)"
+          expected="$(printf '%s\n' editor.html package.json src/version.js tests/pwa-update.test.js | sort)"
+          if [ "$merge_status" -ne 0 ] && [ "$conflicts" != "$expected" ]; then
+            echo "Unexpected merge conflicts:" >&2
+            printf '%s\n' "$conflicts" >&2
+            exit 1
+          fi
+
+          git checkout --ours editor.html
+          git checkout --theirs package.json
+          git checkout --theirs src/version.js
+          git checkout --theirs tests/pwa-update.test.js
+
+          python3 <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace_once(path, old, new):
+              p=Path(path)
+              text=p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'missing expected block in {path}: {old[:100]!r}')
+              p.write_text(text.replace(old,new,1),encoding='utf-8')
+
+          # Keep every current-main check while restoring the editor playtest checks.
+          pkg_path=Path('package.json')
+          pkg=json.loads(pkg_path.read_text(encoding='utf-8'))
+          unit=pkg['scripts']['test']
+          if 'node --check src/editor-playtest.js' not in unit:
+              unit=unit.replace('node --check src/editor.js','node --check src/editor-playtest.js && node --check src/editor.js')
+          if 'node tests/editor-playtest.test.js' not in unit:
+              unit=unit.replace('node tests/editor-feasibility.test.js','node tests/editor-feasibility.test.js && node tests/editor-playtest.test.js')
+          browser=pkg['scripts']['test:browser']
+          if 'node tests/editor-playtest-browser.test.js' not in browser:
+              browser=browser.replace('node tests/editor-feasibility-browser.test.js','node tests/editor-feasibility-browser.test.js && node tests/editor-playtest-browser.test.js')
+          pkg['scripts']['test']=unit
+          pkg['scripts']['test:browser']=browser
+          pkg_path.write_text(json.dumps(pkg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          # Main's PWA assertions plus the new cached playtest runtime.
+          p=Path('tests/pwa-update.test.js')
+          text=p.read_text(encoding='utf-8')
+          needle='  assert.match(serviceWorkerSource, /versioned\\("\\.\\/src\\/game\\.js"\\)/);\n'
+          addition=needle+'  assert.match(serviceWorkerSource, /versioned\\("\\.\\/src\\/editor-playtest\\.js"\\)/);\n'
+          if 'src\\/editor-playtest\\.js' not in text:
+              if needle not in text: raise SystemExit('PWA game cache assertion not found')
+              text=text.replace(needle,addition,1)
+          p.write_text(text,encoding='utf-8')
+
+          # Expose one canonical numeric value for both sorting and display.
+          replace_once('src/song-record.js', '''  function difficultySortValue(id,meta={},chart={}){
+              for(const value of [meta.stars,meta.declaredStars,meta.level,meta.rating,meta.difficulty,chart.stars,chart.level,chart.rating,chart.difficulty]){
+                const numeric=numericDifficulty(value);
+                if(numeric!==null)return {group:0,value:numeric};
+              }
+              const words=`${id} ${meta.label||''} ${meta.name||''}`.toLowerCase().replace(/[^a-z0-9]+/g,' ');
+              for(const [name,rank] of Object.entries(NAME_RANK))if(words.split(' ').includes(name))return {group:1,value:rank};
+              return {group:2,value:0};
+            }
+          ''', '''  function difficultyNumericValue(meta={},chart={}){
+              for(const value of [meta.stars,meta.declaredStars,meta.level,meta.rating,meta.difficulty,chart.stars,chart.level,chart.rating,chart.difficulty]){
+                const numeric=numericDifficulty(value);
+                if(numeric!==null)return numeric;
+              }
+              return null;
+            }
+            function difficultySortValue(id,meta={},chart={}){
+              const numeric=difficultyNumericValue(meta,chart);
+              if(numeric!==null)return {group:0,value:numeric};
+              const words=`${id} ${meta.label||''} ${meta.name||''}`.toLowerCase().replace(/[^a-z0-9]+/g,' ');
+              for(const [name,rank] of Object.entries(NAME_RANK))if(words.split(' ').includes(name))return {group:1,value:rank};
+              return {group:2,value:0};
+            }
+          ''')
+          replace_once('src/song-record.js', 'return Object.freeze({SOURCE_BUNDLED,SOURCE_LOCAL,sourceOf,keyOf,numericDifficulty,difficultySortValue,sortLocalDifficultyOrder,resolveDifficultyOrder,normalize});', 'return Object.freeze({SOURCE_BUNDLED,SOURCE_LOCAL,sourceOf,keyOf,numericDifficulty,difficultyNumericValue,difficultySortValue,sortLocalDifficultyOrder,resolveDifficultyOrder,normalize});')
+
+          # LOCAL selection, HUD and sorting now show the same declared level/stars.
+          replace_once('src/game.js', '    if(isLocalSong(selectedSong)){ const c=selectedSong.charts?.[mode]; return c ? chartDifficulty.calculate(c) : null; }', '''    if(isLocalSong(selectedSong)){
+              const c=selectedSong.charts?.[mode];
+              const declared=window.CircleMixSongRecord?.difficultyNumericValue?.(selectedSong.difficulties?.[mode]||{},c||{});
+              if(declared!==null&&declared!==undefined)return {stars:declared,raw:null,declaredStars:true};
+              return c ? chartDifficulty.calculate(c) : null;
+            }''')
+          replace_once('src/game.js', '''    const chart=songData.charts?.[difficultyId]; let stars;
+              if(chart){ try{ stars=chartDifficulty.calculate(chart).stars; }catch(error){ console.error("[Difficulty Calculation Failed]", error); } }
+              return {id:difficultyId, label, stars};''', '''    const chart=songData.charts?.[difficultyId];
+              const declared=window.CircleMixSongRecord?.difficultyNumericValue?.(meta||{},chart||{});
+              let stars=declared!==null&&declared!==undefined?declared:undefined;
+              if(stars===undefined&&chart){ try{ stars=chartDifficulty.calculate(chart).stars; }catch(error){ console.error("[Difficulty Calculation Failed]", error); } }
+              return {id:difficultyId, label, stars};''')
+
+          # Testable merge helper: editing one chart must never erase sibling difficulties.
+          p=Path('src/editor-playtest.js')
+          text=p.read_text(encoding='utf-8')
+          anchor='  function mountBadge(session,doc=typeof document!=="undefined"?document:null){\n'
+          helper='''  function mergeLocalDifficulty(existing,incoming,diffKey){
+              const id=String(diffKey||"").trim();
+              if(!id||!incoming||typeof incoming!=="object")throw new Error("A local difficulty record and id are required.");
+              const previous=existing&&typeof existing==="object"?existing:{};
+              const difficulties={...(previous.difficulties||{}),...(incoming.difficulties||{})};
+              const charts={...(previous.charts||{}),...(incoming.charts||{})};
+              const available=new Set([...Object.keys(difficulties),...Object.keys(charts)]),difficultyOrder=[],seen=new Set();
+              const candidates=[...(Array.isArray(previous.difficultyOrder)?previous.difficultyOrder:[]),...Object.keys(previous.difficulties||{}),...Object.keys(previous.charts||{}),...(Array.isArray(incoming.difficultyOrder)?incoming.difficultyOrder:[]),...Object.keys(incoming.difficulties||{}),...Object.keys(incoming.charts||{}),id];
+              for(const candidate of candidates)if(typeof candidate==="string"&&available.has(candidate)&&!seen.has(candidate)){seen.add(candidate);difficultyOrder.push(candidate);}
+              return {...previous,...incoming,difficultyOrder,difficulties,charts};
+            }
+          '''
+          if 'function mergeLocalDifficulty(' not in text:
+              if anchor not in text: raise SystemExit('editor playtest badge anchor missing')
+              text=text.replace(anchor,helper+anchor,1)
+          old='return Object.freeze({SESSION_KEY,PREFERENCES_KEY,SESSION_MAX_AGE_MS,PRESET_SCALES,DEFAULTS,sanitize,loadPreferences,savePreferences,beginSession,readSession,clearSession,previewMetrics,summary,mountBadge});'
+          new='return Object.freeze({SESSION_KEY,PREFERENCES_KEY,SESSION_MAX_AGE_MS,PRESET_SCALES,DEFAULTS,sanitize,loadPreferences,savePreferences,beginSession,readSession,clearSession,previewMetrics,summary,mergeLocalDifficulty,mountBadge});'
+          if old not in text: raise SystemExit('editor playtest export block missing')
+          p.write_text(text.replace(old,new,1),encoding='utf-8')
+
+          replace_once('src/editor.js', '''      const diffKey=difficultyKey();
+              const record={ id:m.songId, source:"local", title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, updatedAt:new Date().toISOString(), audioBlob:state.audioFile, audioType:state.audioFile.type, jacketBlob:state.jacketFile||null, jacketData:state.jacketData, difficulties:{ [diffKey]:{ label:m.difficulty||"CUSTOM", chart:`local:${m.songId}:${diffKey}`, stars:tools.calculateStars(chart) } }, charts:{ [diffKey]:chart } };''', '''      const diffKey=difficultyKey(), now=new Date().toISOString();
+              const incoming={ id:m.songId, source:"local", title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, installedAt:existing?.installedAt||now, updatedAt:now, audioBlob:state.audioFile||existing?.audioBlob, audioType:state.audioFile?.type||existing?.audioType||null, jacketBlob:state.jacketFile||existing?.jacketBlob||null, jacketData:state.jacketData||existing?.jacketData||null, difficultyOrder:[diffKey], difficulties:{ [diffKey]:{ label:m.difficulty||"CUSTOM", chart:`local:${m.songId}:${diffKey}`, stars:tools.calculateStars(chart) } }, charts:{ [diffKey]:chart } };
+              const record=playtestApi?.mergeLocalDifficulty(existing,incoming,diffKey)||incoming;''')
+
+          # Unit regressions for the exact two reported failures.
+          p=Path('tests/song-record.test.js')
+          text=p.read_text(encoding='utf-8')
+          marker="assert.deepEqual(R.normalize({id:'numeric',difficultyOrder:['master','basic','expert','plus'],difficulties:{master:{level:12},basic:{level:3},expert:{level:'9.5'},plus:{level:'12+'}}},'local').difficultyOrder,['basic','expert','master','plus']);\n"
+          extra=marker+"assert.equal(R.difficultyNumericValue({level:'12+'},{}),12.5); assert.equal(R.difficultyNumericValue({stars:4},{level:9}),4);\n"
+          if 'R.difficultyNumericValue' not in text:
+              if marker not in text: raise SystemExit('song record numeric regression anchor missing')
+              text=text.replace(marker,extra,1)
+          p.write_text(text,encoding='utf-8')
+
+          p=Path('tests/editor-playtest.test.js')
+          text=p.read_text(encoding='utf-8')
+          anchor='test("editor playtest is wired into editor, game, offline shell and packages",()=>{\n'
+          test_block='''test("editor playtest save preserves sibling LOCAL difficulties",()=>{
+              const existing={id:"song",difficultyOrder:["easy","hard"],difficulties:{easy:{stars:2},hard:{stars:8}},charts:{easy:{notes:[1]},hard:{notes:[2]}}};
+              const incoming={id:"song",difficultyOrder:["hard"],difficulties:{hard:{stars:9}},charts:{hard:{notes:[3]}}};
+              const merged=api.mergeLocalDifficulty(existing,incoming,"hard");
+              assert.deepEqual(merged.difficultyOrder,["easy","hard"]);
+              assert.deepEqual(Object.keys(merged.difficulties),["easy","hard"]);
+              assert.equal(merged.difficulties.easy.stars,2);
+              assert.equal(merged.difficulties.hard.stars,9);
+              assert.deepEqual(merged.charts.easy.notes,[1]);
+            });
+
+          '''
+          if 'preserves sibling LOCAL difficulties' not in text:
+              if anchor not in text: raise SystemExit('editor playtest wiring test anchor missing')
+              text=text.replace(anchor,test_block+anchor,1)
+          p.write_text(text,encoding='utf-8')
+          PY
+
+          git add editor.html package.json src/version.js tests/pwa-update.test.js src/song-record.js src/game.js src/editor-playtest.js src/editor.js tests/song-record.test.js tests/editor-playtest.test.js
+          git diff --check
+
+      - name: Install dependencies and run unit safety net
+        run: npm ci && npm test
+
+      - name: Commit synchronized fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/pr158-sync-diagnostic.yml .github/workflows/pr158-sync-fix.yml pr158-merge-diagnostic.txt
+          git add -A
+          git status --short
+          git commit -m "fix: sync editor playtest and preserve local difficulty order"
+          git push origin HEAD:agent/editor-playtest-controls
