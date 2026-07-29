@@ -41,3 +41,5 @@ jobs:
           git add .github/windows-release-0.9.50-snapshot.json
           git commit -m "chore: snapshot Windows 0.9.50 release status"
           git push origin HEAD:release/windows-0.9.50
+
+# refreshed after signed release completion
