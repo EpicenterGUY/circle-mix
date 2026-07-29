@@ -1,0 +1,43 @@
+name: Snapshot Windows 0.9.50 publication
+
+on:
+  push:
+    branches:
+      - release/windows-0.9.50
+    paths:
+      - .github/workflows/snapshot-windows-0.9.50.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TARGET_SHA: ba2523ef819d8132ee8dba43ddeb1f4c8253a7f6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/windows-0.9.50
+      - name: Record current publication state
+        shell: bash
+        run: |
+          set -euo pipefail
+          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow windows-updater-release.yml --branch main --limit 20 --json databaseId,status,conclusion,headSha,url,createdAt,updatedAt)
+          run=$(jq -c --arg sha "$TARGET_SHA" '[.[] | select(.headSha == $sha)] | first // {}' <<<"$runs")
+          release_error=''
+          if release=$(gh release view v0.9.50 --repo "$GITHUB_REPOSITORY" --json tagName,name,isDraft,isPrerelease,url,targetCommitish,assets 2>/tmp/circle-mix-release-error.txt); then
+            :
+          else
+            release='{}'
+            release_error=$(cat /tmp/circle-mix-release-error.txt || true)
+          fi
+          mkdir -p .github
+          jq -n --arg checkedAt "$(date -u +%FT%TZ)" --argjson run "$run" --argjson release "$release" --arg releaseError "$release_error" '{checkedAt:$checkedAt,run:$run,release:$release,releaseError:$releaseError}' > .github/windows-release-0.9.50-snapshot.json
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/windows-release-0.9.50-snapshot.json
+          git commit -m "chore: snapshot Windows 0.9.50 release status"
+          git push origin HEAD:release/windows-0.9.50
