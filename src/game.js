@@ -179,6 +179,12 @@
   };
   const chartDifficulty = window.CircleMixChartDifficulty || { VERSION:"local-v2", calculate:chart=>({stars:chartTools.calculateStars(chart),raw:0,version:"local-v2"}) };
   const initialParams = new URLSearchParams(window.location.search);
+  const editorPlaytestApi=window.CircleMixEditorPlaytest||null;
+  const editorPlaytestSession=editorPlaytestApi?.readSession({search:window.location.search})||null;
+  const EDITOR_PLAYTEST_JUDGEMENT_SCALE=editorPlaytestSession?.judgementScale||1;
+  const EDITOR_PLAYTEST_HIT_RADIUS_SCALE=editorPlaytestSession?.hitRadiusScale||1;
+  const EDITOR_PLAYTEST_NOTE_SCALE=editorPlaytestSession?.noteScale||1;
+  window.CircleMixEditorPlaytestActive=editorPlaytestSession;
   const versionInfo = window.CircleMixVersion || {version:"0.0.0", buildDate:""};
   const changelogEntries = Array.isArray(window.CircleMixChangelog) ? [...window.CircleMixChangelog] : [];
   const devModeFromQuery = initialParams.get("dev") === "1";
@@ -197,22 +203,22 @@
   // 사용자가 말한 마지막 음 기준: 약 1:51 지점에서 종료.
   const SONG_END_TIME = 111.450;
   const CHART_END_BEAT = 342.894; // beat 단위. 채보가 빠르면 +, 늦으면 - 로 조정
-  let APPROACH = 0.60;
-  const HIT_WINDOW = 0.17;
+  let APPROACH = editorPlaytestSession?.approachSeconds||0.60;
+  const HIT_WINDOW = 0.17 * EDITOR_PLAYTEST_JUDGEMENT_SCALE;
   const SWING_FLICK_SPEED = 0.78;
   const SCRATCH_FLICK_SPEED = 1.30;
-  const DIAL_ARC_HALF = Math.PI * 0.075;
+  const DIAL_ARC_HALF = Math.PI * 0.075 * EDITOR_PLAYTEST_JUDGEMENT_SCALE;
   const DIAL_ARC_VISUAL = Math.PI * 0.100;
   // Tutorial and normal play intentionally share the exact same TRACE judgement.
   // The tutorial only adds visual guidance, slower/simple charts and immediate retries.
   const COMMON_TRACE_PROFILE = {
     // TRACE is judged by directed angular travel, not by tracking a moving dot.
-    startToleranceDeg:30,
-    endpointGreatToleranceDeg:30,
-    endpointPerfectToleranceDeg:15,
-    startGrace:.25,
-    endpointWindow:.25,
-    endpointGrace:.14,
+    startToleranceDeg:30*EDITOR_PLAYTEST_JUDGEMENT_SCALE,
+    endpointGreatToleranceDeg:30*EDITOR_PLAYTEST_JUDGEMENT_SCALE,
+    endpointPerfectToleranceDeg:15*EDITOR_PLAYTEST_JUDGEMENT_SCALE,
+    startGrace:.25*EDITOR_PLAYTEST_JUDGEMENT_SCALE,
+    endpointWindow:.25*EDITOR_PLAYTEST_JUDGEMENT_SCALE,
+    endpointGrace:.14*EDITOR_PLAYTEST_JUDGEMENT_SCALE,
     greatTravelRatio:.85,
     perfectTravelRatio:.95,
     reverseGreatRatio:.25,
@@ -226,7 +232,7 @@
   };
   const SLIDE_JUDGEMENT_PROFILE = Object.freeze({
     // DIAL_ARC_HALF is 13.5 degrees; + .025 PI gives an 18 degree total window.
-    angleExtra:.025,
+    angleExtra:.025*EDITOR_PLAYTEST_JUDGEMENT_SCALE,
     greatHoldRatio:.52,
     perfectHoldRatio:.84
   });
@@ -234,7 +240,7 @@
   const TRACE_SWING_LINK_MAX = .25;
   const PULSE_SYNC_EPSILON = .004;
   const BASE_NOTE_WIDTH = 8;
-  const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH, slide:BASE_NOTE_WIDTH, scratch:BASE_NOTE_WIDTH, swing:BASE_NOTE_WIDTH, pulse:10, trace:3.0, hold:11.5 };
+  const NOTE_WIDTHS = { cut:BASE_NOTE_WIDTH*EDITOR_PLAYTEST_NOTE_SCALE, slide:BASE_NOTE_WIDTH*EDITOR_PLAYTEST_NOTE_SCALE, scratch:BASE_NOTE_WIDTH*EDITOR_PLAYTEST_NOTE_SCALE, swing:BASE_NOTE_WIDTH*EDITOR_PLAYTEST_NOTE_SCALE, pulse:10*EDITOR_PLAYTEST_NOTE_SCALE, trace:3.0*EDITOR_PLAYTEST_NOTE_SCALE, hold:11.5*EDITOR_PLAYTEST_NOTE_SCALE };
   const VISUAL_SETTINGS_KEY = "circleMixVisualSettings.v1";
   const INPUT_SETTINGS_KEY = "circleMixInputSettings.v1";
   const MOBILE_CONTROL_PRESETS = ["STANDARD","LEFT_HANDED","RIGHT_HANDED","CUSTOM"];
@@ -406,7 +412,14 @@
   }
   function localChartEntries(songData=selectedSong){
     const charts=songData?.charts||{};
-    return difficultyIds(songData).filter(id=>charts[id]?.notes?.length).map(id=>({id,chart:charts[id],meta:songData?.difficulties?.[id]||charts[id]?.meta||{}}));
+    const entries=difficultyIds(songData).filter(id=>charts[id]?.notes?.length).map(id=>{
+      const chart=charts[id], meta=songData?.difficulties?.[id]||chart?.meta||{};
+      let stars;
+      try{ stars=difficultyViewForSong(songData,id)?.stars; }catch(error){ console.error("[Difficulty Ordering Failed]",error); }
+      return {id,chart,meta,stars};
+    });
+    const ordered=window.CircleMixSongRecord?.sortDifficultyEntriesByStars?.(entries)||entries;
+    return ordered.map(({stars,...entry})=>entry);
   }
   function getActiveDifficultyLabel(songData=selectedSong, difficultyId=selectedDifficultyId || selectedMenuMode){
     if(!difficultyId) return "UNKNOWN";
@@ -578,7 +591,7 @@
       cy = H * .5;
       outerR = Math.max(96, playfieldSize * .5 - Math.max(safeMargin,tutorialMargin));
       baseR = outerR / 1.86;
-      hitR = baseR;
+      hitR = baseR * EDITOR_PLAYTEST_HIT_RADIUS_SCALE;
       return;
     }
 
@@ -588,7 +601,7 @@
     cy = H * .5;
     outerR = Math.max(96, playfieldSize * .5 - safeMargin);
     baseR = outerR / 1.86;
-    hitR = baseR;
+    hitR = baseR * EDITOR_PLAYTEST_HIT_RADIUS_SCALE;
   }
   const handleViewportResize=()=>resize();
   window.addEventListener("resize", handleViewportResize);
@@ -4551,14 +4564,17 @@ activePath.autoTraceProgress=progress;
     if(resultMaxCombo) resultMaxCombo.textContent=result.maxCombo;
     if(resultTotalNotes) resultTotalNotes.textContent=result.totalNotes;
     if(resultMapLevel) resultMapLevel.textContent=`${result.difficultyLabel || getActiveDifficultyLabel(selectedSong,result.difficulty)} ${result.starLevel}`;
-    if(resultPower) resultPower.textContent=result.autoPlay ? "AUTO — NO POWER" : (result.power !== null ? `POWER ${result.power}` : "POWER ---");
-    if(resultAuto) resultAuto.textContent=result.autoPlay ? "AUTO PLAY RESULT" : "PLAYER RESULT";
-    if(resultNewRecord) resultNewRecord.textContent=recordInfo?.newPowerRecord ? "NEW POWER RECORD" : (recordInfo?.newRecord ? "NEW RECORD" : "");
+    if(resultPower) resultPower.textContent=editorPlaytestSession ? "PLAYTEST — NO POWER" : (result.autoPlay ? "AUTO — NO POWER" : (result.power !== null ? `POWER ${result.power}` : "POWER ---"));
+    if(resultAuto) resultAuto.textContent=editorPlaytestSession ? "EDITOR PLAYTEST · RECORD NOT SAVED" : (result.autoPlay ? "AUTO PLAY RESULT" : "PLAYER RESULT");
+    if(resultNewRecord) resultNewRecord.textContent=editorPlaytestSession ? "" : (recordInfo?.newPowerRecord ? "NEW POWER RECORD" : (recordInfo?.newRecord ? "NEW RECORD" : ""));
     if(resultBest){
-      const best=recordInfo?.newRecord ? {bestScore:result.finalScore,bestRank:result.rank,bestAccuracy:result.accuracyRatio,bestPower:recordInfo?.newPowerRecord ? result.power : recordInfo?.previous?.bestPower} : (recordInfo?.newPowerRecord ? {...(recordInfo?.previous||{}), bestPower:result.power} : recordInfo?.previous);
-      resultBest.textContent=best ? `BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")} / POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"} / ${best.bestRank || "---"} / ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}` : (result.autoPlay ? "AUTO PLAY is not saved" : "NO RECORD");
+      if(editorPlaytestSession) resultBest.textContent="PLAYTEST RESULT · OFFICIAL RECORDS UNCHANGED";
+      else{
+        const best=recordInfo?.newRecord ? {bestScore:result.finalScore,bestRank:result.rank,bestAccuracy:result.accuracyRatio,bestPower:recordInfo?.newPowerRecord ? result.power : recordInfo?.previous?.bestPower} : (recordInfo?.newPowerRecord ? {...(recordInfo?.previous||{}), bestPower:result.power} : recordInfo?.previous);
+        resultBest.textContent=best ? `BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")} / POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"} / ${best.bestRank || "---"} / ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}` : (result.autoPlay ? "AUTO PLAY is not saved" : "NO RECORD");
+      }
     }
-    if(resultOverlay){ resultOverlay.classList.toggle("newRecord", !!(recordInfo?.newRecord || recordInfo?.newPowerRecord)); resultOverlay.classList.add("show"); }
+    if(resultOverlay){ resultOverlay.classList.toggle("newRecord", !editorPlaytestSession && !!(recordInfo?.newRecord || recordInfo?.newPowerRecord)); resultOverlay.classList.add("show"); }
     notifyPwaGameplay();
     animateResultScore(result.finalScore);
   }
@@ -4571,9 +4587,9 @@ activePath.autoTraceProgress=progress;
     notifyPwaGameplay();
     const result=buildResultData();
     if(!result){ alert("결과를 계산할 수 없습니다. 채보가 비어 있거나 잘못되었습니다."); exitToMenu(); return; }
-    const recordInfo=saveBestRecord(result);
+    const recordInfo=editorPlaytestSession ? {playtest:true,newRecord:false,newPowerRecord:false,previous:null} : saveBestRecord(result);
     showResult(result, recordInfo);
-    try{ localStorage.setItem("circleMixPlayCount.v1", String(Number(localStorage.getItem("circleMixPlayCount.v1")||0)+1)); }catch(e){}
+    if(!editorPlaytestSession){ try{ localStorage.setItem("circleMixPlayCount.v1", String(Number(localStorage.getItem("circleMixPlayCount.v1")||0)+1)); }catch(e){} }
     updateButtons();
   }
 
@@ -6318,6 +6334,11 @@ running=${running}`);
   const productionUpdateNotes=updateNotes; updateNotes=function(t,dt){ productionUpdateNotes(t,dt); selfTestTick(); };
 
   installBrowserTestApi();
+  if(editorPlaytestSession){
+    document.body.classList.add("editorPlaytestMode");
+    editorPlaytestApi?.mountBadge(editorPlaytestSession);
+    Promise.resolve().then(()=>showSongSelect()).catch(error=>console.error("Editor playtest song select failed",error));
+  }
   if(window.CircleMixTestApi){
     window.CircleMixTestApi.selfTestState=()=>({active:!!selfTest.active, overlayHidden:!!selfTestOverlay?.hidden, overlayDisplay:selfTestOverlay?getComputedStyle(selfTestOverlay).display:null, buttonHidden:!!selfTestButton?.hidden, pointerLockActive:!!pointerLockActive(), actionHeld:!!keys.MouseLeft, scratchHeld:!!scratchHeld});
   }

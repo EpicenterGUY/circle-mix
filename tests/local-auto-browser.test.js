@@ -7,6 +7,8 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const artifactDir = process.env.BROWSER_ARTIFACTS_DIR;
+const versionSource=fs.readFileSync(path.join(__dirname,'..','src/version.js'),'utf8');
+const CURRENT_VERSION=versionSource.match(/version:\s*["']([^"']+)/)?.[1]||'0.0.0';
 const MIME = {
   '.html':'text/html; charset=utf-8',
   '.js':'text/javascript; charset=utf-8',
@@ -93,6 +95,7 @@ async function waitForAuto(page,on,label){
   try{
     browser=await chromium.launch({headless:true});
     context=await browser.newContext({viewport:{width:1280,height:720},serviceWorkers:'block'});
+    await context.addInitScript(version=>{try{localStorage.setItem('circleMixLastSeenVersion',version);}catch(_){}},CURRENT_VERSION);
     page=await context.newPage();
     page.on('pageerror',error=>errors.push(error.message));
     stage='load page';
@@ -167,7 +170,4 @@ async function waitForAuto(page,on,label){
     if(browser)await browser.close().catch(()=>{});
     await new Promise(resolve=>server.close(resolve));
   }
-})().catch(error=>{
-  console.error(error);
-  process.exitCode=1;
-});
+})().catch(error=>{console.error(error);process.exitCode=1;});

@@ -34,6 +34,14 @@
     for(const [name,rank] of Object.entries(NAME_RANK))if(words.split(' ').includes(name))return {group:1,value:rank};
     return {group:2,value:0};
   }
+  function sortDifficultyEntriesByStars(entries=[]){
+    return entries.map((entry,index)=>({entry,index,value:Number(entry?.stars)})).sort((a,b)=>{
+      const aFinite=Number.isFinite(a.value), bFinite=Number.isFinite(b.value);
+      if(aFinite&&bFinite&&a.value!==b.value)return a.value-b.value;
+      if(aFinite!==bFinite)return aFinite?-1:1;
+      return a.index-b.index;
+    }).map(item=>item.entry);
+  }
   function sortLocalDifficultyOrder(order,rawDiffs={},charts={}){
     return order.map((id,index)=>({id,index,key:difficultySortValue(id,rawDiffs[id]||{},charts[id]||{})})).sort((a,b)=>a.key.group-b.key.group||a.key.value-b.key.value||a.index-b.index).map(entry=>entry.id);
   }
@@ -54,5 +62,5 @@
     const difficulties=difficultyOrder.reduce((out,id)=>{const meta=rawDiffs[id]||{},chart=charts[id];out[id]={...meta,id,chart:meta.chart,notes:chart?.notes||meta.notes};return out;},{});
     return {...record, id:String(record.id), source:actual, origin:actual, title:String(record.title||''), titleUnicode:record.titleUnicode||null, artist:String(record.artist||''), bpm, offset:Number(record.offset)||0, preview:record.preview || (record.previewStart!==undefined?{startSeconds:Number(record.previewStart)||0,durationSeconds:Number(record.previewDuration)||15}:null), jacket:record.jacket||null, audio:record.audio||null, audioBlob:record.audioBlob||null, audioStorageKey:record.audioStorageKey||null, audioMetadata:record.audioMetadata||null, packageType:record.packageType||null, packageVersion:record.packageVersion||null, charts, difficultyOrder, difficulties, installedAt:record.installedAt||null, updatedAt:record.updatedAt||null, exportable:true, removable:actual===SOURCE_LOCAL, restorable:actual===SOURCE_LOCAL, bundled:actual===SOURCE_BUNDLED, local:actual===SOURCE_LOCAL};
   }
-  return Object.freeze({SOURCE_BUNDLED,SOURCE_LOCAL,sourceOf,keyOf,numericDifficulty,difficultySortValue,sortLocalDifficultyOrder,resolveDifficultyOrder,normalize});
+  return Object.freeze({SOURCE_BUNDLED,SOURCE_LOCAL,sourceOf,keyOf,numericDifficulty,difficultySortValue,sortDifficultyEntriesByStars,sortLocalDifficultyOrder,resolveDifficultyOrder,normalize});
 });

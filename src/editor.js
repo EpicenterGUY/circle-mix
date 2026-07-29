@@ -6,6 +6,30 @@
   const audio = $("audio"), preview = $("preview"), ctx = preview.getContext("2d"), tl = $("timelineCanvas"), tx = tl.getContext("2d");
   const fields = ["songId","title","artist","bpm","offset","difficulty","previewStart"];
   const meta = () => Object.fromEntries(fields.map(id => [id, id==="bpm"||id==="offset"||id==="previewStart" ? Number($(id).value)||0 : $(id).value.trim() || ""]));
+  const playtestApi=window.CircleMixEditorPlaytest;
+  let playtestPreferences=playtestApi?.loadPreferences()||{judgementPreset:"NORMAL",hitRadiusScale:1,noteScale:1,approachSeconds:.60};
+  function difficultyKey(){const value=(meta().difficulty||"custom").toLowerCase().replace(/[^a-z0-9_-]+/g,"-");return value||"custom";}
+  function playtestSettingsFromInputs(){return playtestApi?.sanitize({judgementPreset:$("playtestJudge")?.value,hitRadiusScale:$("playtestRing")?.value,noteScale:$("playtestNoteScale")?.value,approachSeconds:$("playtestApproach")?.value})||playtestPreferences;}
+  function syncPlaytestUi({repaint=true,persist=true}={}){
+    const settings=playtestSettingsFromInputs();playtestPreferences=settings;
+    if(persist)playtestApi?.savePreferences(settings);
+    if($("playtestRingValue"))$("playtestRingValue").textContent=settings.hitRadiusScale.toFixed(2)+"x";
+    if($("playtestNoteScaleValue"))$("playtestNoteScaleValue").textContent=settings.noteScale.toFixed(2)+"x";
+    if($("playtestApproachValue"))$("playtestApproachValue").textContent=settings.approachSeconds.toFixed(2)+"s";
+    if($("playtestSummary"))$("playtestSummary").textContent=playtestApi?.summary(settings)||"";
+    window.CircleMixEditorPlaytestUI={settings,previewMetrics:playtestApi?.previewMetrics(settings,preview.width)||null};
+    if(repaint)renderPreview();
+    return settings;
+  }
+  function initializePlaytestControls(){
+    if(!playtestApi||!$("playtestBtn"))return;
+    $("playtestJudge").value=playtestPreferences.judgementPreset;
+    $("playtestRing").value=playtestPreferences.hitRadiusScale;
+    $("playtestNoteScale").value=playtestPreferences.noteScale;
+    $("playtestApproach").value=playtestPreferences.approachSeconds;
+    for(const id of ["playtestJudge","playtestRing","playtestNoteScale","playtestApproach"]){$(id)?.addEventListener(id==="playtestJudge"?"change":"input",()=>syncPlaytestUi());}
+    syncPlaytestUi({repaint:false,persist:false});
+  }
   const beatDur = () => 60 / Math.max(1, Number($("bpm").value)||120);
   const beatAt = t => Math.max(0, (t - (Number($("offset").value)||0)) / beatDur());
   const timeAtBeat = b => b * beatDur() + (Number($("offset").value)||0);
@@ -39,8 +63,8 @@
   function songMetaJson(){ const m=meta(); return { id:m.songId, title:m.title, artist:m.artist, audio:"", jacket:state.jacketData?"local-jacket-not-embedded-in-chart":null, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, difficulties:{ custom:{ label:m.difficulty, chart:`${m.songId}.json` } } }; }
   function download(name,obj){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:"application/json"})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500); }
   function validate(){ const dur=audio.duration||Infinity, errors=[], warnings=[], pulseBeats=new Set(); const traceSign=n=>String(n.direction || (n.type?.endsWith("CCW")?"CCW":(n.type?.endsWith("CW")?"CW":""))).toUpperCase()==="CCW"?-1:(String(n.direction || (n.type?.endsWith("CW")?"CW":"")).toUpperCase()==="CW"?1:0); state.notes.forEach((n,i)=>{ const fam=n.type==="fx"?"hold":(n.type||"").replace(/CW|CCW/g,"").toLowerCase(); if(!NOTE_TYPES.includes(n.type)) errors.push(`#${i} unsupported type ${n.type}`); if((n.beat??0)<0 || noteTime(n)<0) errors.push(`#${i} negative time`); if(["fx","slideCW","slideCCW","trace","traceCW","traceCCW"].includes(n.type) && !(n.durationBeat>0)) errors.push(`#${i} ${fam} duration must be > 0`); if(noteTime(n)>dur) warnings.push(`#${i} outside song length`); if(n.type==="pulse"){ const key=Number(n.beat).toFixed(6); if(pulseBeats.has(key)) errors.push(`#${i} duplicate PULSE timestamp`); pulseBeats.add(key); for(const field of ["angle","endAngle","durationBeat","direction","sweepAngle","turns"]) if(n[field]!==undefined) errors.push(`#${i} PULSE must not define ${field}`); } else { if(n.angle!==undefined && !Number.isFinite(Number(n.angle))) errors.push(`#${i} invalid angle`); if(n.angle===undefined && (n.lane===undefined || n.lane<0 || n.lane>7)) errors.push(`#${i} invalid lane/angle`); } if((n.type.startsWith("slide")||n.type.startsWith("trace")) && n.endAngle===undefined && n.endLane===undefined) errors.push(`#${i} missing endAngle`); const end=noteEndAngle(n); if((n.type.startsWith("slide")||n.type.startsWith("trace")) && end!=="" && shortestAngleDifference(noteAngle(n),end)<6) warnings.push(`#${i} path start/end angles are very close`); if(n.type.startsWith("trace")){ const sign=traceSign(n); if(n.sweepAngle!==undefined && !Number.isFinite(Number(n.sweepAngle))) errors.push(`#${i} invalid sweepAngle`); if(n.sweepAngle!==undefined && Number(n.sweepAngle)!==0 && sign && Math.sign(Number(n.sweepAngle))!==sign) errors.push(`#${i} direction conflicts with sweepAngle`); if(end!=="" && shortestAngleDifference(noteAngle(n),end)<6 && n.sweepAngle===undefined && n.turns===undefined) warnings.push(`#${i} TRACE needs sweepAngle/turns when startAngle equals endAngle`); } }); for(let i=0;i<state.notes.length;i++) for(let j=i+1;j<state.notes.length;j++){ if(state.notes[i].type!=="pulse"&&state.notes[j].type!=="pulse"&&Math.abs((state.notes[i].beat||0)-(state.notes[j].beat||0))<0.001 && shortestAngleDifference(noteAngle(state.notes[i]),noteAngle(state.notes[j]))<8) warnings.push(`#${i}/#${j} same-time angles overlap visually`); } $("validation").innerHTML=[...errors.map(e=>`<div class="err">ERROR ${e}</div>`),...warnings.map(w=>`<div class="warn">WARN ${w}</div>`)].join("") || "No errors."; return errors.length===0; }
-  function renderPreview(){ const w=preview.width,h=preview.height,c=w/2,r=w*.35; ctx.clearRect(0,0,w,h); ctx.strokeStyle="#24405f"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(c,c,r,0,TAU); ctx.stroke(); for(let i=0;i<8;i++){ const a=(-90+i*45)*Math.PI/180; ctx.strokeStyle="rgba(92,255,251,.18)"; ctx.beginPath(); ctx.moveTo(c,c); ctx.lineTo(c+Math.cos(a)*r,c+Math.sin(a)*r); ctx.stroke(); }
-    const t=audio.currentTime; state.notes.forEach((n,i)=>{ const dt=noteTime(n)-t; if(Math.abs(dt)>8) return; if(n.type==="pulse"){ const p=Math.max(0,Math.min(1,1-dt/2)); ctx.strokeStyle=state.selected.has(i)?"#fff36a":"#ff4eb8"; ctx.lineWidth=5; ctx.beginPath(); ctx.arc(c,c,Math.max(18,r*p),0,TAU); ctx.stroke(); return; } const a=(noteAngle(n)-90)*Math.PI/180; const rr=r + Math.max(-40,Math.min(110,dt*30)); ctx.fillStyle=state.selected.has(i)?"#fff36a":(n.type.includes("scratch")?"#d9782a":n.type.includes("slide")?"#ffe15a":n.type.includes("trace")?"#dffcff":n.type.includes("swing")?"#ff72d6":n.type==="fx"?"#b77cff":"#5cfffb"); ctx.beginPath(); ctx.arc(c+Math.cos(a)*rr,c+Math.sin(a)*rr,8,0,TAU); ctx.fill(); if(n.type.includes("trace") && state.selected.has(i)){ const sweep=Number(n.sweepAngle ?? (Number(n.turns||0)*360)); if(sweep){ ctx.fillStyle="#dffcff"; ctx.font="700 12px system-ui"; ctx.textAlign="center"; ctx.fillText(`${sweep}° / ${(Math.abs(sweep)/360).toFixed(2)}x`,c,c+r+24); } } }); }
+  function renderPreview(){ const w=preview.width,h=preview.height,c=w/2,settings=playtestSettingsFromInputs(),metrics=playtestApi?.previewMetrics(settings,w)||{ringRadius:w*.35,noteRadius:8,lineWidth:3},r=metrics.ringRadius; window.CircleMixEditorPlaytestUI={settings,previewMetrics:metrics}; ctx.clearRect(0,0,w,h); ctx.strokeStyle="#24405f"; ctx.lineWidth=metrics.lineWidth; ctx.beginPath(); ctx.arc(c,c,r,0,TAU); ctx.stroke(); for(let i=0;i<8;i++){ const a=(-90+i*45)*Math.PI/180; ctx.strokeStyle="rgba(92,255,251,.18)"; ctx.beginPath(); ctx.moveTo(c,c); ctx.lineTo(c+Math.cos(a)*r,c+Math.sin(a)*r); ctx.stroke(); }
+    const t=audio.currentTime; state.notes.forEach((n,i)=>{ const dt=noteTime(n)-t; if(Math.abs(dt)>8) return; if(n.type==="pulse"){ const p=Math.max(0,Math.min(1,1-dt/Math.max(.2,settings.approachSeconds))); ctx.strokeStyle=state.selected.has(i)?"#fff36a":"#ff9f43"; ctx.lineWidth=5*settings.noteScale; ctx.beginPath(); ctx.arc(c,c,Math.max(18,r*p),0,TAU); ctx.stroke(); return; } const a=(noteAngle(n)-90)*Math.PI/180; const rr=r + Math.max(-40,Math.min(110,dt*30)); ctx.fillStyle=state.selected.has(i)?"#fff36a":(n.type.includes("scratch")?"#d9782a":n.type.includes("slide")?"#ffe15a":n.type.includes("trace")?"#dffcff":n.type.includes("swing")?"#ff72d6":n.type==="fx"?"#b77cff":"#5cfffb"); ctx.beginPath(); ctx.arc(c+Math.cos(a)*rr,c+Math.sin(a)*rr,metrics.noteRadius,0,TAU); ctx.fill(); if(n.type.includes("trace") && state.selected.has(i)){ const sweep=Number(n.sweepAngle ?? (Number(n.turns||0)*360)); if(sweep){ ctx.fillStyle="#dffcff"; ctx.font="700 12px system-ui"; ctx.textAlign="center"; ctx.fillText(`${sweep}° / ${(Math.abs(sweep)/360).toFixed(2)}x`,c,c+r+24); } } }); }
   function renderTimeline(){ const zoom=Number($("zoom").value), w=Math.max(900,(audio.duration||120)*zoom); tl.width=w; const h=tl.height, t=audio.currentTime, bpm=Number($("bpm").value)||120; tx.clearRect(0,0,w,h); tx.fillStyle="#06101e"; tx.fillRect(0,0,w,h); tx.strokeStyle="rgba(92,255,251,.18)"; for(let b=0;b<beatAt(audio.duration||120)+8;b++){ const x=timeAtBeat(b)*zoom; tx.beginPath(); tx.moveTo(x,0); tx.lineTo(x,h); tx.stroke(); } state.notes.forEach((n,i)=>{ const x=noteTime(n)*zoom; tx.fillStyle=state.selected.has(i)?"#fff36a":(n.type==="pulse"?"#ff4eb8":"#5cfffb"); tx.fillRect(x-2,n.type==="pulse"?16:35+angleToLane(noteAngle(n))*12,5,16); }); tx.strokeStyle="#ff4567"; tx.beginPath(); tx.moveTo(t*zoom,0); tx.lineTo(t*zoom,h); tx.stroke(); }
   function renderList(){ $("noteList").innerHTML=state.notes.map((n,i)=>`<div class="noteRow ${state.selected.has(i)?"on":""}" data-i="${i}"><span>${i} ${n.type}</span><span>b${(n.beat||0).toFixed(3)} ${n.type==="pulse"?"GLOBAL":`A${noteAngle(n)}°`}</span></div>`).join(""); fillProps(); }
   function renderAll(){ renderPreview(); renderTimeline(); renderList(); }
@@ -85,7 +109,7 @@
   $("importFile").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const rd=new FileReader(); rd.onload=()=>{ try{ const data=JSON.parse(rd.result); pushHistory(); state.notes=Array.isArray(data)?data:(data.notes||[]); fields.forEach(id=>{ if(data[id]!==undefined) $(id).value=data[id]; }); renderAll(); autosave(); validate(); }catch(err){ $("validation").innerHTML=`<span class="err">IMPORT ERROR ${err.message}</span>`; } }; rd.readAsText(f); };
   $("copyBtn").onclick=()=>state.clipboard=[...state.selected].map(i=>({...state.notes[i]})); $("pasteBtn").onclick=()=>{ pushHistory(); const add=state.clipboard.map(n=>({...n,beat:(n.beat||0)+Number($("snap").value)})); state.notes.push(...add); renderAll(); autosave();}; $("deleteBtn").onclick=()=>{ pushHistory(); state.notes=state.notes.filter((_,i)=>!state.selected.has(i)); state.selected.clear(); renderAll(); autosave();}; $("undoBtn").onclick=()=>{ if(state.undo.length){ state.redo.push(JSON.stringify(state.notes)); restore(state.undo.pop()); }}; $("redoBtn").onclick=()=>{ if(state.redo.length){ state.undo.push(JSON.stringify(state.notes)); restore(state.redo.pop()); }};
 
-  async function addToLocalSongs(){
+  async function addToLocalSongs(options={}){
     const m=meta(), status=$("localSongStatus"), tools=window.CircleMixChartTools, store=window.CircleMixLocalSongs;
     const chart=chartJson(), problems=[];
     if(!m.songId) problems.push("곡 ID가 필요합니다.");
@@ -96,17 +120,33 @@
     if(!Number.isFinite(m.offset)) problems.push("OFFSET이 올바르지 않습니다.");
     const checked=tools.validateChart(chart);
     if(!checked.ok) problems.push(...checked.errors);
-    if(problems.length){ status.innerHTML=problems.map(e=>`<div class="err">${e}</div>`).join(""); return; }
+    if(problems.length){ status.innerHTML=problems.map(e=>`<div class="err">${e}</div>`).join(""); return null; }
     try{
-      if(await store.exists(m.songId) && !confirm(`LOCAL SONGS에 ${m.songId}가 이미 있습니다. 덮어쓸까요?`)) return;
-      const diffKey=(m.difficulty||"custom").toLowerCase().replace(/[^a-z0-9_-]+/g,"-") || "custom";
-      const record={ id:m.songId, source:"local", title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, updatedAt:new Date().toISOString(), audioBlob:state.audioFile, audioType:state.audioFile.type, jacketBlob:state.jacketFile||null, jacketData:state.jacketData, difficulties:{ [diffKey]:{ label:m.difficulty||"CUSTOM", chart:`local:${m.songId}:${diffKey}`, stars:tools.calculateStars(chart) } }, charts:{ [diffKey]:chart } };
-      await store.install(record,{expectedCurrent:{exists:Boolean(await store.get(record.id)),...((await store.get(record.id))||{})},keepBackup:true});
-      status.innerHTML=`<div>No errors. LOCAL SONGS에 등록되었습니다. <a class="back" href="./index.html?tab=local&song=${encodeURIComponent(m.songId)}&difficulty=${encodeURIComponent(diffKey)}">SONG SELECT로 이동</a></div>`;
-    }catch(err){ status.innerHTML=`<div class="err">IndexedDB 저장 실패: ${err.message}</div>`; }
+      const existing=await store.get(m.songId);
+      if(existing && !confirm(`LOCAL SONGS에 ${m.songId}가 이미 있습니다. 현재 편집본으로 덮어쓸까요?`)) return null;
+      const diffKey=difficultyKey(), now=new Date().toISOString();
+    const incoming={ id:m.songId, source:'local', title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, installedAt:existing?.installedAt||now, updatedAt:now, audioBlob:state.audioFile||existing?.audioBlob, audioType:state.audioFile?.type||existing?.audioType||null, jacketBlob:state.jacketFile||existing?.jacketBlob||null, jacketData:state.jacketData||existing?.jacketData||null, difficultyOrder:[diffKey], difficulties:{ [diffKey]:{ label:m.difficulty||'CUSTOM', chart:`local:${m.songId}:${diffKey}`, stars:tools.calculateStars(chart) } }, charts:{ [diffKey]:chart } };
+    const record=playtestApi?.mergeLocalDifficulty(existing,incoming,diffKey)||incoming;
+      await store.install(record,{expectedCurrent:{exists:Boolean(existing),...(existing||{})},keepBackup:true});
+      state.localRecord=record;
+      if(!options.playtest) status.innerHTML=`<div>No errors. LOCAL SONGS에 등록되었습니다. <a class="back" href="./index.html?tab=local&song=${encodeURIComponent(m.songId)}&chart=${encodeURIComponent(diffKey)}">SONG SELECT로 이동</a></div>`;
+      return {record,diffKey};
+    }catch(err){ status.innerHTML=`<div class="err">IndexedDB 저장 실패: ${err.message}</div>`; return null; }
+  }
+  async function openPlaytest(){
+    if(!playtestApi){$("validation").innerHTML='<div class="err">PLAYTEST ERROR: runtime unavailable.</div>';return;}
+    const button=$("playtestBtn"), panel=button?.closest(".playtestPanel"), old=button?.textContent||"";
+    if(button){button.disabled=true;button.textContent="SAVING PLAYTEST…";} panel?.classList.add("isBusy");
+    try{
+      const saved=await addToLocalSongs({playtest:true});if(!saved)return;
+      const settings=syncPlaytestUi({repaint:false,persist:true});
+      playtestApi.beginSession({...settings,songId:saved.record.id,chartId:saved.diffKey});
+      const url=new URL("./index.html",location.href);url.searchParams.set("tab","local");url.searchParams.set("song",saved.record.id);url.searchParams.set("chart",saved.diffKey);url.searchParams.set("editorPlaytest","1");location.href=url.href;
+    }catch(error){$("validation").innerHTML=`<div class="err">PLAYTEST ERROR: ${error.message}</div>`;}
+    finally{if(button){button.disabled=false;button.textContent=old;}panel?.classList.remove("isBusy");}
   }
 
-  $("saveProject").onclick=saveLocal; $("addLocalSong").onclick=addToLocalSongs; $("newProject").onclick=()=>{ pushHistory(); state.notes=[]; state.selected.clear(); renderAll();}; $("projects").onclick=e=>{ const row=e.target.closest(".projectRow"); if(!row||!state.db)return; const req=state.db.transaction("projects").objectStore("projects").get(row.dataset.id); req.onsuccess=()=>{ const p=req.result; if(!p)return; Object.entries(p.meta||{}).forEach(([k,v])=>$(k)&&($(k).value=v)); state.notes=p.notes||[]; renderAll(); }; };
+  $("saveProject").onclick=saveLocal; $("addLocalSong").onclick=()=>addToLocalSongs(); $("playtestBtn").onclick=openPlaytest; $("newProject").onclick=()=>{ pushHistory(); state.notes=[]; state.selected.clear(); renderAll();}; $("projects").onclick=e=>{ const row=e.target.closest(".projectRow"); if(!row||!state.db)return; const req=state.db.transaction("projects").objectStore("projects").get(row.dataset.id); req.onsuccess=()=>{ const p=req.result; if(!p)return; Object.entries(p.meta||{}).forEach(([k,v])=>$(k)&&($(k).value=v)); state.notes=p.notes||[]; renderAll(); }; };
   document.querySelectorAll(".quickSweep [data-sweep]").forEach(b=>b.onclick=()=>{ const n=selectedNote(); if(!n)return; pushHistory(); const sign=($("noteDirection").value==="CCW"?-1:1); n.sweepAngle=Number(b.dataset.sweep)*sign; $("noteSweepAngle").value=n.sweepAngle; renderAll(); autosave(); });
   $("autoPreviewBtn").onclick=()=>{ state.autoPreview=!state.autoPreview; $("autoPreviewBtn").classList.toggle("on",state.autoPreview); $("validation").innerHTML="AUTO preview uses the editor renderer only; official game judgment stays in src/game.js."; };
   document.addEventListener("keydown",e=>{ if(e.target.matches("input,textarea,select"))return; if(e.key===" "){ e.preventDefault(); $("playBtn").click(); } if(e.key==="Delete") $("deleteBtn").click(); if((e.ctrlKey||e.metaKey)&&e.key==="c") $("copyBtn").click(); if((e.ctrlKey||e.metaKey)&&e.key==="v") $("pasteBtn").click(); if((e.ctrlKey||e.metaKey)&&e.key==="z") $("undoBtn").click(); });
@@ -121,5 +161,5 @@
     }catch(err){ $("validation").innerHTML=`<span class="err">LOCAL LOAD ERROR ${err.message}</span>`; }
   }
 
-  openDb().then(()=>{ listProjects(); loadLocalSongFromQuery(); }); renderAll(); tick();
+  initializePlaytestControls(); openDb().then(()=>{ listProjects(); loadLocalSongFromQuery(); }); renderAll(); tick();
 })();

@@ -39,6 +39,7 @@ test("PWA and service worker consume the shared release metadata", () => {
   assert.doesNotMatch(serviceWorkerSource, /const VERSION\s*=\s*["'][0-9]/);
   assert.match(serviceWorkerSource, /cacheRevision/);
   assert.match(serviceWorkerSource, /versioned\("\.\/src\/game\.js"\)/);
+  assert.match(serviceWorkerSource, /versioned\("\.\/src\/editor-playtest\.js"\)/);
   assert.match(serviceWorkerSource, /versioned\("\.\/song-select-fixes\.css"\)/);
   assert.match(changelogSource, /window\.CircleMixChangelog\s*=\s*\[/);
   assert.match(buildConfigSource, /version:"0\.9\.33"/);
