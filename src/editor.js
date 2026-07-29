@@ -124,8 +124,9 @@
     try{
       const existing=await store.get(m.songId);
       if(existing && !confirm(`LOCAL SONGS에 ${m.songId}가 이미 있습니다. 현재 편집본으로 덮어쓸까요?`)) return null;
-      const diffKey=difficultyKey();
-      const record={ id:m.songId, source:"local", title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, updatedAt:new Date().toISOString(), audioBlob:state.audioFile, audioType:state.audioFile.type, jacketBlob:state.jacketFile||null, jacketData:state.jacketData, difficulties:{ [diffKey]:{ label:m.difficulty||"CUSTOM", chart:`local:${m.songId}:${diffKey}`, stars:tools.calculateStars(chart) } }, charts:{ [diffKey]:chart } };
+      const diffKey=difficultyKey(), now=new Date().toISOString();
+    const incoming={ id:m.songId, source:'local', title:m.title, artist:m.artist, bpm:m.bpm, offset:m.offset, previewStart:m.previewStart, installedAt:existing?.installedAt||now, updatedAt:now, audioBlob:state.audioFile||existing?.audioBlob, audioType:state.audioFile?.type||existing?.audioType||null, jacketBlob:state.jacketFile||existing?.jacketBlob||null, jacketData:state.jacketData||existing?.jacketData||null, difficultyOrder:[diffKey], difficulties:{ [diffKey]:{ label:m.difficulty||'CUSTOM', chart:`local:${m.songId}:${diffKey}`, stars:tools.calculateStars(chart) } }, charts:{ [diffKey]:chart } };
+    const record=playtestApi?.mergeLocalDifficulty(existing,incoming,diffKey)||incoming;
       await store.install(record,{expectedCurrent:{exists:Boolean(existing),...(existing||{})},keepBackup:true});
       state.localRecord=record;
       if(!options.playtest) status.innerHTML=`<div>No errors. LOCAL SONGS에 등록되었습니다. <a class="back" href="./index.html?tab=local&song=${encodeURIComponent(m.songId)}&chart=${encodeURIComponent(diffKey)}">SONG SELECT로 이동</a></div>`;

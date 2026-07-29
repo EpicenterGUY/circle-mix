@@ -1,8 +1,0 @@
-song-sort: True index=1320
-song-export: True index=4636
-game-hud: True index=52660
-game-select: True index=54277
-editor-export: True index=5172
-editor-record: True index=26498
-song-test: True index=2059
-editor-test: True index=1811

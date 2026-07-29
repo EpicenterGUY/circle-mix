@@ -412,7 +412,14 @@
   }
   function localChartEntries(songData=selectedSong){
     const charts=songData?.charts||{};
-    return difficultyIds(songData).filter(id=>charts[id]?.notes?.length).map(id=>({id,chart:charts[id],meta:songData?.difficulties?.[id]||charts[id]?.meta||{}}));
+    const entries=difficultyIds(songData).filter(id=>charts[id]?.notes?.length).map(id=>{
+      const chart=charts[id], meta=songData?.difficulties?.[id]||chart?.meta||{};
+      let stars;
+      try{ stars=difficultyViewForSong(songData,id)?.stars; }catch(error){ console.error("[Difficulty Ordering Failed]",error); }
+      return {id,chart,meta,stars};
+    });
+    const ordered=window.CircleMixSongRecord?.sortDifficultyEntriesByStars?.(entries)||entries;
+    return ordered.map(({stars,...entry})=>entry);
   }
   function getActiveDifficultyLabel(songData=selectedSong, difficultyId=selectedDifficultyId || selectedMenuMode){
     if(!difficultyId) return "UNKNOWN";

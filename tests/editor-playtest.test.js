@@ -27,6 +27,16 @@ test("editor playtest session requires the exact local song and chart",()=>{
   assert.equal(api.readSession({storage,search:"?tab=local&song=song-a&chart=hard&editorPlaytest=1",now:now+api.SESSION_MAX_AGE_MS+1}),null);
 });
 
+test('editor playtest save preserves sibling LOCAL difficulties',()=>{
+    const existing={id:'song',difficultyOrder:['easy','hard'],difficulties:{easy:{stars:2},hard:{stars:8}},charts:{easy:{notes:[1]},hard:{notes:[2]}}};
+    const incoming={id:'song',difficultyOrder:['hard'],difficulties:{hard:{stars:9}},charts:{hard:{notes:[3]}}};
+    const merged=api.mergeLocalDifficulty(existing,incoming,'hard');
+    assert.deepEqual(merged.difficultyOrder,['easy','hard']);
+    assert.equal(merged.difficulties.easy.stars,2);
+    assert.equal(merged.difficulties.hard.stars,9);
+    assert.deepEqual(merged.charts.easy.notes,[1]);
+  });
+
 test("editor playtest is wired into editor, game, offline shell and packages",()=>{
   const editor=fs.readFileSync("editor.html","utf8"), editorJs=fs.readFileSync("src/editor.js","utf8"), game=fs.readFileSync("src/game.js","utf8"), index=fs.readFileSync("index.html","utf8"), sw=fs.readFileSync("service-worker.js","utf8"), pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
   assert.match(editor,/id="playtestBtn"/);

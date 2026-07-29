@@ -16,6 +16,8 @@ const full=A.songRecordToFullPackageInput(fullRecord); assert.deepEqual(full.cha
 assert.deepEqual(R.normalize({id:'legacy',difficulties:{hard:{},easy:{}}},'local').difficultyOrder,['easy','hard']);
 assert.deepEqual(R.normalize({id:'numeric',difficultyOrder:['master','basic','expert','plus'],difficulties:{master:{level:12},basic:{level:3},expert:{level:'9.5'},plus:{level:'12+'}}},'local').difficultyOrder,['basic','expert','master','plus']);
 assert.deepEqual(R.normalize({id:'stable',difficultyOrder:['custom-b','custom-a'],difficulties:{'custom-b':{},'custom-a':{}}},'local').difficultyOrder,['custom-b','custom-a']);
+assert.deepEqual(R.sortDifficultyEntriesByStars([{id:'declared-easy-but-runtime-hard',stars:9.2},{id:'declared-hard-but-runtime-easy',stars:4.8},{id:'unknown'},{id:'unknown-2'}]).map(entry=>entry.id),['declared-hard-but-runtime-easy','declared-easy-but-runtime-hard','unknown','unknown-2']);
+assert.match(require('fs').readFileSync('src/game.js','utf8'),/sortDifficultyEntriesByStars/);
 assert.deepEqual(R.normalize({id:'empty'},'local').difficultyOrder,[]);
 console.log('song record tests passed');
 const Install=require('../src/cmix-local-install.js');
