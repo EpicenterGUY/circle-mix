@@ -1,0 +1,14 @@
+{
+  "checkedAt": "2026-07-29T15:19:10Z",
+  "run": {
+    "conclusion": "",
+    "createdAt": "2026-07-29T15:11:56Z",
+    "databaseId": 30464679994,
+    "headSha": "ba2523ef819d8132ee8dba43ddeb1f4c8253a7f6",
+    "status": "in_progress",
+    "updatedAt": "2026-07-29T15:12:01Z",
+    "url": "https://github.com/EpicenterGUY/circle-mix/actions/runs/30464679994"
+  },
+  "release": {},
+  "releaseError": "release not found"
+}
