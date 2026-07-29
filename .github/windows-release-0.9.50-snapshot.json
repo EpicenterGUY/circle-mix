@@ -1,14 +1,65 @@
 {
-  "checkedAt": "2026-07-29T15:19:10Z",
+  "checkedAt": "2026-07-29T15:30:38Z",
   "run": {
-    "conclusion": "",
+    "conclusion": "success",
     "createdAt": "2026-07-29T15:11:56Z",
     "databaseId": 30464679994,
     "headSha": "ba2523ef819d8132ee8dba43ddeb1f4c8253a7f6",
-    "status": "in_progress",
-    "updatedAt": "2026-07-29T15:12:01Z",
+    "status": "completed",
+    "updatedAt": "2026-07-29T15:28:15Z",
     "url": "https://github.com/EpicenterGUY/circle-mix/actions/runs/30464679994"
   },
-  "release": {},
-  "releaseError": "release not found"
+  "release": {
+    "assets": [
+      {
+        "apiUrl": "https://api.github.com/repos/EpicenterGUY/circle-mix/releases/assets/494202147",
+        "contentType": "application/x-msdownload",
+        "createdAt": "2026-07-29T15:28:07Z",
+        "digest": "sha256:d981dc4a88946a3189ef3119532d9b46a6f2d0eebc071742da286d3076bee534",
+        "downloadCount": 0,
+        "id": "RA_kwDOTYZOy84ddO0j",
+        "label": "",
+        "name": "circle-mix-0.9.50-windows-x64-setup.exe",
+        "size": 3155487,
+        "state": "uploaded",
+        "updatedAt": "2026-07-29T15:28:08Z",
+        "url": "https://github.com/EpicenterGUY/circle-mix/releases/download/v0.9.50/circle-mix-0.9.50-windows-x64-setup.exe"
+      },
+      {
+        "apiUrl": "https://api.github.com/repos/EpicenterGUY/circle-mix/releases/assets/494202148",
+        "contentType": "application/octet-stream",
+        "createdAt": "2026-07-29T15:28:07Z",
+        "digest": "sha256:d0d9a71678e2dafd3c905cdfe1f6c06bfd44116a5e625e57cc4b4d533fb2891a",
+        "downloadCount": 0,
+        "id": "RA_kwDOTYZOy84ddO0k",
+        "label": "",
+        "name": "circle-mix-0.9.50-windows-x64-setup.exe.sig",
+        "size": 424,
+        "state": "uploaded",
+        "updatedAt": "2026-07-29T15:28:08Z",
+        "url": "https://github.com/EpicenterGUY/circle-mix/releases/download/v0.9.50/circle-mix-0.9.50-windows-x64-setup.exe.sig"
+      },
+      {
+        "apiUrl": "https://api.github.com/repos/EpicenterGUY/circle-mix/releases/assets/494202150",
+        "contentType": "application/json",
+        "createdAt": "2026-07-29T15:28:07Z",
+        "digest": "sha256:37dafdf3632c6dbfd74b7030fb101e049d89fa4a8cfc130dbeb6d47253185ac7",
+        "downloadCount": 0,
+        "id": "RA_kwDOTYZOy84ddO0m",
+        "label": "",
+        "name": "latest.json",
+        "size": 753,
+        "state": "uploaded",
+        "updatedAt": "2026-07-29T15:28:08Z",
+        "url": "https://github.com/EpicenterGUY/circle-mix/releases/download/v0.9.50/latest.json"
+      }
+    ],
+    "isDraft": false,
+    "isPrerelease": false,
+    "name": "CIRCLE MIX 0.9.50",
+    "tagName": "v0.9.50",
+    "targetCommitish": "main",
+    "url": "https://github.com/EpicenterGUY/circle-mix/releases/tag/v0.9.50"
+  },
+  "releaseError": ""
 }
