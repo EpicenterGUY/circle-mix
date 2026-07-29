@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   diagnose:
@@ -25,15 +25,23 @@ jobs:
           git fetch origin main
           git merge --no-commit --no-ff origin/main
           status=$?
-          echo "MERGE_EXIT=$status"
-          echo "=== UNMERGED FILES ==="
-          git diff --name-only --diff-filter=U || true
-          echo "=== CONFLICT MARKERS ==="
-          for file in $(git diff --name-only --diff-filter=U); do
-            echo "--- $file ---"
-            grep -n -C 6 -E '^(<<<<<<<|=======|>>>>>>>)' "$file" || true
-          done
-          echo "=== STATUS ==="
-          git status --short
+          {
+            echo "MERGE_EXIT=$status"
+            echo "=== UNMERGED FILES ==="
+            git diff --name-only --diff-filter=U || true
+            echo "=== CONFLICT MARKERS ==="
+            for file in $(git diff --name-only --diff-filter=U); do
+              echo "--- $file ---"
+              grep -n -C 8 -E '^(<<<<<<<|=======|>>>>>>>)' "$file" || true
+            done
+            echo "=== STATUS ==="
+            git status --short
+          } > /tmp/pr158-merge-diagnostic.txt
+          cat /tmp/pr158-merge-diagnostic.txt
           git merge --abort 2>/dev/null || true
-          exit $status
+          cp /tmp/pr158-merge-diagnostic.txt pr158-merge-diagnostic.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pr158-merge-diagnostic.txt
+          git commit -m "chore: record PR 158 merge conflicts" || true
+          git push origin HEAD:agent/editor-playtest-controls
