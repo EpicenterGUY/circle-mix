@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TARGET_SHA: e42683dff8d7ad34f603b3d16ad81ca59dd66979
+      TARGET_SHA: cc91e87a35395dbf04d1efd258b91ad01c3a37a7
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,5 +41,5 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .github/diagnostics/power-preview-v4-target-*.json
-          git commit -m "chore: snapshot target power preview run"
+          git commit -m "chore: snapshot corrected power preview run"
           git push origin HEAD:feature/power-preview
