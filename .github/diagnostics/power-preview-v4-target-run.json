@@ -1,20 +1,20 @@
 {
-  "id": 30564601652,
+  "id": 30564992045,
   "name": "Implement chart power preview v4",
-  "node_id": "WFR_kwLOTYZOy88AAAAHHcrPNA",
+  "node_id": "WFR_kwLOTYZOy88AAAAHHdDELQ",
   "head_branch": "feature/power-preview",
-  "head_sha": "e42683dff8d7ad34f603b3d16ad81ca59dd66979",
+  "head_sha": "cc91e87a35395dbf04d1efd258b91ad01c3a37a7",
   "path": ".github/workflows/implement-power-preview-v4.yml",
-  "display_title": "fix: patch smoke reader prefixes without regex escaping",
-  "run_number": 6,
+  "display_title": "test: dismiss update log before entering song select",
+  "run_number": 7,
   "event": "push",
   "status": "completed",
   "conclusion": "failure",
   "workflow_id": 323901569,
-  "check_suite_id": 82874235790,
-  "check_suite_node_id": "CS_kwDOTYZOy88AAAATS7B7jg",
-  "url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564601652",
-  "html_url": "https://github.com/EpicenterGUY/circle-mix/actions/runs/30564601652",
+  "check_suite_id": 82875423125,
+  "check_suite_node_id": "CS_kwDOTYZOy88AAAATS8KZlQ",
+  "url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564992045",
+  "html_url": "https://github.com/EpicenterGUY/circle-mix/actions/runs/30564992045",
   "pull_requests": [
     {
       "url": "https://api.github.com/repos/EpicenterGUY/circle-mix/pulls/166",
@@ -22,7 +22,7 @@
       "number": 166,
       "head": {
         "ref": "feature/power-preview",
-        "sha": "3f593b56869361927deaaea05bb1c64b63759ae4",
+        "sha": "5ef86e5556774b42eafedce2a3a1f6e644a57024",
         "repo": {
           "id": 1300647627,
           "url": "https://api.github.com/repos/EpicenterGUY/circle-mix",
@@ -40,8 +40,8 @@
       }
     }
   ],
-  "created_at": "2026-07-30T17:07:48Z",
-  "updated_at": "2026-07-30T17:08:57Z",
+  "created_at": "2026-07-30T17:13:08Z",
+  "updated_at": "2026-07-30T17:14:13Z",
   "actor": {
     "login": "EpicenterGUY",
     "id": 278117273,
@@ -65,7 +65,7 @@
   },
   "run_attempt": 1,
   "referenced_workflows": [],
-  "run_started_at": "2026-07-30T17:07:48Z",
+  "run_started_at": "2026-07-30T17:13:08Z",
   "triggering_actor": {
     "login": "EpicenterGUY",
     "id": 278117273,
@@ -87,19 +87,19 @@
     "user_view_type": "public",
     "site_admin": false
   },
-  "jobs_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564601652/jobs",
-  "logs_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564601652/logs",
-  "check_suite_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/check-suites/82874235790",
-  "artifacts_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564601652/artifacts",
-  "cancel_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564601652/cancel",
-  "rerun_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564601652/rerun",
+  "jobs_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564992045/jobs",
+  "logs_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564992045/logs",
+  "check_suite_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/check-suites/82875423125",
+  "artifacts_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564992045/artifacts",
+  "cancel_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564992045/cancel",
+  "rerun_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/runs/30564992045/rerun",
   "previous_attempt_url": null,
   "workflow_url": "https://api.github.com/repos/EpicenterGUY/circle-mix/actions/workflows/323901569",
   "head_commit": {
-    "id": "e42683dff8d7ad34f603b3d16ad81ca59dd66979",
-    "tree_id": "511deedf1017c094280a5563fb0f1cd12b4b21f2",
-    "message": "fix: patch smoke reader prefixes without regex escaping",
-    "timestamp": "2026-07-30T17:07:45Z",
+    "id": "cc91e87a35395dbf04d1efd258b91ad01c3a37a7",
+    "tree_id": "7e19e0beb334773021fe6aa48464d8969a5bcabc",
+    "message": "test: dismiss update log before entering song select",
+    "timestamp": "2026-07-30T17:13:05Z",
     "author": {
       "name": "EpicenterGUY",
       "email": "mintbamtol7@gmail.com"
