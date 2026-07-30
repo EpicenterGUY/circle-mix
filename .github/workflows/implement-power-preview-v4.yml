@@ -64,4 +64,6 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add src/power.js src/game.js style.css index.html service-worker.js scripts/prepare-desktop.js scripts/audit-desktop-dist.js scripts/audit-android-dist.js tests/power-preview.test.js tests/power-preview-browser.test.js tests/smoke.test.js package.json
           git commit -m "feat: show accuracy power forecasts by chart difficulty"
+          git fetch origin feature/power-preview
+          git rebase origin/feature/power-preview
           git push origin HEAD:feature/power-preview
