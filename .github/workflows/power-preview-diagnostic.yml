@@ -20,19 +20,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feature/power-preview
-      - name: Capture implementation run
+      - name: Wait for and capture implementation run
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .github/diagnostics
-          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/implement-power-preview-v4.yml/runs?branch=feature%2Fpower-preview&per_page=5")
+          for attempt in $(seq 1 90); do
+            runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/implement-power-preview-v4.yml/runs?branch=feature%2Fpower-preview&per_page=5")
+            run_id=$(echo "$runs" | jq -r '.workflow_runs[0].id // empty')
+            status=$(echo "$runs" | jq -r '.workflow_runs[0].status // empty')
+            if [ -n "$run_id" ] && [ "$status" = "completed" ]; then break; fi
+            sleep 10
+          done
           echo "$runs" | jq '{total_count,workflow_runs:[.workflow_runs[]|{id,status,conclusion,head_sha,event,html_url,created_at,updated_at}]}' > .github/diagnostics/power-preview-v4-runs.json
-          run_id=$(echo "$runs" | jq -r '.workflow_runs[0].id // empty')
           if [ -n "$run_id" ]; then
             gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" | jq '{jobs:[.jobs[]|{id,name,status,conclusion,steps}]}' > .github/diagnostics/power-preview-v4-jobs.json
           fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .github/diagnostics
-          git commit -m "chore: record power preview v4 diagnostics"
+          git commit -m "chore: record completed power preview diagnostics"
           git push origin HEAD:feature/power-preview
