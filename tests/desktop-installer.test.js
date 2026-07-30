@@ -52,6 +52,8 @@ assert.match(audit,/desktop trackpad settings or updater entry is missing/,'desk
 assert.match(audit,/song-select overflow fix is missing/,'desktop audit must verify first and last song reachability');
 assert.match(audit,/local difficulty sorting is missing/,'desktop audit must verify ascending LOCAL difficulty order');
 assert.match(audit,/editor playtest lost sibling difficulty preservation/,'desktop audit must verify sibling difficulty preservation');
+assert.match(audit,/desktop POWER forecast model is missing/,'desktop audit must verify the shared POWER model');
+assert.match(audit,/\.\/src\/power\.js/,'desktop audit must verify the POWER model is loaded by the desktop index');
 assert.match(audit,/PULSE color was not separated from SWING CCW/,'desktop audit must verify PULSE color separation');
 assert.match(audit,/PULSE single-ring visual pass is missing/,'desktop audit must verify PULSE simplification');
 assert.match(audit,/desktop PULSE multi-aim guide is missing/,'desktop audit must verify simultaneous PULSE aim guidance');
