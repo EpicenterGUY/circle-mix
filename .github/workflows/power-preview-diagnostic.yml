@@ -25,14 +25,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .github/diagnostics
-          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/implement-power-preview-v3.yml/runs?branch=feature%2Fpower-preview&per_page=5")
-          echo "$runs" | jq '{total_count,workflow_runs:[.workflow_runs[]|{id,status,conclusion,head_sha,event,html_url,created_at,updated_at}]}' > .github/diagnostics/power-preview-v3-runs.json
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/implement-power-preview-v4.yml/runs?branch=feature%2Fpower-preview&per_page=5")
+          echo "$runs" | jq '{total_count,workflow_runs:[.workflow_runs[]|{id,status,conclusion,head_sha,event,html_url,created_at,updated_at}]}' > .github/diagnostics/power-preview-v4-runs.json
           run_id=$(echo "$runs" | jq -r '.workflow_runs[0].id // empty')
           if [ -n "$run_id" ]; then
-            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" | jq '{jobs:[.jobs[]|{id,name,status,conclusion,steps}]}' > .github/diagnostics/power-preview-v3-jobs.json
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" | jq '{jobs:[.jobs[]|{id,name,status,conclusion,steps}]}' > .github/diagnostics/power-preview-v4-jobs.json
           fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add .github/diagnostics
-          git commit -m "chore: record final power preview diagnostics"
+          git commit -m "chore: record power preview v4 diagnostics"
           git push origin HEAD:feature/power-preview
