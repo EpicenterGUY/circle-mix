@@ -1,0 +1,44 @@
+name: Cleanup all-platform 0.9.51 branch
+
+on:
+  push:
+    branches:
+      - release/all-platform-0.9.51
+    paths:
+      - .github/workflows/cleanup-all-platform-0.9.51.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/all-platform-0.9.51
+          fetch-depth: 0
+      - name: Merge current main and remove temporary files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git fetch origin main
+          git merge --no-edit origin/main
+          rm -f \
+            .github/workflows/cleanup-all-platform-0.9.51.yml \
+            .github/workflows/prepare-all-platform-0.9.51.yml \
+            .github/workflows/prepare-all-platform-0.9.51-v2.yml \
+            .github/workflows/prepare-all-platform-0.9.51-v3.yml \
+            .github/workflows/diagnose-all-platform-0.9.51.yml \
+            .github/diagnostics/all-platform-0.9.51-jobs.json \
+            .github/diagnostics/all-platform-0.9.51-run.json \
+            .github/diagnostics/all-platform-0.9.51-v2-jobs.json \
+            .github/diagnostics/all-platform-0.9.51-v2-run.json
+          rmdir .github/diagnostics 2>/dev/null || true
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: clean and synchronize 0.9.51 release branch"
+          fi
+          git push origin HEAD:release/all-platform-0.9.51
