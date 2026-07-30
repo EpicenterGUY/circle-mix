@@ -1,0 +1,242 @@
+name: Implement chart power preview
+
+on:
+  push:
+    branches:
+      - feature/power-preview
+    paths:
+      - .github/workflows/implement-power-preview.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/power-preview
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply power preview implementation
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import json
+          import re
+
+          root=Path('.')
+
+          power_js=r'''/* Shared CIRCLE MIX POWER model and song-select forecast helpers. */
+          (function(root,factory){
+            const api=factory();
+            if(typeof module!=="undefined"&&module.exports)module.exports=api;
+            if(root)root.CircleMixPower=api;
+          })(typeof window!=="undefined"?window:globalThis,function(){
+            "use strict";
+            const VERSION="power-v1";
+            const ACCURACY_STEPS=Object.freeze([0.90,0.95,0.97,0.99,1.00]);
+            const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
+            function calculatePower({stars,accuracyRatio,comboRatio,missCount,totalNotes}={}){
+              const starValue=Number(stars);
+              const noteCount=Number(totalNotes);
+              if(!Number.isFinite(starValue)||starValue<=0||!Number.isFinite(noteCount)||noteCount<=0)return null;
+              const accuracy=clamp(Number.isFinite(accuracyRatio)?accuracyRatio:0,0,1);
+              const combo=clamp(Number.isFinite(comboRatio)?comboRatio:0,0,1);
+              const misses=Math.max(0,Number.isFinite(missCount)?Math.trunc(missCount):0);
+              const missPenalty=Math.pow(0.97,misses);
+              const power=Math.pow(starValue,2.15)*18*Math.pow(accuracy,2.4)*(0.75+0.25*combo)*missPenalty;
+              if(!Number.isFinite(power))return null;
+              return Math.max(0,Math.round(power));
+            }
+            function previewForStars(stars,accuracies=ACCURACY_STEPS){
+              const steps=Array.isArray(accuracies)?accuracies:ACCURACY_STEPS;
+              return steps.map(value=>{
+                const accuracy=clamp(Number(value)||0,0,1);
+                return Object.freeze({accuracyRatio:accuracy,accuracyPercent:Math.round(accuracy*100),power:calculatePower({stars,accuracyRatio:accuracy,comboRatio:1,missCount:0,totalNotes:1})});
+              });
+            }
+            return Object.freeze({VERSION,ACCURACY_STEPS,calculatePower,previewForStars});
+          });
+          '''
+          (root/'src/power.js').write_text(power_js,encoding='utf-8')
+
+          unit_test=r'''"use strict";
+          const assert=require("node:assert/strict");
+          const Power=require("../src/power");
+
+          const perfect=Power.calculatePower({stars:5,accuracyRatio:1,comboRatio:1,missCount:0,totalNotes:100});
+          assert.equal(perfect,Math.round(Math.pow(5,2.15)*18));
+          assert.equal(Power.calculatePower({stars:5,accuracyRatio:1,comboRatio:1,missCount:0,totalNotes:0}),null);
+          assert(Power.calculatePower({stars:5,accuracyRatio:.99,comboRatio:1,missCount:0,totalNotes:100})<perfect);
+          assert(Power.calculatePower({stars:5,accuracyRatio:1,comboRatio:1,missCount:1,totalNotes:100})<perfect);
+
+          const preview=Power.previewForStars(7);
+          assert.deepEqual(preview.map(item=>item.accuracyPercent),[90,95,97,99,100]);
+          assert.equal(preview.length,5);
+          assert(preview.every((item,index)=>index===0||item.power>preview[index-1].power));
+          assert.equal(preview.at(-1).power,Power.calculatePower({stars:7,accuracyRatio:1,comboRatio:1,missCount:0,totalNotes:1}));
+          console.log("power preview model tests passed");
+          '''
+          (root/'tests/power-preview.test.js').write_text(unit_test,encoding='utf-8')
+
+          browser_test=r'''"use strict";
+          const assert=require("node:assert/strict");
+          const fs=require("node:fs");
+          const http=require("node:http");
+          const path=require("node:path");
+          const {chromium}=require("playwright");
+          const MIME={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".json":"application/json; charset=utf-8",".webmanifest":"application/manifest+json; charset=utf-8",".svg":"image/svg+xml",".png":"image/png",".jpg":"image/jpeg",".mp3":"audio/mpeg",".ogg":"audio/ogg",".wav":"audio/wav"};
+          const CASES=[{name:"desktop",viewport:{width:1280,height:720},isMobile:false,hasTouch:false},{name:"mobile-landscape",viewport:{width:844,height:390},isMobile:true,hasTouch:true}];
+          function startServer(root){const base=path.resolve(root);const server=http.createServer((req,res)=>{const requestPath=decodeURIComponent(new URL(req.url,"http://127.0.0.1").pathname);const relative=requestPath==="/"?"index.html":requestPath.replace(/^\/+/,"");const file=path.resolve(base,relative);if(file!==base&&!file.startsWith(base+path.sep)){res.writeHead(403);res.end("forbidden");return;}fs.stat(file,(error,stat)=>{if(error||!stat.isFile()){res.writeHead(404);res.end("not found");return;}res.writeHead(200,{"Content-Type":MIME[path.extname(file).toLowerCase()]||"application/octet-stream","Cache-Control":"no-store"});fs.createReadStream(file).pipe(res);});});return new Promise((resolve,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",()=>resolve(server));});}
+          async function snapshot(page){return page.evaluate(()=>{const panel=document.querySelector(".songPowerPreview");const cells=[...document.querySelectorAll(".songPowerCell")].map(cell=>({accuracy:Number(cell.dataset.accuracy),power:Number(cell.dataset.power),label:cell.textContent.trim()}));return {api:!!window.CircleMixPower,panel:!!panel,difficulty:panel?.dataset.difficulty||"",stars:Number(panel?.dataset.stars),title:panel?.querySelector("strong")?.textContent||"",condition:panel?.querySelector("small")?.textContent||"",cells,expected:panel?window.CircleMixPower.previewForStars(Number(panel.dataset.stars)).map(item=>({accuracy:item.accuracyPercent,power:item.power})):[]};});}
+          (async()=>{const server=await startServer(process.cwd());const port=server.address().port;let browser;try{browser=await chromium.launch({headless:true});for(const testCase of CASES){const context=await browser.newContext({viewport:testCase.viewport,isMobile:testCase.isMobile,hasTouch:testCase.hasTouch,deviceScaleFactor:1,serviceWorkers:"block"});await context.addInitScript(()=>{try{localStorage.setItem("circleMixLastSeenVersion","0.9.50");}catch(_){}});const page=await context.newPage();const errors=[];page.on("pageerror",error=>errors.push(error.message));try{await page.goto(`http://127.0.0.1:${port}/index.html?browserTest=1`,{waitUntil:"domcontentloaded"});await page.waitForFunction(()=>window.CircleMixPower&&document.querySelector(".songPowerPreview .songPowerCell"),{timeout:10000});const first=await snapshot(page);assert.equal(first.api,true,`${testCase.name} shared power API`);assert.equal(first.panel,true,`${testCase.name} preview panel`);assert(Number.isFinite(first.stars)&&first.stars>0,`${testCase.name} stars`);assert.match(first.condition,/FC.*MISS 0/i,`${testCase.name} forecast condition`);assert.deepEqual(first.cells.map(item=>({accuracy:item.accuracy,power:item.power})),first.expected,`${testCase.name} forecast values`);assert.deepEqual(first.cells.map(item=>item.accuracy),[90,95,97,99,100],`${testCase.name} accuracy steps`);const buttons=page.locator(".songDiffBtn[data-difficulty]");if(await buttons.count()>1){const previous=first.difficulty;await buttons.nth((await buttons.count())-1).click();await page.waitForFunction(old=>document.querySelector(".songPowerPreview")?.dataset.difficulty!==old,previous);const next=await snapshot(page);assert.notEqual(next.difficulty,previous,`${testCase.name} selected difficulty updates preview`);assert.deepEqual(next.cells.map(item=>({accuracy:item.accuracy,power:item.power})),next.expected,`${testCase.name} updated forecast values`);}assert.deepEqual(errors,[],`${testCase.name} page errors: ${JSON.stringify(errors)}`);console.log(`power preview browser passed: ${testCase.name}`);}finally{await context.close();}}}finally{if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}})().catch(error=>{console.error(error);process.exitCode=1;});
+          '''
+          (root/'tests/power-preview-browser.test.js').write_text(browser_test,encoding='utf-8')
+
+          def replace_once(path,old,new,label):
+            text=path.read_text(encoding='utf-8')
+            if old not in text:
+              raise SystemExit(f'{label}: target not found in {path}')
+            path.write_text(text.replace(old,new,1),encoding='utf-8')
+
+          index=root/'index.html'
+          index_text=index.read_text(encoding='utf-8')
+          if './src/power.js' not in index_text:
+            index_text,count=re.subn(r'(<script src="\./src/game\.js[^\"]*"></script>)',r'<script src="./src/power.js"></script>\n\1',index_text,count=1)
+            if count!=1: raise SystemExit('index game script target not found')
+            index.write_text(index_text,encoding='utf-8')
+
+          game=root/'src/game.js'
+          game_text=game.read_text(encoding='utf-8')
+          chart_marker='  const chartDifficulty = window.CircleMixChartDifficulty || { VERSION:"local-v2", calculate:chart=>({stars:chartTools.calculateStars(chart),raw:0,version:"local-v2"}) };\n'
+          if 'const powerModel = window.CircleMixPower' not in game_text:
+            if chart_marker not in game_text: raise SystemExit('chart difficulty marker missing')
+            game_text=game_text.replace(chart_marker,chart_marker+'  const powerModel = window.CircleMixPower || null;\n',1)
+
+          old_power='''  function calculatePower({stars, accuracyRatio, comboRatio, missCount, totalNotes}){\n    const starValue=Number(stars);\n    const noteCount=Number(totalNotes);\n    if(!Number.isFinite(starValue) || starValue <= 0 || !Number.isFinite(noteCount) || noteCount <= 0) return null;\n    const accuracy=clamp(Number.isFinite(accuracyRatio) ? accuracyRatio : 0, 0, 1);\n    const combo=clamp(Number.isFinite(comboRatio) ? comboRatio : 0, 0, 1);\n    const misses=Math.max(0, Number.isFinite(missCount) ? Math.trunc(missCount) : 0);\n    const missPenalty=Math.pow(0.97, misses);\n    const power=Math.pow(starValue, 2.15) * 18 * Math.pow(accuracy, 2.4) * (0.75 + 0.25 * combo) * missPenalty;\n    if(!Number.isFinite(power)) return null;\n    return Math.max(0, Math.round(power));\n  }'''
+          new_power='''  function calculatePower(input){\n    if(powerModel?.calculatePower) return powerModel.calculatePower(input);\n    const {stars,accuracyRatio,comboRatio,missCount,totalNotes}=input||{};\n    const starValue=Number(stars);\n    const noteCount=Number(totalNotes);\n    if(!Number.isFinite(starValue) || starValue <= 0 || !Number.isFinite(noteCount) || noteCount <= 0) return null;\n    const accuracy=clamp(Number.isFinite(accuracyRatio) ? accuracyRatio : 0, 0, 1);\n    const combo=clamp(Number.isFinite(comboRatio) ? comboRatio : 0, 0, 1);\n    const misses=Math.max(0, Number.isFinite(missCount) ? Math.trunc(missCount) : 0);\n    const missPenalty=Math.pow(0.97, misses);\n    const power=Math.pow(starValue, 2.15) * 18 * Math.pow(accuracy, 2.4) * (0.75 + 0.25 * combo) * missPenalty;\n    if(!Number.isFinite(power)) return null;\n    return Math.max(0, Math.round(power));\n  }'''
+          if old_power not in game_text: raise SystemExit('calculatePower block missing')
+          game_text=game_text.replace(old_power,new_power,1)
+
+          preview_helper=r'''  function powerPreviewHtml(songData,difficultyId){
+            if(!songData||!difficultyId||!powerModel?.previewForStars)return "";
+            const diff=difficultyViewForSong(songData,difficultyId);
+            const stars=Number(diff?.stars);
+            if(!Number.isFinite(stars)||stars<=0)return "";
+            const values=powerModel.previewForStars(stars);
+            if(!values.length)return "";
+            const label=getActiveDifficultyLabel(songData,difficultyId);
+            const cells=values.map(item=>`<span class="songPowerCell" data-accuracy="${item.accuracyPercent}" data-power="${item.power ?? ""}"><em>${item.accuracyPercent}%</em><strong>${item.power ?? "---"}</strong></span>`).join("");
+            return `<section class="songPowerPreview" aria-label="${escapeAttribute(label)} 정확도별 예상 파워" data-difficulty="${escapeAttribute(difficultyId)}" data-stars="${escapeAttribute(stars)}"><div class="songPowerHeader"><strong>${escapeHtml(label)} 예상 POWER</strong><small>${escapeHtml(formatStarValue(stars))} · FC · MISS 0 기준</small></div><div class="songPowerGrid">${cells}</div></section>`;
+          }
+
+          '''
+          render_marker='  function renderSongSelect(){\n'
+          if 'function powerPreviewHtml(' not in game_text:
+            if render_marker not in game_text: raise SystemExit('renderSongSelect marker missing')
+            game_text=game_text.replace(render_marker,preview_helper+render_marker,1)
+
+          old_assign='    songDifficulty.innerHTML = diffHtml + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>`;'
+          new_assign='    const powerPreview=powerPreviewHtml(selectedSong,selectedDifficultyId);\n    songDifficulty.innerHTML = diffHtml + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>` + powerPreview;'
+          if old_assign not in game_text: raise SystemExit('songDifficulty assignment missing')
+          game_text=game_text.replace(old_assign,new_assign,1)
+          game.write_text(game_text,encoding='utf-8')
+
+          style=root/'style.css'
+          style_text=style.read_text(encoding='utf-8')
+          css=r'''
+
+          /* Accuracy-based POWER forecast for the selected chart. */
+          .songPowerPreview{flex:1 0 100%;display:grid;grid-template-columns:minmax(150px,.8fr) minmax(0,2fr);gap:12px;align-items:center;padding:12px 14px;box-sizing:border-box;border:1px solid rgba(255,243,106,.28);border-radius:18px;background:linear-gradient(135deg,rgba(255,243,106,.08),rgba(92,255,251,.08));box-shadow:inset 0 0 24px rgba(255,255,255,.025)}
+          .songPowerHeader{min-width:0;text-align:left}.songPowerHeader>strong{display:block;color:#fff;font-size:13px;font-weight:1000;letter-spacing:.06em}.songPowerHeader>small{display:block;margin-top:3px;color:#9fb0c7;font-size:10px;font-weight:900;letter-spacing:.06em}
+          .songPowerGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}.songPowerCell{min-width:0;padding:7px 5px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18);text-align:center}.songPowerCell em{display:block;color:#9fb0c7;font-size:9px;font-style:normal;font-weight:1000}.songPowerCell strong{display:block;margin-top:2px;color:#fff36a;font-size:14px;font-weight:1000;font-variant-numeric:tabular-nums}
+          @media(max-width:720px){.songPowerPreview{grid-template-columns:1fr;gap:8px;padding:10px}.songPowerHeader{text-align:center}.songPowerGrid{gap:5px}.songPowerCell{padding:6px 3px}.songPowerCell strong{font-size:12px}}
+          @media(max-height:520px) and (orientation:landscape){.songPowerPreview{grid-template-columns:minmax(130px,.7fr) minmax(0,2fr);padding:7px 9px;gap:8px}.songPowerHeader>strong{font-size:11px}.songPowerHeader>small{font-size:8px}.songPowerCell{padding:4px 2px}.songPowerCell strong{font-size:11px}}
+          '''
+          if 'Accuracy-based POWER forecast' not in style_text:
+            style.write_text(style_text+css,encoding='utf-8')
+
+          prepare=root/'scripts/prepare-desktop.js'
+          prepare_text=prepare.read_text(encoding='utf-8')
+          if "'src/power.js'" not in prepare_text:
+            target="'src/chart-difficulty.js'"
+            if target not in prepare_text: raise SystemExit('desktop allowlist marker missing')
+            prepare_text=prepare_text.replace(target,"'src/power.js',"+target,1)
+            prepare.write_text(prepare_text,encoding='utf-8')
+
+          sw=root/'service-worker.js'
+          sw_text=sw.read_text(encoding='utf-8')
+          if 'versioned("./src/power.js")' not in sw_text:
+            marker='  versioned("./src/chart-difficulty.js"),\n'
+            if marker not in sw_text: raise SystemExit('service worker marker missing')
+            sw.write_text(sw_text.replace(marker,'  versioned("./src/power.js"),\n'+marker,1),encoding='utf-8')
+
+          desktop_audit=root/'scripts/audit-desktop-dist.js'
+          da=desktop_audit.read_text(encoding='utf-8')
+          if "src/power.js" not in da:
+            marker="const songRecord=fs.readFileSync(path.join(out,'src/song-record.js'),'utf8');"
+            insert="const powerModel=fs.readFileSync(path.join(out,'src/power.js'),'utf8');\nfor(const needle of ['calculatePower','previewForStars','ACCURACY_STEPS'])if(!powerModel.includes(needle))throw new Error(`desktop POWER forecast model is missing: ${needle}`);\n"
+            if marker not in da: raise SystemExit('desktop audit marker missing')
+            da=da.replace(marker,insert+marker,1)
+            index_marker="if(!desktopIndex.includes('./src/desktop-release.js')||!desktopIndex.includes('./src/desktop-updater.js'))throw new Error('desktop release or updater script is not loaded by index.html');"
+            index_new="if(!desktopIndex.includes('./src/power.js'))throw new Error('desktop POWER forecast model is not loaded by index.html');\n"+index_marker
+            if index_marker not in da: raise SystemExit('desktop index audit marker missing')
+            da=da.replace(index_marker,index_new,1)
+            desktop_audit.write_text(da,encoding='utf-8')
+
+          android_audit=root/'scripts/audit-android-dist.js'
+          aa=android_audit.read_text(encoding='utf-8')
+          if "src/power.js" not in aa:
+            req_marker="'src/editor-playtest.js'"
+            if req_marker not in aa: raise SystemExit('android audit required marker missing')
+            aa=aa.replace(req_marker,req_marker+",'src/power.js'",1)
+            index_marker="'./src/editor-playtest.js'"
+            if index_marker not in aa: raise SystemExit('android audit index marker missing')
+            aa=aa.replace(index_marker,index_marker+",'./src/power.js'",1)
+            game_marker="const game=fs.readFileSync(path.join(out,'src/game.js'),'utf8');"
+            insert="const powerModel=fs.readFileSync(path.join(out,'src/power.js'),'utf8');\nfor(const needle of ['calculatePower','previewForStars','ACCURACY_STEPS'])if(!powerModel.includes(needle))throw new Error(`Android POWER forecast model is missing ${needle}`);\n"
+            if game_marker not in aa: raise SystemExit('android audit game marker missing')
+            aa=aa.replace(game_marker,insert+game_marker,1)
+            android_audit.write_text(aa,encoding='utf-8')
+
+          package_path=root/'package.json'
+          package=json.loads(package_path.read_text(encoding='utf-8'))
+          test=package['scripts']['test']
+          if 'node --check src/power.js' not in test:
+            test=test.replace('node --check src/player-profile.js','node --check src/power.js && node --check src/player-profile.js',1)
+          if 'node tests/power-preview.test.js' not in test:
+            test=test.replace('node tests/player-profile.test.js','node tests/power-preview.test.js && node tests/player-profile.test.js',1)
+          package['scripts']['test']=test
+          browser=package['scripts']['test:browser']
+          if 'power-preview-browser.test.js' not in browser:
+            browser=browser.replace('node tests/song-select-overflow-browser.test.js','node tests/power-preview-browser.test.js && node tests/song-select-overflow-browser.test.js',1)
+          package['scripts']['test:browser']=browser
+          package_path.write_text(json.dumps(package,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          smoke=root/'tests/smoke.test.js'
+          smoke_text=smoke.read_text(encoding='utf-8')
+          if 'POWER_PREVIEW_MODEL' not in smoke_text:
+            smoke_text+='''\n// POWER_PREVIEW_MODEL: shared result and song-select power calculations must stay packaged.\nassert.ok(fs.existsSync(path.join(root,'src/power.js')),'shared POWER model missing');\nassert.match(html,/src\\/power\\.js/,'index must load the shared POWER model');\nassert.match(game,/powerPreviewHtml/,'song select must render the accuracy POWER forecast');\n'''
+            smoke.write_text(smoke_text,encoding='utf-8')
+          PY
+      - name: Install dependencies
+        run: npm ci
+      - name: Run repository tests
+        run: npm test
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser tests
+        run: npm run test:browser
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/power.js src/game.js style.css index.html service-worker.js scripts/prepare-desktop.js scripts/audit-desktop-dist.js scripts/audit-android-dist.js tests/power-preview.test.js tests/power-preview-browser.test.js tests/smoke.test.js package.json
+          git commit -m "feat: show accuracy power forecasts by chart difficulty"
+          git push origin HEAD:feature/power-preview
