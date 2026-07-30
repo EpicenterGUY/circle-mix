@@ -42,13 +42,33 @@ jobs:
             "fs.existsSync(path.join(root,'src/power.js'))":"fs.existsSync('src/power.js')",
             "assert.match(html,":"assert.match(fs.readFileSync('index.html','utf8'),",
             "assert.match(game,":"assert.match(fs.readFileSync('src/game.js','utf8'),",
-            "localStorage.setItem(\"circleMixLastSeenVersion\",\"0.9.50\");":"localStorage.setItem(\"circleMixLastSeenVersion\",\"0.9.50\");localStorage.setItem(\"circleMixTutorialCompleted\",\"true\");localStorage.setItem(\"circleMixTutorialPromptAnswered\",\"true\");",
-            "await page.waitForFunction(()=>window.CircleMixPower&&document.querySelector(\".songPowerPreview .songPowerCell\"),{timeout:10000});":"await page.waitForFunction(()=>window.CircleMixPower&&document.getElementById(\"safeStart\"),{timeout:10000});await page.evaluate(()=>{const update=document.getElementById(\"updateLogOverlay\");if(update){update.classList.remove(\"show\");update.hidden=true;}document.body.classList.remove(\"updateLogOpen\");document.getElementById(\"safeStart\")?.click();});await page.waitForFunction(()=>window.CircleMixPower&&document.querySelector(\".songPowerPreview .songPowerCell\"),{timeout:10000});"
+            "localStorage.setItem(\"circleMixLastSeenVersion\",\"0.9.50\");":"localStorage.setItem(\"circleMixLastSeenVersion\",\"0.9.50\");localStorage.setItem(\"circleMixTutorialCompleted\",\"true\");localStorage.setItem(\"circleMixTutorialPromptAnswered\",\"true\");"
           }
           for old,new in replacements.items():
             if old not in script: raise SystemExit(f'unable to patch generated source: {old}')
             script=script.replace(old,new,1)
           exec(compile(script,'implement-power-preview.py','exec'),{'__name__':'__main__'})
+
+          game_path=Path('src/game.js')
+          game=game_path.read_text(encoding='utf-8')
+          render_marker='  function renderSongSelect(){\n'
+          test_hook='  if(initialParams.get("browserTest")==="1") window.CircleMixPowerPreviewTestApi=Object.freeze({render:powerPreviewHtml});\n\n'
+          if 'CircleMixPowerPreviewTestApi' not in game:
+            if render_marker not in game: raise SystemExit('renderSongSelect marker missing for POWER preview test hook')
+            game=game.replace(render_marker,test_hook+render_marker,1)
+            game_path.write_text(game,encoding='utf-8')
+
+          browser_path=Path('tests/power-preview-browser.test.js')
+          browser=browser_path.read_text(encoding='utf-8')
+          original_wait='await page.waitForFunction(()=>window.CircleMixPower&&document.querySelector(".songPowerPreview .songPowerCell"),{timeout:10000});'
+          fixture_wait='''await page.waitForFunction(()=>window.CircleMixPower&&window.CircleMixPowerPreviewTestApi&&document.getElementById("songDifficulty"),{timeout:10000});await page.evaluate(()=>{window.__powerPreviewFixture={source:"builtin",difficultyOrder:["easy","hard"],difficulties:{easy:{label:"EASY",stars:3},hard:{label:"HARD",stars:8}}};const host=document.getElementById("songDifficulty");host.innerHTML=window.CircleMixPowerPreviewTestApi.render(window.__powerPreviewFixture,"easy");});await page.waitForFunction(()=>document.querySelector(".songPowerPreview .songPowerCell"),{timeout:10000});'''
+          if original_wait not in browser: raise SystemExit('POWER preview browser wait marker missing')
+          browser=browser.replace(original_wait,fixture_wait,1)
+          block_start=browser.index('const buttons=page.locator(".songDiffBtn[data-difficulty]");')
+          block_end=browser.index('assert.deepEqual(errors',block_start)
+          replacement='''await page.evaluate(()=>{const host=document.getElementById("songDifficulty");host.innerHTML=window.CircleMixPowerPreviewTestApi.render(window.__powerPreviewFixture,"hard");});await page.waitForFunction(old=>document.querySelector(".songPowerPreview")?.dataset.difficulty!==old,first.difficulty);const next=await snapshot(page);assert.equal(next.difficulty,"hard",`${testCase.name} selected difficulty updates preview`);assert.match(next.title,/HARD/,`${testCase.name} updated difficulty label`);assert.deepEqual(next.cells.map(item=>({accuracy:item.accuracy,power:item.power})),next.expected,`${testCase.name} updated forecast values`);assert(next.cells.at(-1).power>first.cells.at(-1).power,`${testCase.name} harder chart raises forecast POWER`);'''
+          browser=browser[:block_start]+replacement+browser[block_end:]
+          browser_path.write_text(browser,encoding='utf-8')
           PY
       - run: npm ci
       - name: Run repository tests
