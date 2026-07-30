@@ -1,0 +1,65 @@
+name: Implement chart power preview v4
+
+on:
+  push:
+    branches:
+      - feature/power-preview
+    paths:
+      - .github/workflows/implement-power-preview-v4.yml
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/power-preview
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply implementation
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow=Path('.github/workflows/implement-power-preview.yml').read_text(encoding='utf-8')
+          start=workflow.index("          python3 <<'PY'\n")+len("          python3 <<'PY'\n")
+          end=workflow.index("\n          PY\n",start)
+          script=textwrap.dedent(workflow[start:end])
+
+          old_audit='''  index_marker="if(!desktopIndex.includes('./src/desktop-release.js')||!desktopIndex.includes('./src/desktop-updater.js'))throw new Error('desktop release or updater script is not loaded by index.html');"\n  index_new="if(!desktopIndex.includes('./src/power.js'))throw new Error('desktop POWER forecast model is not loaded by index.html');\\n"+index_marker\n  if index_marker not in da: raise SystemExit('desktop index audit marker missing')\n  da=da.replace(index_marker,index_new,1)'''
+          new_audit='''  index_marker="for(const asset of ['./src/desktop-release.js','./src/desktop-updater.js','./src/editor-playtest.js'])if(!desktopIndex.includes(asset))throw new Error(`desktop index does not load ${asset}`);"\n  index_new="for(const asset of ['./src/desktop-release.js','./src/desktop-updater.js','./src/editor-playtest.js','./src/power.js'])if(!desktopIndex.includes(asset))throw new Error(`desktop index does not load ${asset}`);"\n  if index_marker not in da: raise SystemExit('desktop index audit marker missing')\n  da=da.replace(index_marker,index_new,1)'''
+          if old_audit not in script: raise SystemExit('unable to patch desktop audit marker')
+          script=script.replace(old_audit,new_audit,1)
+
+          old_smoke="""assert.ok(fs.existsSync(path.join(root,'src/power.js')),'shared POWER model missing');
+assert.match(html,/src\\/power\\.js/,'index must load the shared POWER model');
+assert.match(game,/powerPreviewHtml/,'song select must render the accuracy POWER forecast');"""
+          new_smoke="""assert.ok(fs.existsSync('src/power.js'),'shared POWER model missing');
+assert.match(fs.readFileSync('index.html','utf8'),/src\\/power\\.js/,'index must load the shared POWER model');
+assert.match(fs.readFileSync('src/game.js','utf8'),/powerPreviewHtml/,'song select must render the accuracy POWER forecast');"""
+          if old_smoke not in script: raise SystemExit('unable to patch smoke source reads')
+          script=script.replace(old_smoke,new_smoke,1)
+          exec(compile(script,'implement-power-preview.py','exec'),{'__name__':'__main__'})
+          PY
+      - run: npm ci
+      - name: Run repository tests
+        run: npm test
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser tests
+        run: npm run test:browser
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/power.js src/game.js style.css index.html service-worker.js scripts/prepare-desktop.js scripts/audit-desktop-dist.js scripts/audit-android-dist.js tests/power-preview.test.js tests/power-preview-browser.test.js tests/smoke.test.js package.json
+          git commit -m "feat: show accuracy power forecasts by chart difficulty"
+          git push origin HEAD:feature/power-preview
