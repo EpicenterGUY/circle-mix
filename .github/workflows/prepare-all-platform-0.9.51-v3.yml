@@ -1,0 +1,91 @@
+name: Prepare all-platform 0.9.51 v3
+
+on:
+  push:
+    branches:
+      - release/all-platform-0.9.51
+    paths:
+      - .github/workflows/prepare-all-platform-0.9.51-v3.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/all-platform-0.9.51
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply corrected 0.9.51 release metadata
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap,re
+          workflow=Path('.github/workflows/prepare-all-platform-0.9.51.yml').read_text(encoding='utf-8')
+          start=workflow.index("          python3 <<'PY'\n")+len("          python3 <<'PY'\n")
+          end=workflow.index("\n          PY\n",start)
+          script=textwrap.dedent(workflow[start:end])
+          cargo_block='''cargo_lock=read('src-tauri/Cargo.lock')
+          pattern=r'(name = "circle-mix"\\nversion = ")0\\.9\\.50(")'
+          cargo_lock,count=re.subn(pattern,rf'\\g<1>{VERSION}\\g<2>',cargo_lock,count=1)
+          if count!=1: raise SystemExit('Cargo.lock circle-mix version marker missing')
+          write('src-tauri/Cargo.lock',cargo_lock)
+
+          '''
+          if cargo_block not in script: raise SystemExit('Cargo.lock preparation block not found')
+          script=script.replace(cargo_block,'',1)
+          faulty="tests=tests.replace('android-v0.9.51','android-v0.9.52').replace(\"'0.9.51'\",\"'0.9.52'\",1)"
+          fixed="tests=tests.replace('android-v0.9.51','android-v0.9.52')"
+          if faulty not in script: raise SystemExit('Android future-version replacement marker missing')
+          script=script.replace(faulty,fixed,1)
+          exec(compile(script,'prepare-all-platform-0.9.51.py','exec'),{'__name__':'__main__'})
+
+          test_path=Path('tests/android-app.test.js')
+          tests=test_path.read_text(encoding='utf-8')
+          tests=tests.replace("assert.equal(config.version,'0.9.52');","assert.equal(config.version,'0.9.51');")
+          block_start=tests.index("test('Android release metadata selects only a newer exact signed ARM64 APK',()=>{")
+          block_end=tests.index("\n\ntest('Android startup fails open",block_start)
+          updater_block='''test('Android release metadata selects only a newer exact signed ARM64 APK',()=>{
+            assert.equal(Updater.VERSION,'android-updater-v1');
+            assert.equal(Updater.compareVersions('0.9.51','0.9.50'),1);
+            assert.equal(Updater.compareVersions('0.9.51','0.9.51'),0);
+            assert.equal(Updater.releaseVersion('android-v0.9.52'),'0.9.52');
+            assert.equal(Updater.releaseVersion('v0.9.52'),'');
+            const release={
+              tag_name:'android-v0.9.52',draft:false,prerelease:false,body:'notes',published_at:'2026-07-31T00:00:00Z',
+              assets:[{name:'circle-mix-0.9.52-android-arm64-release.apk',state:'uploaded',size:123,digest:`sha256:${'a'.repeat(64)}`,browser_download_url:'https://github.com/EpicenterGUY/circle-mix/releases/download/android-v0.9.52/circle-mix-0.9.52-android-arm64-release.apk'}]
+            };
+            const update=Updater.releaseToUpdate(release,'0.9.51');
+            assert.equal(update.version,'0.9.52');
+            assert.equal(update.sha256,'a'.repeat(64));
+            assert.equal(Updater.releaseToUpdate(release,'0.9.52'),null);
+            assert.equal(Updater.releaseToUpdate({...release,assets:[{...release.assets[0],digest:null}]},'0.9.51'),null);
+            assert.match(Updater.RELEASE_API,/releases\?per_page=20/);
+          });'''
+          tests=tests[:block_start]+updater_block+tests[block_end:]
+          test_path.write_text(tests,encoding='utf-8')
+          PY
+      - run: npm ci
+      - name: Run repository and distribution tests
+        run: |
+          npm test
+          npm run desktop:prepare
+          npm run desktop:audit
+          npm run android:prepare
+          node scripts/audit-android-dist.js
+      - name: Commit release metadata
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "release: prepare Android and Windows 0.9.51 POWER forecast"
+          git fetch origin release/all-platform-0.9.51
+          git rebase origin/release/all-platform-0.9.51
+          git push origin HEAD:release/all-platform-0.9.51
