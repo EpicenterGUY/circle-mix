@@ -9,10 +9,10 @@ const files=[];(function walk(directory){for(const entry of fs.readdirSync(direc
 const relative=files.map(file=>path.relative(out,file).replaceAll(path.sep,'/'));
 const forbiddenFile=/\.(?:mp3|ogg|wav|flac|m4a|cmix|osz|osu|map)$/i;
 if(relative.some(file=>forbiddenFile.test(file)||/(^|\/)(assets|charts)\//.test(file)||/service-worker|manifest\.webmanifest/.test(file)))throw new Error('Android distribution contains bundled media, chart data, or PWA files');
-for(const file of ['src/android-platform.js','src/android-updater.js','src/android-release.js','src/mobile-layout-v2.js','mobile-layout-v2.css','src/pc-settings.js','pc-settings.css','song-select-fixes.css','src/editor-playtest.js'])if(!relative.includes(file))throw new Error(`Android distribution is missing ${file}`);
+for(const file of ['src/android-platform.js','src/android-updater.js','src/android-release.js','src/mobile-layout-v2.js','mobile-layout-v2.css','src/pc-settings.js','pc-settings.css','song-select-fixes.css','src/editor-playtest.js','src/power.js'])if(!relative.includes(file))throw new Error(`Android distribution is missing ${file}`);
 for(const file of ['src/desktop-updater.js','src/desktop-release.js'])if(relative.includes(file))throw new Error(`Android distribution contains desktop-only file ${file}`);
 const index=fs.readFileSync(path.join(out,'index.html'),'utf8');
-for(const asset of ['./src/android-release.js','./src/android-platform.js','./src/android-updater.js','./src/editor-playtest.js'])if(!index.includes(asset))throw new Error(`Android index does not load ${asset}`);
+for(const asset of ['./src/android-release.js','./src/android-platform.js','./src/android-updater.js','./src/editor-playtest.js','./src/power.js'])if(!index.includes(asset))throw new Error(`Android index does not load ${asset}`);
 if(index.includes('desktop-updater.js')||index.includes('desktop-release.js')||index.includes('data:audio/'))throw new Error('Android index contains desktop updater or embedded audio');
 const config=fs.readFileSync(path.join(out,'src/build-config.js'),'utf8');
 for(const needle of ["target:'android'",'includeBundledSongs:false','enableServiceWorker:false','enableAndroidUpdater:true','nativeAndroid:true','song-select-fixes.css'])if(!config.includes(needle))throw new Error(`Android build config is missing ${needle}`);
@@ -30,6 +30,8 @@ const editorPlaytest=fs.readFileSync(path.join(out,'src/editor-playtest.js'),'ut
 if(!editorPlaytest.includes('mergeLocalDifficulty'))throw new Error('Android editor playtest lost sibling difficulty preservation');
 const updater=fs.readFileSync(path.join(out,'src/android-updater.js'),'utf8');
 for(const needle of ['api.github.com/repos/EpicenterGUY/circle-mix/releases?per_page=20','CircleMixAndroidUpdaterNative','sha256:','androidUpdateCheck','releaseToUpdate','다운로드 및 설치'])if(!updater.includes(needle))throw new Error(`Android updater frontend is missing ${needle}`);
+const powerModel=fs.readFileSync(path.join(out,'src/power.js'),'utf8');
+for(const needle of ['calculatePower','previewForStars','ACCURACY_STEPS'])if(!powerModel.includes(needle))throw new Error(`Android POWER forecast model is missing ${needle}`);
 const game=fs.readFileSync(path.join(out,'src/game.js'),'utf8');
 for(const needle of ['function checkScratch','sortDifficultyEntriesByStars','editorPlaytestSession'])if(!game.includes(needle))throw new Error(`Android game payload is missing ${needle}`);
 console.log(`Android distribution audit passed: ${files.length} files.`);

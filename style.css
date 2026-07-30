@@ -985,3 +985,11 @@ body.gameplayScrollLocked #game{
 body.foldExpanded .rotateCard{width:min(520px,calc(100vw - 36px));border-color:rgba(141,107,255,.48);box-shadow:0 24px 80px rgba(0,0,0,.62),0 0 78px rgba(141,107,255,.20)}
 body.foldExpanded .rotateCard strong{font-size:clamp(22px,4vw,30px)}
 @media (pointer:coarse) and (min-width:600px){body.foldExpanded .rotateCard{padding:28px 32px}.rotateLandscapeBtn{min-width:220px}}
+
+
+/* Accuracy-based POWER forecast for the selected chart. */
+.songPowerPreview{flex:1 0 100%;display:grid;grid-template-columns:minmax(150px,.8fr) minmax(0,2fr);gap:12px;align-items:center;padding:12px 14px;box-sizing:border-box;border:1px solid rgba(255,243,106,.28);border-radius:18px;background:linear-gradient(135deg,rgba(255,243,106,.08),rgba(92,255,251,.08));box-shadow:inset 0 0 24px rgba(255,255,255,.025)}
+.songPowerHeader{min-width:0;text-align:left}.songPowerHeader>strong{display:block;color:#fff;font-size:13px;font-weight:1000;letter-spacing:.06em}.songPowerHeader>small{display:block;margin-top:3px;color:#9fb0c7;font-size:10px;font-weight:900;letter-spacing:.06em}
+.songPowerGrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px}.songPowerCell{min-width:0;padding:7px 5px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.18);text-align:center}.songPowerCell em{display:block;color:#9fb0c7;font-size:9px;font-style:normal;font-weight:1000}.songPowerCell strong{display:block;margin-top:2px;color:#fff36a;font-size:14px;font-weight:1000;font-variant-numeric:tabular-nums}
+@media(max-width:720px){.songPowerPreview{grid-template-columns:1fr;gap:8px;padding:10px}.songPowerHeader{text-align:center}.songPowerGrid{gap:5px}.songPowerCell{padding:6px 3px}.songPowerCell strong{font-size:12px}}
+@media(max-height:520px) and (orientation:landscape){.songPowerPreview{grid-template-columns:minmax(130px,.7fr) minmax(0,2fr);padding:7px 9px;gap:8px}.songPowerHeader>strong{font-size:11px}.songPowerHeader>small{font-size:8px}.songPowerCell{padding:4px 2px}.songPowerCell strong{font-size:11px}}

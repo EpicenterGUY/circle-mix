@@ -35,6 +35,7 @@ const APP_SHELL_URLS = [
   versioned("./src/charts/ghost-rule.js"),
   versioned("./src/charts/routing.js"),
   versioned("./src/local-library.js"),
+  versioned("./src/power.js"),
   versioned("./src/chart-difficulty.js"),
   versioned("./src/chart-feasibility.js"),
   versioned("./src/songs.js"),

@@ -738,3 +738,8 @@ test("foldable mobile viewports retry landscape safely", () => {
   assert.match(src,/await requestGameFullscreen\(\);[\s\S]{0,120}await lockLandscapeSafe\("rotate-button"\)/);
   assert.match(src,/handleAdaptiveMobileViewport\("initial",true\)/);
 });
+
+// POWER_PREVIEW_MODEL: shared result and song-select power calculations must stay packaged.
+assert.ok(fs.existsSync('src/power.js'),'shared POWER model missing');
+assert.match(fs.readFileSync('index.html','utf8'),/src\/power\.js/,'index must load the shared POWER model');
+assert.match(fs.readFileSync('src/game.js','utf8'),/powerPreviewHtml/,'song select must render the accuracy POWER forecast');
