@@ -1,0 +1,108 @@
+{
+  "jobs": [
+    {
+      "id": 90941466336,
+      "name": "implement",
+      "status": "completed",
+      "conclusion": "failure",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-07-30T16:50:37Z",
+          "completed_at": "2026-07-30T16:50:38Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-07-30T16:50:38Z",
+          "completed_at": "2026-07-30T16:50:39Z"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3,
+          "started_at": "2026-07-30T16:50:39Z",
+          "completed_at": "2026-07-30T16:50:42Z"
+        },
+        {
+          "name": "Apply final implementation",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-07-30T16:50:42Z",
+          "completed_at": "2026-07-30T16:50:42Z"
+        },
+        {
+          "name": "Install dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5,
+          "started_at": "2026-07-30T16:50:42Z",
+          "completed_at": "2026-07-30T16:50:42Z"
+        },
+        {
+          "name": "Run repository tests",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 6,
+          "started_at": "2026-07-30T16:50:42Z",
+          "completed_at": "2026-07-30T16:50:44Z"
+        },
+        {
+          "name": "Install Chromium",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 7,
+          "started_at": "2026-07-30T16:50:44Z",
+          "completed_at": "2026-07-30T16:50:44Z"
+        },
+        {
+          "name": "Run browser tests",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 8,
+          "started_at": "2026-07-30T16:50:44Z",
+          "completed_at": "2026-07-30T16:50:44Z"
+        },
+        {
+          "name": "Commit implementation",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 9,
+          "started_at": "2026-07-30T16:50:44Z",
+          "completed_at": "2026-07-30T16:50:44Z"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 17,
+          "started_at": "2026-07-30T16:50:44Z",
+          "completed_at": "2026-07-30T16:50:44Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 18,
+          "started_at": "2026-07-30T16:50:44Z",
+          "completed_at": "2026-07-30T16:50:44Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 19,
+          "started_at": "2026-07-30T16:50:44Z",
+          "completed_at": "2026-07-30T16:50:44Z"
+        }
+      ]
+    }
+  ]
+}
