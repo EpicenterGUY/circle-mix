@@ -178,6 +178,7 @@
     approachProgress(nowMs,hitMs,approachMs){return Math.min(1,Math.max(0,1-(hitMs-nowMs)/Math.max(1,approachMs)));}
   };
   const chartDifficulty = window.CircleMixChartDifficulty || { VERSION:"local-v2", calculate:chart=>({stars:chartTools.calculateStars(chart),raw:0,version:"local-v2"}) };
+  const powerModel = window.CircleMixPower || null;
   const initialParams = new URLSearchParams(window.location.search);
   const editorPlaytestApi=window.CircleMixEditorPlaytest||null;
   const editorPlaytestSession=editorPlaytestApi?.readSession({search:window.location.search})||null;
@@ -764,7 +765,9 @@
     if(next.bestPowerMissCount !== prev.bestPowerMissCount) return next.bestPowerMissCount < prev.bestPowerMissCount;
     return next.bestPowerScore > prev.bestPowerScore;
   }
-  function calculatePower({stars, accuracyRatio, comboRatio, missCount, totalNotes}){
+  function calculatePower(input){
+    if(powerModel?.calculatePower) return powerModel.calculatePower(input);
+    const {stars,accuracyRatio,comboRatio,missCount,totalNotes}=input||{};
     const starValue=Number(stars);
     const noteCount=Number(totalNotes);
     if(!Number.isFinite(starValue) || starValue <= 0 || !Number.isFinite(noteCount) || noteCount <= 0) return null;
@@ -5725,6 +5728,20 @@ settingsOrigin=${settingsOrigin}`);
   }
   function escapeAttribute(value){ return escapeHtml(value); }
 
+  function powerPreviewHtml(songData,difficultyId){
+  if(!songData||!difficultyId||!powerModel?.previewForStars)return "";
+  const diff=difficultyViewForSong(songData,difficultyId);
+  const stars=Number(diff?.stars);
+  if(!Number.isFinite(stars)||stars<=0)return "";
+  const values=powerModel.previewForStars(stars);
+  if(!values.length)return "";
+  const label=getActiveDifficultyLabel(songData,difficultyId);
+  const cells=values.map(item=>`<span class="songPowerCell" data-accuracy="${item.accuracyPercent}" data-power="${item.power ?? ""}"><em>${item.accuracyPercent}%</em><strong>${item.power ?? "---"}</strong></span>`).join("");
+  return `<section class="songPowerPreview" aria-label="${escapeAttribute(label)} 정확도별 예상 파워" data-difficulty="${escapeAttribute(difficultyId)}" data-stars="${escapeAttribute(stars)}"><div class="songPowerHeader"><strong>${escapeHtml(label)} 예상 POWER</strong><small>${escapeHtml(formatStarValue(stars))} · FC · MISS 0 기준</small></div><div class="songPowerGrid">${cells}</div></section>`;
+}
+
+  if(initialParams.get("browserTest")==="1") window.CircleMixPowerPreviewTestApi=Object.freeze({render:powerPreviewHtml});
+
   function renderSongSelect(){
     if(!songCarousel || !songDifficulty) return;
     selectedSource = songTab==="local" ? "local" : "builtin";
@@ -5811,7 +5828,8 @@ settingsOrigin=${settingsOrigin}`);
     }
     const playability=getSelectionPlayability();
     if(!playability.ok && selectedSong && selectedDifficultyId) diffHtml += `<div class="songDiffEmpty" data-playability-error="true">${escapeHtml(playability.message)}</div>`;
-    songDifficulty.innerHTML = diffHtml + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>`;
+    const powerPreview=powerPreviewHtml(selectedSong,selectedDifficultyId);
+    songDifficulty.innerHTML = diffHtml + `<button class="songDiffBtn songAutoBtn${gameState.autoEnabled ? " on" : ""}" type="button" data-auto-play="true">AUTO PLAY <span>${gameState.autoEnabled ? "ON" : "OFF"}</span></button>` + powerPreview;
     for(const btn of songDifficulty.querySelectorAll(".songDiffBtn[data-difficulty]")){
       bindPress(btn,()=>{ selectedDifficultyId = btn.dataset.difficulty; selectedMenuMode = selectedDifficultyId; mapMode = selectedMenuMode; renderSongSelect(); updateButtons(); });
     }

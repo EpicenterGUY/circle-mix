@@ -45,6 +45,8 @@ const tabletArea=fs.readFileSync(path.join(out,'src/trackpad-tablet-area.js'),'u
 for(const needle of ['circleMixTrackpadTabletArea.v1','mapPointToAngle','trackpadTabletResize','mirrorX','deadzone','stopImmediatePropagation'])if(!tabletArea.includes(needle))throw new Error(`desktop tablet-area input is missing: ${needle}`);
 const songSelectCss=fs.readFileSync(path.join(out,'song-select-fixes.css'),'utf8');
 for(const needle of ['align-content:flex-start','overflow-y:auto','scrollbar-gutter:stable','songTabs'])if(!songSelectCss.includes(needle))throw new Error(`desktop song-select overflow fix is missing: ${needle}`);
+const powerModel=fs.readFileSync(path.join(out,'src/power.js'),'utf8');
+for(const needle of ['calculatePower','previewForStars','ACCURACY_STEPS'])if(!powerModel.includes(needle))throw new Error(`desktop POWER forecast model is missing: ${needle}`);
 const songRecord=fs.readFileSync(path.join(out,'src/song-record.js'),'utf8');
 for(const needle of ['sortLocalDifficultyOrder','numericDifficulty','sortDifficultyEntriesByStars'])if(!songRecord.includes(needle))throw new Error(`desktop local difficulty sorting is missing: ${needle}`);
 const editorPlaytest=fs.readFileSync(path.join(out,'src/editor-playtest.js'),'utf8');
@@ -70,5 +72,5 @@ if(!desktopGame.includes('SWING_VISUAL_DIRECTIONAL_ARC')||!desktopGame.includes(
 if(desktopGame.includes('addRingBurst(color,label==="PERFECT"?1.22:1.0,label)'))throw new Error('SWING still emits a full-ring judgement burst');
 for(const needle of ['HIT_SOUND_CHORD_WINDOW','createDynamicsCompressor','function hitSoundHeadroom','function ensureHitNoiseBuffer','function scheduleHitTone','function scheduleHitNoise','family==="pulse"','quality==="PERFECT"'])if(!desktopGame.includes(needle))throw new Error(`desktop punchier hit-sound pass is missing: ${needle}`);
 const desktopIndex=fs.readFileSync(path.join(out,'index.html'),'utf8');
-for(const asset of ['./src/desktop-release.js','./src/desktop-updater.js','./src/editor-playtest.js'])if(!desktopIndex.includes(asset))throw new Error(`desktop index does not load ${asset}`);
+for(const asset of ['./src/desktop-release.js','./src/desktop-updater.js','./src/editor-playtest.js','./src/power.js'])if(!desktopIndex.includes(asset))throw new Error(`desktop index does not load ${asset}`);
 console.log(`Desktop distribution audit passed: ${all.length} files, ${all.reduce((n,p)=>n+fs.statSync(p).size,0)} bytes.`);
