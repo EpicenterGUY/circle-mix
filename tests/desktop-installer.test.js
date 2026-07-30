@@ -20,7 +20,7 @@ assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop bu
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
 assert.equal(pkg.version,tauri.version,'npm and desktop versions must match for updater releases');
-assert.equal(tauri.version,'0.9.50','Windows installer must publish the runtime-star ordering and editor safety release');
+assert.equal(tauri.version,'0.9.51','Windows installer must publish the accuracy POWER forecast release');
 assert.match(prepare,/replace\(\/\\r\\n\/g,'\\n'\)/,'desktop transforms must normalize Windows CRLF line endings');
 assert.match(prepare,/desktop-visual-pass\.js/,'desktop build must retain the dedicated visual pass');
 assert.match(prepare,/desktop-updater\.js/,'desktop build must inject the updater UI');
@@ -31,8 +31,8 @@ assert.match(prepare,/safeUpdateLogBtn/,'desktop update-log retry must reuse the
 assert.match(settingsPass,/TRACKPAD_DESKTOP_RELEASE_PATCH/,'final desktop pass must stamp release metadata');
 assert.match(settingsPass,/package\.json/,'desktop release version must derive from package metadata');
 assert.match(settingsPass,/WINDOWS/,'desktop changelog must announce the Windows release');
-assert.match(settingsPass,/자동 계산 별 기준/,'desktop changelog must describe runtime-star ordering');
-assert.match(settingsPass,/다른 난이도와 채보를 그대로 보존/,'desktop changelog must describe sibling difficulty preservation');
+assert.match(settingsPass,/90%·95%·97%·99%·100%/,'desktop changelog must list accuracy POWER targets');
+assert.match(settingsPass,/FC·MISS 0 기준/,'desktop changelog must state the forecast assumptions');
 assert.match(settingsPass,/editor-playtest\.js/,'desktop final pass must retain the editor playtest runtime');
 for(const asset of ['pc-settings.css','src/pc-settings.js','src/ui.js','trackpad-tablet-area.css','src/trackpad-tablet-area.js','mobile-layout-v2.css','src/mobile-layout-v2.js','song-select-fixes.css','src/editor-playtest.js'])assert.ok(settingsPass.includes(asset),`desktop settings pass includes ${asset}`);
 assert.match(visualPass,/readPaletteColor\(game,'pulse'\)/,'desktop visual pass must retain the shared PULSE color');
