@@ -1,0 +1,60 @@
+name: Prepare all-platform 0.9.51 v2
+
+on:
+  push:
+    branches:
+      - release/all-platform-0.9.51
+    paths:
+      - .github/workflows/prepare-all-platform-0.9.51-v2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/all-platform-0.9.51
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply corrected 0.9.51 release metadata
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import textwrap
+          workflow=Path('.github/workflows/prepare-all-platform-0.9.51.yml').read_text(encoding='utf-8')
+          start=workflow.index("          python3 <<'PY'\n")+len("          python3 <<'PY'\n")
+          end=workflow.index("\n          PY\n",start)
+          script=textwrap.dedent(workflow[start:end])
+          cargo_block='''cargo_lock=read('src-tauri/Cargo.lock')
+          pattern=r'(name = "circle-mix"\\nversion = ")0\\.9\\.50(")'
+          cargo_lock,count=re.subn(pattern,rf'\\g<1>{VERSION}\\g<2>',cargo_lock,count=1)
+          if count!=1: raise SystemExit('Cargo.lock circle-mix version marker missing')
+          write('src-tauri/Cargo.lock',cargo_lock)
+
+          '''
+          if cargo_block not in script: raise SystemExit('Cargo.lock preparation block not found')
+          script=script.replace(cargo_block,'',1)
+          exec(compile(script,'prepare-all-platform-0.9.51.py','exec'),{'__name__':'__main__'})
+          PY
+      - run: npm ci
+      - name: Run repository and distribution tests
+        run: |
+          npm test
+          npm run desktop:prepare
+          npm run desktop:audit
+          npm run android:prepare
+          node scripts/audit-android-dist.js
+      - name: Commit release metadata
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "release: prepare Android and Windows 0.9.51 POWER forecast"
+          git push origin HEAD:release/all-platform-0.9.51
