@@ -38,18 +38,14 @@ jobs:
           if old_audit not in script: raise SystemExit('unable to patch desktop audit marker')
           script=script.replace(old_audit,new_audit,1)
 
-          old_smoke='\n'.join([
-            "assert.ok(fs.existsSync(path.join(root,'src/power.js')),'shared POWER model missing');",
-            "assert.match(html,/src\\/power\\.js/,'index must load the shared POWER model');",
-            "assert.match(game,/powerPreviewHtml/,'song select must render the accuracy POWER forecast');"
-          ])
-          new_smoke='\n'.join([
-            "assert.ok(fs.existsSync('src/power.js'),'shared POWER model missing');",
-            "assert.match(fs.readFileSync('index.html','utf8'),/src\\/power\\.js/,'index must load the shared POWER model');",
-            "assert.match(fs.readFileSync('src/game.js','utf8'),/powerPreviewHtml/,'song select must render the accuracy POWER forecast');"
-          ])
-          if old_smoke not in script: raise SystemExit('unable to patch smoke source reads')
-          script=script.replace(old_smoke,new_smoke,1)
+          replacements={
+            "fs.existsSync(path.join(root,'src/power.js'))":"fs.existsSync('src/power.js')",
+            "assert.match(html,/src\\\\/power\\\\.js/":"assert.match(fs.readFileSync('index.html','utf8'),/src\\\\/power\\\\.js/",
+            "assert.match(game,/powerPreviewHtml/":"assert.match(fs.readFileSync('src/game.js','utf8'),/powerPreviewHtml/"
+          }
+          for old,new in replacements.items():
+            if old not in script: raise SystemExit(f'unable to patch smoke assertion: {old}')
+            script=script.replace(old,new,1)
           exec(compile(script,'implement-power-preview.py','exec'),{'__name__':'__main__'})
           PY
       - run: npm ci
