@@ -43,7 +43,7 @@ jobs:
             "assert.match(html,":"assert.match(fs.readFileSync('index.html','utf8'),",
             "assert.match(game,":"assert.match(fs.readFileSync('src/game.js','utf8'),",
             "localStorage.setItem(\"circleMixLastSeenVersion\",\"0.9.50\");":"localStorage.setItem(\"circleMixLastSeenVersion\",\"0.9.50\");localStorage.setItem(\"circleMixTutorialCompleted\",\"true\");localStorage.setItem(\"circleMixTutorialPromptAnswered\",\"true\");",
-            "await page.waitForFunction(()=>window.CircleMixPower&&document.querySelector(\".songPowerPreview .songPowerCell\"),{timeout:10000});":"await page.waitForFunction(()=>window.CircleMixPower&&document.getElementById(\"safeStart\"),{timeout:10000});await page.click(\"#safeStart\");await page.waitForFunction(()=>window.CircleMixPower&&document.querySelector(\".songPowerPreview .songPowerCell\"),{timeout:10000});"
+            "await page.waitForFunction(()=>window.CircleMixPower&&document.querySelector(\".songPowerPreview .songPowerCell\"),{timeout:10000});":"await page.waitForFunction(()=>window.CircleMixPower&&document.getElementById(\"safeStart\"),{timeout:10000});await page.evaluate(()=>{const update=document.getElementById(\"updateLogOverlay\");if(update){update.classList.remove(\"show\");update.hidden=true;}document.body.classList.remove(\"updateLogOpen\");document.getElementById(\"safeStart\")?.click();});await page.waitForFunction(()=>window.CircleMixPower&&document.querySelector(\".songPowerPreview .songPowerCell\"),{timeout:10000});"
           }
           for old,new in replacements.items():
             if old not in script: raise SystemExit(f'unable to patch generated source: {old}')
