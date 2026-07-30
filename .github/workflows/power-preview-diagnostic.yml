@@ -16,28 +16,27 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TARGET_SHA: 310c5d8912c0453fb219644e78650939a60ec9d1
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feature/power-preview
-      - name: Capture newest completed implementation run
+      - name: Capture exact implementation run
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .github/diagnostics
-          for attempt in $(seq 1 90); do
-            runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/implement-power-preview-v4.yml/runs?branch=feature%2Fpower-preview&per_page=5")
-            run_id=$(echo "$runs" | jq -r '.workflow_runs[0].id // empty')
-            status=$(echo "$runs" | jq -r '.workflow_runs[0].status // empty')
-            if [ -n "$run_id" ] && [ "$status" = "completed" ]; then break; fi
-            sleep 10
-          done
-          echo "$runs" | jq '{total_count,workflow_runs:[.workflow_runs[]|{id,status,conclusion,head_sha,event,html_url,created_at,updated_at}]}' > .github/diagnostics/power-preview-v4-runs.json
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/implement-power-preview-v4.yml/runs?branch=feature%2Fpower-preview&per_page=30")
+          run=$(echo "$runs" | jq -c --arg sha "$TARGET_SHA" '[.workflow_runs[] | select(.head_sha==$sha)] | first // {}')
+          run_id=$(echo "$run" | jq -r '.id // empty')
+          echo "$run" | jq . > .github/diagnostics/power-preview-exact-run.json
           if [ -n "$run_id" ]; then
-            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" | jq '{jobs:[.jobs[]|{id,name,status,conclusion,steps}]}' > .github/diagnostics/power-preview-v4-jobs.json
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?per_page=100" > .github/diagnostics/power-preview-exact-jobs.json
+          else
+            echo '{"error":"target run not found"}' > .github/diagnostics/power-preview-exact-jobs.json
           fi
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add .github/diagnostics
-          git commit -m "chore: capture newest power preview implementation run"
+          git add .github/diagnostics/power-preview-exact-*.json
+          git commit -m "chore: capture exact POWER preview implementation status"
           git push origin HEAD:feature/power-preview
