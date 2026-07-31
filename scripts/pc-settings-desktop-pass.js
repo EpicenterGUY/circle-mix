@@ -39,12 +39,12 @@ let desktopRelease=fs.readFileSync(releasePath,'utf8');
 desktopRelease=desktopRelease
   .replace(/version:"[^"]+"/,`version:"${desktopVersion}"`)
   .replace(/title:"[^"]+"/,`title:"WINDOWS ${desktopVersion}"`)
-  .replace(/summary:"[^"]+"/,'summary:"LOCAL 난이도를 실제 표시 별 기준으로 정렬하고 에디터 플레이테스트 저장 안전성을 반영한 Windows 업데이트입니다."')
+  .replace(/summary:"[^"]+"/,'summary:"채보 난이도별 정확도 POWER 예상표를 추가한 Windows 업데이트입니다."')
   .replace(/changes:\[[\s\S]*?\]\};/,`changes:[
-    {category:"LOCAL ORDER",text:"LOCAL 난이도를 화면에 표시되는 자동 계산 별 기준으로 쉬운 순서부터 어려운 순서로 정렬합니다."},
-    {category:"EDITOR",text:"한 난이도를 저장하거나 플레이테스트해도 같은 곡의 다른 난이도와 채보를 그대로 보존합니다."},
-    {category:"PLAYTEST",text:"에디터에서 현재 채보를 공식 게임 판정으로 바로 열고 테스트 전용 설정을 사용할 수 있습니다."},
-    {category:"COMPATIBILITY",text:"판정, 점수, 기록, 기존 LOCAL .cmix와 Windows 설정은 그대로 유지됩니다."}
+    {category:"POWER FORECAST",text:"선택한 채보의 90%·95%·97%·99%·100% 정확도 예상 POWER를 곡 선택 화면에 표시합니다."},
+    {category:"CONDITION",text:"예상치는 FC·MISS 0 기준이며 실제 결과 POWER와 같은 공용 산식을 사용합니다."},
+    {category:"DIFFICULTY",text:"난이도를 바꾸면 자동 계산 별 난이도에 맞춰 예상 POWER가 즉시 갱신됩니다."},
+    {category:"COMPATIBILITY",text:"판정, 기록, 기존 LOCAL .cmix와 Windows 설정은 그대로 유지됩니다."}
   ]};`);
 if(!desktopRelease.includes(`version:"${desktopVersion}"`)||!desktopRelease.includes(`WINDOWS ${desktopVersion}`))throw new Error('unable to stamp desktop release metadata');
 fs.writeFileSync(releasePath,desktopRelease);
@@ -52,4 +52,4 @@ fs.writeFileSync(releasePath,desktopRelease);
 const editorPlaytest=fs.readFileSync(path.join(out,'src/editor-playtest.js'),'utf8');
 if(!editorPlaytest.includes('mergeLocalDifficulty'))throw new Error('desktop editor playtest lost sibling difficulty preservation');
 for(const [,targetRelative] of required)if(!fs.existsSync(path.join(out,targetRelative)))throw new Error(`settings desktop copy failed: ${targetRelative}`);
-console.log(`Applied unified settings, LOCAL difficulty and editor playtest desktop pass v${desktopVersion}.`);
+console.log(`Applied unified settings and accuracy POWER forecast desktop pass v${desktopVersion}.`);

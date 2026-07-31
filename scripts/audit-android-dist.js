@@ -21,7 +21,7 @@ for(const needle of ['androidBackCallback','foldExpanded','circlemix:viewportcha
 const mobileInput=fs.readFileSync(path.join(out,'src/mobile-layout-v2.js'),'utf8');
 for(const needle of ['mobile-input-v3','BALANCED','PRECISION','SPEED','stopImmediatePropagation','mobileAimRecontactGuard','mobileGestureGuard'])if(!mobileInput.includes(needle))throw new Error(`Android mobile input layer is missing ${needle}`);
 const release=fs.readFileSync(path.join(out,'src/android-release.js'),'utf8');
-for(const needle of ['version:"0.9.50"','ANDROID 0.9.50','자동 계산 별 기준','다른 난이도와 채보를 그대로 보존'])if(!release.includes(needle))throw new Error(`Android release metadata is missing ${needle}`);
+for(const needle of ['version:"0.9.51"','ANDROID 0.9.51','90%·95%·97%·99%·100%','FC·MISS 0 기준'])if(!release.includes(needle))throw new Error(`Android release metadata is missing ${needle}`);
 const songSelectCss=fs.readFileSync(path.join(out,'song-select-fixes.css'),'utf8');
 for(const needle of ['align-content:flex-start','overflow-y:auto','scrollbar-gutter:stable'])if(!songSelectCss.includes(needle))throw new Error(`Android song-select fix is missing ${needle}`);
 const songRecord=fs.readFileSync(path.join(out,'src/song-record.js'),'utf8');
