@@ -39,12 +39,12 @@ let desktopRelease=fs.readFileSync(releasePath,'utf8');
 desktopRelease=desktopRelease
   .replace(/version:"[^"]+"/,`version:"${desktopVersion}"`)
   .replace(/title:"[^"]+"/,`title:"WINDOWS ${desktopVersion}"`)
-  .replace(/summary:"[^"]+"/,'summary:"채보 난이도별 정확도 POWER 예상표를 추가한 Windows 업데이트입니다."')
+  .replace(/summary:"[^"]+"/,'summary:"난이도가 많은 맵의 목록 표시와 .cmix 더블클릭 열기를 개선한 Windows 업데이트입니다."')
   .replace(/changes:\[[\s\S]*?\]\};/,`changes:[
-    {category:"POWER FORECAST",text:"선택한 채보의 90%·95%·97%·99%·100% 정확도 예상 POWER를 곡 선택 화면에 표시합니다."},
-    {category:"CONDITION",text:"예상치는 FC·MISS 0 기준이며 실제 결과 POWER와 같은 공용 산식을 사용합니다."},
-    {category:"DIFFICULTY",text:"난이도를 바꾸면 자동 계산 별 난이도에 맞춰 예상 POWER가 즉시 갱신됩니다."},
-    {category:"COMPATIBILITY",text:"판정, 기록, 기존 LOCAL .cmix와 Windows 설정은 그대로 유지됩니다."}
+    {category:"DIFFICULTY LIST",text:"난이도 버튼이 많아도 가로 스크롤로 마지막 난이도까지 선택할 수 있습니다."},
+    {category:"MOUSE",text:"PC에서는 난이도 목록 위에서 마우스 휠을 굴려 좌우로 이동할 수 있습니다."},
+    {category:"CMIX OPEN",text:"Windows 탐색기에서 .cmix 맵을 더블클릭하면 CIRCLE MIX 가져오기 창이 바로 열립니다."},
+    {category:"RUNNING APP",text:"게임이 이미 실행 중이어도 다른 .cmix 파일을 더블클릭하면 기존 창에서 가져옵니다."}
   ]};`);
 if(!desktopRelease.includes(`version:"${desktopVersion}"`)||!desktopRelease.includes(`WINDOWS ${desktopVersion}`))throw new Error('unable to stamp desktop release metadata');
 fs.writeFileSync(releasePath,desktopRelease);
@@ -52,4 +52,4 @@ fs.writeFileSync(releasePath,desktopRelease);
 const editorPlaytest=fs.readFileSync(path.join(out,'src/editor-playtest.js'),'utf8');
 if(!editorPlaytest.includes('mergeLocalDifficulty'))throw new Error('desktop editor playtest lost sibling difficulty preservation');
 for(const [,targetRelative] of required)if(!fs.existsSync(path.join(out,targetRelative)))throw new Error(`settings desktop copy failed: ${targetRelative}`);
-console.log(`Applied unified settings and accuracy POWER forecast desktop pass v${desktopVersion}.`);
+console.log(`Applied unified settings and map-open desktop pass v${desktopVersion}.`);
