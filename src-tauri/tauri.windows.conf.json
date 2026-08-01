@@ -1,0 +1,14 @@
+{
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": [
+          "cmix"
+        ],
+        "name": "CIRCLE MIX Map Package",
+        "description": "CIRCLE MIX map package",
+        "mimeType": "application/vnd.circle-mix.cmix"
+      }
+    ]
+  }
+}

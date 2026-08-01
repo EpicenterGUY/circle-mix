@@ -114,6 +114,25 @@ function installAutoToggleFallback(doc=document){
   return true;
 }
 
+function installDifficultyScroller(doc=document){
+  if(!doc?.addEventListener || doc.__circleMixDifficultyScrollerInstalled)return false;
+  doc.__circleMixDifficultyScrollerInstalled=true;
+  doc.addEventListener('wheel',event=>{
+    const row=event.target?.closest?.('.songDifficulty');
+    if(!row || row.scrollWidth<=row.clientWidth || Math.abs(event.deltaX)>=Math.abs(event.deltaY))return;
+    const before=row.scrollLeft;
+    row.scrollLeft+=event.deltaY;
+    if(row.scrollLeft!==before)event.preventDefault();
+  },{capture:true,passive:false});
+  const reveal=event=>{
+    const button=event.target?.closest?.('.songDiffBtn');
+    button?.scrollIntoView?.({block:'nearest',inline:'nearest'});
+  };
+  doc.addEventListener('click',reveal,true);
+  doc.addEventListener('focusin',reveal,true);
+  return true;
+}
+
 function installMobileSongSelectLayout(doc=document){
   if(!doc?.createElement || doc.getElementById?.(MOBILE_SONG_SELECT_STYLE_ID))return false;
   const target=doc.head||doc.documentElement;
@@ -121,6 +140,23 @@ function installMobileSongSelectLayout(doc=document){
   const style=doc.createElement('style');
   style.id=MOBILE_SONG_SELECT_STYLE_ID;
   style.textContent=`
+body.safeSongSelect .songSelectFooter{min-width:0;overflow:hidden;}
+body.safeSongSelect .songDifficulty{
+  min-width:0;
+  max-width:100%;
+  justify-content:flex-start;
+  flex-wrap:nowrap;
+  overflow-x:auto;
+  overflow-y:hidden;
+  overscroll-behavior-x:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+  scrollbar-gutter:stable;
+  scroll-snap-type:x proximity;
+  touch-action:pan-x;
+  padding-bottom:4px;
+}
+body.safeSongSelect .songDiffBtn{flex:0 0 auto;white-space:nowrap;scroll-snap-align:start;}
 @media (pointer:coarse), (max-width:932px){
   body.safeSongSelect{overflow:hidden!important;}
   body.safeSongSelect .songSelect{
@@ -202,8 +238,8 @@ function installMobileSongSelectLayout(doc=document){
   body.safeSongSelect .songMeta em{font-size:9px;}
   body.safeSongSelect .songMeta strong{margin:3px 0 2px;font-size:20px;line-height:1;}
   body.safeSongSelect .songSelectFooter{grid-template-columns:minmax(0,1fr) auto!important;gap:8px;}
-  body.safeSongSelect .songDifficulty{min-width:0;justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;overscroll-behavior-x:contain;}
-  body.safeSongSelect .songDiffBtn{min-height:38px;padding:7px 9px;font-size:10px;white-space:nowrap;}
+  body.safeSongSelect .songDifficulty{padding-bottom:2px;}
+  body.safeSongSelect .songDiffBtn{min-height:38px;padding:7px 9px;font-size:10px;}
   body.safeSongSelect .songDiffBtn small{display:none;}
   body.safeSongSelect .songAutoBtn{min-width:112px;}
   body.safeSongSelect .songPlayBtn{width:auto!important;min-width:88px;min-height:40px;padding:8px 16px;font-size:12px;}
@@ -247,9 +283,57 @@ function inspect(file){ const token=++generation;clear();generation=token; abort
 function fileDragCandidate(dt){ return [...(dt?.types||[])].includes('Files') || [...(dt?.items||[])].some(item=>item?.kind==='file') || (dt?.files?.length||0)>0; }
 function cmixFiles(dt){return [...(dt?.files||[])].filter(f=>/\.cmix$/i.test(f.name)||f.type==='application/vnd.circle-mix.cmix');}
 
+function tauriInvoke(){
+  const invoke=window.__TAURI__?.core?.invoke;
+  return typeof invoke==='function'?invoke:null;
+}
+function desktopCmixFileName(filePath){return String(filePath||'').split(/[\\/]/).pop()||'import.cmix';}
+function desktopCmixBlobPart(payload){
+  if(payload instanceof ArrayBuffer || ArrayBuffer.isView(payload))return payload;
+  if(Array.isArray(payload))return new Uint8Array(payload);
+  throw new Error('Desktop .cmix bridge returned an invalid file payload.');
+}
+function dismissStartupOverlay(){
+  const overlay=$('updateLogOverlay');
+  if(overlay){overlay.classList.remove('show');overlay.hidden=true;}
+  document.body.classList.remove('updateLogOpen');
+}
+async function importDesktopCmixPath(filePath){
+  const invoke=tauriInvoke();
+  if(!invoke || !filePath)return false;
+  const payload=await invoke('read_desktop_cmix_file',{path:String(filePath)});
+  dismissStartupOverlay();
+  inspect(new File([desktopCmixBlobPart(payload)],desktopCmixFileName(filePath),{type:'application/vnd.circle-mix.cmix'}));
+  return true;
+}
+async function drainDesktopCmixQueue(){
+  const invoke=tauriInvoke();
+  if(!invoke)return false;
+  const paths=await invoke('take_desktop_cmix_paths');
+  if(!Array.isArray(paths) || paths.length===0)return false;
+  await importDesktopCmixPath(paths[0]);
+  return true;
+}
+async function installDesktopCmixOpen(doc=document){
+  const invoke=tauriInvoke();
+  if(!doc || doc.__circleMixDesktopCmixOpenInstalled || !invoke)return false;
+  doc.__circleMixDesktopCmixOpenInstalled=true;
+  const listen=window.__TAURI__?.event?.listen;
+  if(typeof listen==='function'){
+    try{
+      await listen('circlemix-open-cmix',()=>{void drainDesktopCmixQueue().catch(error=>console.warn('Desktop .cmix open failed',error));});
+    }catch(error){console.warn('Desktop .cmix listener failed',error);}
+  }
+  try{await drainDesktopCmixQueue();}
+  catch(error){console.warn('Desktop .cmix launch import failed',error);}
+  return true;
+}
+
 document.addEventListener('DOMContentLoaded',()=>{
   installMobileSongSelectLayout(document);
   installAutoToggleFallback(document);
+  installDifficultyScroller(document);
+  void installDesktopCmixOpen(document);
   loadPlayerProfile(document);
   const input=$('cmixImportInput'), b=$('cmixImportBtn');
   b.onclick=open;
@@ -260,5 +344,5 @@ document.addEventListener('DOMContentLoaded',()=>{
   window.addEventListener('beforeunload',clear);
 });
 
-window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,installMobileSongSelectLayout,autoButtonState,syncAutoButton,dispatchAutoShortcut,loadPlayerProfile,loadPlayerProfileUi};
+window.CircleMixCmixImportUi={canImport:safeScene,isFileDrag:fileDragCandidate,filterDragFiles:cmixFiles,installAutoToggleFallback,installDifficultyScroller,installMobileSongSelectLayout,installDesktopCmixOpen,importDesktopCmixPath,drainDesktopCmixQueue,autoButtonState,syncAutoButton,dispatchAutoShortcut,loadPlayerProfile,loadPlayerProfileUi};
 })();

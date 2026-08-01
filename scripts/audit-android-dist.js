@@ -21,9 +21,11 @@ for(const needle of ['androidBackCallback','foldExpanded','circlemix:viewportcha
 const mobileInput=fs.readFileSync(path.join(out,'src/mobile-layout-v2.js'),'utf8');
 for(const needle of ['mobile-input-v3','BALANCED','PRECISION','SPEED','stopImmediatePropagation','mobileAimRecontactGuard','mobileGestureGuard'])if(!mobileInput.includes(needle))throw new Error(`Android mobile input layer is missing ${needle}`);
 const release=fs.readFileSync(path.join(out,'src/android-release.js'),'utf8');
-for(const needle of ['version:"0.9.51"','ANDROID 0.9.51','90%·95%·97%·99%·100%','FC·MISS 0 기준'])if(!release.includes(needle))throw new Error(`Android release metadata is missing ${needle}`);
+for(const needle of ['version:"0.9.52"','ANDROID 0.9.52','DIFFICULTY LIST','손가락으로 좌우 스와이프'])if(!release.includes(needle))throw new Error(`Android release metadata is missing ${needle}`);
 const songSelectCss=fs.readFileSync(path.join(out,'song-select-fixes.css'),'utf8');
-for(const needle of ['align-content:flex-start','overflow-y:auto','scrollbar-gutter:stable'])if(!songSelectCss.includes(needle))throw new Error(`Android song-select fix is missing ${needle}`);
+for(const needle of ['align-content:flex-start','overflow-y:auto','overflow-x:auto','flex-wrap:nowrap','touch-action:pan-x','scrollbar-gutter:stable'])if(!songSelectCss.includes(needle))throw new Error(`Android song-select fix is missing ${needle}`);
+const cmixImportUi=fs.readFileSync(path.join(out,'src/cmix-import-ui.js'),'utf8');
+for(const needle of ['installDifficultyScroller','scrollIntoView','event.deltaY'])if(!cmixImportUi.includes(needle))throw new Error(`Android difficulty scroller is missing ${needle}`);
 const songRecord=fs.readFileSync(path.join(out,'src/song-record.js'),'utf8');
 for(const needle of ['sortLocalDifficultyOrder','numericDifficulty','sortDifficultyEntriesByStars'])if(!songRecord.includes(needle))throw new Error(`Android LOCAL difficulty sort is missing ${needle}`);
 const editorPlaytest=fs.readFileSync(path.join(out,'src/editor-playtest.js'),'utf8');
