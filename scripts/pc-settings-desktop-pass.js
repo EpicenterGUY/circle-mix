@@ -44,7 +44,8 @@ desktopRelease=desktopRelease
     {category:"DIFFICULTY LIST",text:"난이도 버튼이 많아도 가로 스크롤로 마지막 난이도까지 선택할 수 있습니다."},
     {category:"MOUSE",text:"PC에서는 난이도 목록 위에서 마우스 휠을 굴려 좌우로 이동할 수 있습니다."},
     {category:"CMIX OPEN",text:"Windows 탐색기에서 .cmix 맵을 더블클릭하면 CIRCLE MIX 가져오기 창이 바로 열립니다."},
-    {category:"RUNNING APP",text:"게임이 이미 실행 중이어도 다른 .cmix 파일을 더블클릭하면 기존 창에서 가져옵니다."}
+    {category:"RUNNING APP",text:"게임이 이미 실행 중이어도 다른 .cmix 파일을 더블클릭하면 기존 창에서 가져옵니다."},
+    {category:"POWER",text:"기존 90%·95%·97%·99%·100% 정확도 POWER 예측과 FC·MISS 0 기준 표시는 그대로 유지됩니다."}
   ]};`);
 if(!desktopRelease.includes(`version:"${desktopVersion}"`)||!desktopRelease.includes(`WINDOWS ${desktopVersion}`))throw new Error('unable to stamp desktop release metadata');
 fs.writeFileSync(releasePath,desktopRelease);
