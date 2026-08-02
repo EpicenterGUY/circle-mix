@@ -6,6 +6,12 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.34", date: "2026-08-02", title: "CONTENT LIMITS REMOVED", summary: "난이도와 맵·채보·노트 개수에 걸려 있던 고정 상한을 제거했습니다.", changes: [
+    { category: "DIFFICULTY", text: "표시 난이도 20 상한을 제거해 20보다 높은 레벨도 가져오고 내보낼 수 있습니다." },
+    { category: "MAPS", text: "LOCAL SONGS와 .cmix 패키지의 곡·채보·파일 개수에 고정된 상한을 두지 않습니다." },
+    { category: "NOTES", text: "채보당 100,000노트 고정 상한과 에디터 전체 난이도 내보내기의 레벨 20 클램프를 제거했습니다." },
+    { category: "SAFETY", text: "파일 용량, 전체 압축 해제 용량, 압축률, 경로와 금지 확장자 검사는 그대로 유지됩니다." }
+  ] },
   { version: "0.9.33", date: "2026-07-28", title: "ALL-PLATFORM UPDATE", summary: "모바일·PC·PWA에 최신 본편 개선과 통합 설정, Android 업데이트와 PULSE 동시치기 가독성을 배포했습니다.", changes: [
     { category: "PLATFORM", text: "Windows와 Android 설치판을 0.9.46, 웹/PWA를 0.9.33으로 갱신" },
     { category: "MOBILE", text: "폴더블 자동 가로화면, 통합 설정 허브, ACTION·PULSE 배치와 Android 앱 내 업데이트 포함" },
