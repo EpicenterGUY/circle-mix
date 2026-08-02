@@ -21,7 +21,14 @@ for(const needle of ['androidBackCallback','foldExpanded','circlemix:viewportcha
 const mobileInput=fs.readFileSync(path.join(out,'src/mobile-layout-v2.js'),'utf8');
 for(const needle of ['mobile-input-v3','BALANCED','PRECISION','SPEED','stopImmediatePropagation','mobileAimRecontactGuard','mobileGestureGuard'])if(!mobileInput.includes(needle))throw new Error(`Android mobile input layer is missing ${needle}`);
 const release=fs.readFileSync(path.join(out,'src/android-release.js'),'utf8');
-for(const needle of ['version:"0.9.52"','ANDROID 0.9.52','DIFFICULTY LIST','손가락으로 좌우 스와이프'])if(!release.includes(needle))throw new Error(`Android release metadata is missing ${needle}`);
+for(const needle of ['version:"0.9.53"','ANDROID 0.9.53','CONTENT LIMITS','100,000개를 넘는 노트','압축률'])if(!release.includes(needle))throw new Error(`Android release metadata is missing ${needle}`);
+const validator=fs.readFileSync(path.join(out,'src/cmix-validator.js'),'utf8');
+for(const removed of ['maxFiles:','maxCharts:','maxNotesPerChart:'])if(validator.includes(removed))throw new Error(`Android validator still contains ${removed}`);
+for(const needle of ['charts must contain at least 1 entry','notes must contain at least 1 entry','Package must contain at least 1 file','Chart level must be a finite number >= 1'])if(!validator.includes(needle))throw new Error(`Android unlimited-content validator is missing ${needle}`);
+const editorHtml=fs.readFileSync(path.join(out,'editor.html'),'utf8');
+if(/id="cmixLevel"[^>]*max="20"/.test(editorHtml))throw new Error('Android editor still caps level at 20');
+const editor=fs.readFileSync(path.join(out,'src/editor.js'),'utf8');
+if(editor.includes('Math.min(20'))throw new Error('Android editor still clamps exported levels to 20');
 const songSelectCss=fs.readFileSync(path.join(out,'song-select-fixes.css'),'utf8');
 for(const needle of ['align-content:flex-start','overflow-y:auto','overflow-x:auto','flex-wrap:nowrap','touch-action:pan-x','scrollbar-gutter:stable'])if(!songSelectCss.includes(needle))throw new Error(`Android song-select fix is missing ${needle}`);
 const cmixImportUi=fs.readFileSync(path.join(out,'src/cmix-import-ui.js'),'utf8');
