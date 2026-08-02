@@ -38,6 +38,7 @@ const releasePath=path.join(out,'src/desktop-release.js');
 let desktopRelease=fs.readFileSync(releasePath,'utf8');
 desktopRelease=desktopRelease
   .replace(/version:"[^"]+"/,`version:"${desktopVersion}"`)
+  .replace(/date:"[^"]+"/,'date:"2026-08-02"')
   .replace(/title:"[^"]+"/,`title:"WINDOWS ${desktopVersion}"`)
   .replace(/summary:"[^"]+"/,'summary:"난이도와 맵·채보·노트 개수의 고정 상한을 제거한 Windows 업데이트입니다."')
   .replace(/changes:\[[\s\S]*?\]\};/,`changes:[
