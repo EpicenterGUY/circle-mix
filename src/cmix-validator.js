@@ -24,9 +24,6 @@
   const CORE_CHART_FIELDS = new Set(["format", "formatVersion", "id", "bpm", "offset", "notes", "extensions"]);
   const NOTE_FIELDS = new Set(["id", "type", "beat", "angle", "endAngle", "durationBeat", "signedSweepAngle", "direction"]);
   const LIMITS = Object.freeze({
-    maxFiles: 64,
-    maxCharts: 32,
-    maxNotesPerChart: 100000,
     maxManifestBytes: 256 * 1024,
     maxChartBytes: 8 * 1024 * 1024,
     maxAudioBytes: 256 * 1024 * 1024,
@@ -115,8 +112,8 @@
       if(!pathResult.ok) errors.push(issue(pathResult.code, `/${field}`, pathResult.message));
       if(!extensions.has(extensionOf(value))) errors.push(issue(`UNSUPPORTED_${field.toUpperCase()}_TYPE`, `/${field}`, `${field} uses an unsupported file extension.`));
     }
-    if(!Array.isArray(manifest.charts) || manifest.charts.length < 1 || manifest.charts.length > LIMITS.maxCharts){
-      errors.push(issue("INVALID_CHART_LIST", "/charts", `charts must contain 1 to ${LIMITS.maxCharts} entries.`));
+    if(!Array.isArray(manifest.charts) || manifest.charts.length < 1){
+      errors.push(issue("INVALID_CHART_LIST", "/charts", "charts must contain at least 1 entry."));
     }else{
       const ids = new Set(), files = new Set();
       manifest.charts.forEach((chart, index) => {
@@ -127,7 +124,7 @@
         if(ids.has(chart.id)) errors.push(issue("DUPLICATE_CHART_ID", `${path}/id`, `Duplicate chart id: ${chart.id}`));
         ids.add(chart.id);
         if(!validText(chart.name, 1, 64)) errors.push(issue("INVALID_CHART_NAME", `${path}/name`, "Chart name must be 1 to 64 characters."));
-        if(!isFiniteNumber(chart.level) || chart.level < 1 || chart.level > 20) errors.push(issue("INVALID_CHART_LEVEL", `${path}/level`, "Chart level must be a finite number from 1 to 20."));
+        if(!isFiniteNumber(chart.level) || chart.level < 1) errors.push(issue("INVALID_CHART_LEVEL", `${path}/level`, "Chart level must be a finite number >= 1."));
         if(chart.style !== undefined && (typeof chart.style !== "string" || !STYLE_PATTERN.test(chart.style))) errors.push(issue("INVALID_CHART_STYLE", `${path}/style`, "style must be an uppercase identifier up to 24 characters."));
         if(chart.author !== undefined && !validText(chart.author, 1, 100)) errors.push(issue("INVALID_CHART_AUTHOR", `${path}/author`, "author must be 1 to 100 characters."));
         const expectedFile = validId(chart.id, 64) ? `charts/${chart.id}.json` : null;
@@ -159,8 +156,8 @@
     if(settings.descriptor && chart.id !== settings.descriptor.id) errors.push(issue("CHART_ID_MISMATCH", `${basePath}/id`, `Chart id must match descriptor id ${settings.descriptor.id}.`));
     if(chart.bpm !== undefined && (!isFiniteNumber(chart.bpm) || chart.bpm < 20 || chart.bpm > 1000)) errors.push(issue("INVALID_CHART_BPM", `${basePath}/bpm`, "Chart bpm must be from 20 to 1000."));
     if(chart.offset !== undefined && (!isFiniteNumber(chart.offset) || chart.offset < -60 || chart.offset > 60)) errors.push(issue("INVALID_CHART_OFFSET", `${basePath}/offset`, "Chart offset must be from -60 to 60 seconds."));
-    if(!Array.isArray(chart.notes) || chart.notes.length < 1 || chart.notes.length > LIMITS.maxNotesPerChart){
-      errors.push(issue("INVALID_NOTES", `${basePath}/notes`, `notes must contain 1 to ${LIMITS.maxNotesPerChart} entries.`));
+    if(!Array.isArray(chart.notes) || chart.notes.length < 1){
+      errors.push(issue("INVALID_NOTES", `${basePath}/notes`, "notes must contain at least 1 entry."));
       return {ok:errors.length === 0, errors, warnings};
     }
     const noteIds = new Set();
@@ -224,7 +221,7 @@
     const manifest = isObject(input.manifest) ? input.manifest : null;
     const chartObjects = isObject(input.charts) ? input.charts : {};
     const entries = Array.isArray(input.entries) ? input.entries : [];
-    if(entries.length < 1 || entries.length > LIMITS.maxFiles) errors.push(issue("INVALID_ENTRY_COUNT", "/entries", `Package must contain 1 to ${LIMITS.maxFiles} files.`));
+    if(entries.length < 1) errors.push(issue("INVALID_ENTRY_COUNT", "/entries", "Package must contain at least 1 file."));
     const entryMap = new Map();
     let totalUncompressed = 0;
     entries.forEach((entry, index) => {
