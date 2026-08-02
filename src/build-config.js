@@ -2,11 +2,11 @@
 (function(root){
   const supplied=root.CircleMixBuildConfig || {};
   root.CircleMixBuildConfig=Object.freeze({...supplied,includeBundledSongs:supplied.includeBundledSongs !== false});
-  const sharedRelease={version:"0.9.33",date:"2026-07-28",title:"LIBRARY SCROLL & SORT",summary:"곡이 많은 라이브러리의 스크롤 접근성과 LOCAL 난이도 순서를 수정했습니다.",changes:[
-    {category:"SONG SELECT",text:"PC와 모바일에서 곡이 5개를 넘어도 첫 곡부터 마지막 곡까지 모두 스크롤로 접근할 수 있습니다."},
-    {category:"LOCAL",text:"LOCAL .cmix 난이도를 숫자 레벨 기준 쉬운 순서부터 어려운 순서로 정렬합니다."},
-    {category:"INPUT",text:"Windows 트랙패드 TABLET AREA와 Android Mobile Input V3를 함께 포함합니다."},
-    {category:"DATA",text:"기존 점수, 설정, 채보와 LOCAL .cmix 저장 데이터는 유지됩니다."}
+  const sharedRelease={version:"0.9.34",date:"2026-08-02",title:"CONTENT LIMITS REMOVED",summary:"난이도와 맵·채보·노트 개수에 걸려 있던 고정 상한을 제거했습니다.",changes:[
+    {category:"DIFFICULTY",text:"표시 난이도 20 상한을 제거해 20보다 높은 레벨도 가져오고 내보낼 수 있습니다."},
+    {category:"MAPS",text:"LOCAL SONGS와 .cmix 패키지의 곡·채보·파일 개수에 고정된 256개·32개·64개 제한을 두지 않습니다."},
+    {category:"NOTES",text:"채보당 100,000노트 고정 상한을 제거하고 에디터의 전체 난이도 내보내기 레벨 클램프도 없앴습니다."},
+    {category:"SAFETY",text:"파일 용량, 전체 압축 해제 용량, 압축률, 경로와 금지 확장자 검사는 그대로 유지됩니다."}
   ]};
   if(Array.isArray(root.CircleMixChangelog))root.CircleMixChangelog=[sharedRelease,...root.CircleMixChangelog.filter(entry=>entry?.version!==sharedRelease.version)];
 

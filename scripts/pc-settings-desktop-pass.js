@@ -38,19 +38,25 @@ const releasePath=path.join(out,'src/desktop-release.js');
 let desktopRelease=fs.readFileSync(releasePath,'utf8');
 desktopRelease=desktopRelease
   .replace(/version:"[^"]+"/,`version:"${desktopVersion}"`)
+  .replace(/date:"[^"]+"/,'date:"2026-08-02"')
   .replace(/title:"[^"]+"/,`title:"WINDOWS ${desktopVersion}"`)
-  .replace(/summary:"[^"]+"/,'summary:"난이도가 많은 맵의 목록 표시와 .cmix 더블클릭 열기를 개선한 Windows 업데이트입니다."')
+  .replace(/summary:"[^"]+"/,'summary:"난이도와 맵·채보·노트 개수의 고정 상한을 제거한 Windows 업데이트입니다."')
   .replace(/changes:\[[\s\S]*?\]\};/,`changes:[
+    {category:"DIFFICULTY",text:"표시 난이도 20 상한을 제거해 20보다 높은 레벨도 그대로 가져오고 내보냅니다."},
+    {category:"CONTENT LIMITS",text:"LOCAL SONGS와 .cmix의 곡·채보·파일·노트 개수에 고정된 상한을 두지 않습니다."},
+    {category:"EDITOR",text:"전체 난이도 내보내기에서 자동 계산 레벨을 20으로 줄이던 처리를 제거했습니다."},
+    {category:"SAFETY",text:"개별 파일·전체 압축 해제 용량, 압축률, 경로와 금지 확장자 검사는 그대로 유지됩니다."},
     {category:"DIFFICULTY LIST",text:"난이도 버튼이 많아도 가로 스크롤로 마지막 난이도까지 선택할 수 있습니다."},
-    {category:"MOUSE",text:"PC에서는 난이도 목록 위에서 마우스 휠을 굴려 좌우로 이동할 수 있습니다."},
     {category:"CMIX OPEN",text:"Windows 탐색기에서 .cmix 맵을 더블클릭하면 CIRCLE MIX 가져오기 창이 바로 열립니다."},
-    {category:"RUNNING APP",text:"게임이 이미 실행 중이어도 다른 .cmix 파일을 더블클릭하면 기존 창에서 가져옵니다."},
     {category:"POWER",text:"기존 90%·95%·97%·99%·100% 정확도 POWER 예측과 FC·MISS 0 기준 표시는 그대로 유지됩니다."}
   ]};`);
 if(!desktopRelease.includes(`version:"${desktopVersion}"`)||!desktopRelease.includes(`WINDOWS ${desktopVersion}`))throw new Error('unable to stamp desktop release metadata');
 fs.writeFileSync(releasePath,desktopRelease);
 
+const validator=fs.readFileSync(path.join(out,'src/cmix-validator.js'),'utf8');
+for(const removed of ['maxFiles:','maxCharts:','maxNotesPerChart:'])if(validator.includes(removed))throw new Error(`desktop validator still contains ${removed}`);
+for(const needle of ['charts must contain at least 1 entry','notes must contain at least 1 entry','Package must contain at least 1 file','Chart level must be a finite number >= 1'])if(!validator.includes(needle))throw new Error(`desktop unlimited-content validator is missing ${needle}`);
 const editorPlaytest=fs.readFileSync(path.join(out,'src/editor-playtest.js'),'utf8');
 if(!editorPlaytest.includes('mergeLocalDifficulty'))throw new Error('desktop editor playtest lost sibling difficulty preservation');
 for(const [,targetRelative] of required)if(!fs.existsSync(path.join(out,targetRelative)))throw new Error(`settings desktop copy failed: ${targetRelative}`);
-console.log(`Applied unified settings and map-open desktop pass v${desktopVersion}.`);
+console.log(`Applied unlimited-content settings and map-open desktop pass v${desktopVersion}.`);
