@@ -23,7 +23,7 @@ assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop bu
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
 assert.equal(pkg.version,tauri.version,'npm and desktop versions must match for updater releases');
-assert.equal(tauri.version,'0.9.52','Windows installer must publish the difficulty overflow and map-open release');
+assert.equal(tauri.version,'0.9.53','Windows installer must publish the unlimited-content release');
 assert.deepEqual(windowsTauri.bundle?.fileAssociations?.[0]?.ext,['cmix'],'Windows installer must associate .cmix files');
 assert.equal(windowsTauri.bundle?.fileAssociations?.[0]?.mimeType,'application/vnd.circle-mix.cmix');
 assert.match(cargo,/tauri-plugin-single-instance = "2"/,'desktop must keep one running instance for repeated map opens');
@@ -39,7 +39,11 @@ assert.match(prepare,/safeUpdateLogBtn/,'desktop update-log retry must reuse the
 assert.match(settingsPass,/TRACKPAD_DESKTOP_RELEASE_PATCH/,'final desktop pass must stamp release metadata');
 assert.match(settingsPass,/package\.json/,'desktop release version must derive from package metadata');
 assert.match(settingsPass,/WINDOWS/,'desktop changelog must announce the Windows release');
-assert.match(settingsPass,/DIFFICULTY LIST/,'desktop changelog must announce the reachable difficulty list');
+assert.match(settingsPass,/CONTENT LIMITS/,'desktop changelog must announce removal of fixed content limits');
+assert.match(settingsPass,/DIFFICULTY/,'desktop changelog must announce the higher difficulty range');
+assert.match(settingsPass,/SAFETY/,'desktop changelog must explain retained archive safety checks');
+assert.match(settingsPass,/maxNotesPerChart/,'desktop release pass must reject a stale note-count ceiling');
+assert.match(settingsPass,/DIFFICULTY LIST/,'desktop changelog must retain reachable difficulty-list guidance');
 assert.match(settingsPass,/CMIX OPEN/,'desktop changelog must announce .cmix file opening');
 assert.match(settingsPass,/더블클릭/,'desktop changelog must explain Explorer double-click opening');
 assert.match(settingsPass,/editor-playtest\.js/,'desktop final pass must retain the editor playtest runtime');
