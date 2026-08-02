@@ -63,11 +63,11 @@ Required core fields:
 | `title` | 1–200 characters |
 | `artist` | 1–200 characters |
 | `bpm` | finite number, 20–1000 |
-| `charts` | 1–32 descriptors |
+| `charts` | one or more descriptors; no fixed count ceiling |
 
 Optional fields include `offset`, `jacket`, `preview`, `audioMatch`, and `extensions`. FULL requires `audio`. CHART forbids `audio` and requires `audioMatch`.
 
-Every chart descriptor contains `id`, `name`, `level`, and `file`. The file path is canonical and must equal `charts/<id>.json`. `level` is a display difficulty from 1 to 20. `style`, when present, is an uppercase identifier such as `TECH`.
+Every chart descriptor contains `id`, `name`, `level`, and `file`. The file path is canonical and must equal `charts/<id>.json`. `level` is a finite display difficulty of `1` or greater and has no fixed upper ceiling. `style`, when present, is an uppercase identifier such as `TECH`.
 
 The normative machine-readable contract is `schemas/cmix-manifest-v1.schema.json`. The hand-written runtime validator also enforces duplicate IDs, canonical chart paths, safe paths, package type conditions, and extension rules.
 
@@ -86,7 +86,7 @@ A chart file uses angle-based CIRCLE MIX notes only. Legacy lane numbers are not
 }
 ```
 
-Notes must be sorted by non-decreasing `beat`. Simultaneous notes are allowed. Angles are degrees in `[0, 360)`, with 0° at the top and positive movement clockwise.
+Notes must be sorted by non-decreasing `beat`. Simultaneous notes are allowed. Angles are degrees in `[0, 360)`, with 0° at the top and positive movement clockwise. A chart must contain at least one note, but the format does not impose a fixed note-count ceiling.
 
 Supported types:
 
@@ -118,13 +118,12 @@ Image extensions:
 
 Extension validation is only the first layer. The import PR must also inspect file signatures and verify browser decoding before installation.
 
-## 7. Size and archive limits
+## 7. Resource and archive safety limits
+
+CIRCLE MIX no longer imposes fixed gameplay-content ceilings on the number of files, charts, notes, or the maximum displayed difficulty. Packages remain bounded by byte-size and archive-safety checks:
 
 | Limit | v1 value |
 |---|---:|
-| Files per package | 64 |
-| Charts per package | 32 |
-| Notes per chart | 100,000 |
 | `manifest.json` | 256 KiB |
 | Each chart JSON | 8 MiB |
 | Audio | 256 MiB |
@@ -132,7 +131,7 @@ Extension validation is only the first layer. The import PR must also inspect fi
 | Total uncompressed data | 512 MiB |
 | Per-entry compression ratio | 200:1 |
 
-These are validation ceilings, not recommended targets. ZIP extraction must still enforce streaming or incremental limits before allocating the full declared output.
+These are security and storage ceilings, not recommended authoring targets. ZIP extraction must still enforce streaming or incremental byte limits before allocating the full declared output. In practice, the browser or operating system storage quota can limit how many local songs are installed.
 
 ## 8. Duplicate and update policy
 
