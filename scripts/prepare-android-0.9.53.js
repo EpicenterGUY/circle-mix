@@ -33,11 +33,12 @@ for(const removed of ['maxFiles:','maxCharts:','maxNotesPerChart:']){
 for(const needle of ['charts must contain at least 1 entry','notes must contain at least 1 entry','Package must contain at least 1 file','Chart level must be a finite number >= 1']){
   if(!validator.includes(needle))throw new Error(`Android 0.9.53 payload is missing ${needle}`);
 }
-const editorHtml=fs.readFileSync(path.join(out,'editor.html'),'utf8');
-if(/id="cmixLevel"[^>]*max="20"/.test(editorHtml))throw new Error('Android 0.9.53 editor still caps levels at 20');
-const editor=fs.readFileSync(path.join(out,'src/editor.js'),'utf8');
-if(editor.includes('Math.min(20'))throw new Error('Android 0.9.53 editor still clamps exported levels to 20');
-if(!editor.includes('mergeLocalDifficulty')&&!fs.readFileSync(path.join(out,'src/editor-playtest.js'),'utf8').includes('mergeLocalDifficulty'))throw new Error('Android 0.9.53 payload lost sibling difficulty preservation');
+const editorHtml=fs.readFileSync(path.join(root,'editor.html'),'utf8');
+if(/id="cmixLevel"[^>]*max="20"/.test(editorHtml))throw new Error('CIRCLE MIX editor still caps levels at 20');
+const editor=fs.readFileSync(path.join(root,'src/editor.js'),'utf8');
+if(editor.includes('Math.min(20'))throw new Error('CIRCLE MIX editor still clamps exported levels to 20');
+const editorPlaytest=fs.readFileSync(path.join(out,'src/editor-playtest.js'),'utf8');
+if(!editorPlaytest.includes('mergeLocalDifficulty'))throw new Error('Android 0.9.53 payload lost sibling difficulty preservation');
 const css=fs.readFileSync(targetCss,'utf8');
 for(const needle of ['overflow-x:auto','flex-wrap:nowrap','touch-action:pan-x','scroll-snap-type:x proximity']){
   if(!css.includes(needle))throw new Error(`Android 0.9.53 payload is missing ${needle}`);
