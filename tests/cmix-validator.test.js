@@ -49,6 +49,37 @@ test("valid FULL manifest and package pass", () => {
   assert.equal(result.ok, true);
 });
 
+test("content counts and difficulty levels have no fixed gameplay ceiling", () => {
+  const manifest = fullManifest();
+  delete manifest.jacket;
+  manifest.charts = Array.from({length:300}, (_, index) => {
+    const id = `chart-${index}`;
+    return {id,name:`Chart ${index}`,level:index===299?9999:index+1,file:`charts/${id}.json`};
+  });
+  const manifestResult = validator.validateManifest(manifest);
+  assert.equal(manifestResult.ok, true, JSON.stringify(manifestResult.errors));
+
+  const largeChart = {
+    format:"circle-mix-chart",
+    formatVersion:1,
+    id:"large-chart",
+    notes:Array.from({length:100001}, (_, index) => ({type:"cut",beat:index,angle:index%360}))
+  };
+  const chartResult = validator.validateChart(largeChart);
+  assert.equal(chartResult.ok, true, JSON.stringify(chartResult.errors.slice(0,5)));
+
+  const packageManifest = {...manifest,charts:manifest.charts.slice(0,70)};
+  const charts = Object.fromEntries(packageManifest.charts.map(descriptor => [descriptor.file,{
+    format:"circle-mix-chart",formatVersion:1,id:descriptor.id,notes:[{type:"cut",beat:0,angle:0}]
+  }]));
+  const entries = [entry("manifest.json",10_000,5_000),entry("audio.ogg",1000,900),...packageManifest.charts.map(descriptor => entry(descriptor.file,1000,500))];
+  const packageResult = validator.validatePackage({manifest:packageManifest,charts,entries});
+  assert.equal(packageResult.ok, true, JSON.stringify(packageResult.errors.slice(0,5)));
+  assert.equal(validator.LIMITS.maxCharts, undefined);
+  assert.equal(validator.LIMITS.maxFiles, undefined);
+  assert.equal(validator.LIMITS.maxNotesPerChart, undefined);
+});
+
 test("valid CHART package requires audioMatch and contains no audio", () => {
   const manifest = fullManifest();
   manifest.packageType = "chart";
