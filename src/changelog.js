@@ -6,6 +6,12 @@
 4. 기존 로그는 삭제하거나 수정하지 않는다.
 */
 window.CircleMixChangelog = [
+  { version: "0.9.35", date: "2026-08-05", title: "UNLIMITED DIFFICULTY DISPLAY", summary: "작성 LEVEL과 자동 별을 분리 표시하고 자동 난이도의 15★ 상한을 제거했습니다.", changes: [
+    { category: "LEVEL", text: "LOCAL 난이도 버튼과 곡 목록에 .cmix 작성 LEVEL을 그대로 표시" },
+    { category: "AUTO", text: "자동 난이도는 별도 AUTO 값으로 함께 표시하며 15★에서 잘리지 않도록 확장" },
+    { category: "POWER", text: "정렬·POWER·플레이 계산은 계속 자동 별을 사용해 작성 LEVEL 조작의 영향을 차단" },
+    { category: "CACHE", text: "웹·PWA·에디터를 새 캐시 리비전으로 갱신" }
+  ] },
   { version: "0.9.34", date: "2026-08-02", title: "CONTENT LIMITS REMOVED", summary: "난이도와 맵·채보·노트 개수에 걸려 있던 고정 상한을 제거했습니다.", changes: [
     { category: "DIFFICULTY", text: "표시 난이도 20 상한을 제거해 20보다 높은 레벨도 가져오고 내보낼 수 있습니다." },
     { category: "MAPS", text: "LOCAL SONGS와 .cmix 패키지의 곡·채보·파일 개수에 고정된 상한을 두지 않습니다." },

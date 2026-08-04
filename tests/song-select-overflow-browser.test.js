@@ -66,7 +66,7 @@ async function snapshot(page){
     browser=await chromium.launch({headless:true});
     for(const testCase of CASES){
       const context=await browser.newContext({viewport:testCase.viewport,isMobile:testCase.isMobile,hasTouch:testCase.hasTouch,deviceScaleFactor:1,serviceWorkers:'block'});
-      await context.addInitScript(()=>{try{localStorage.setItem('circleMixLastSeenVersion','0.9.34');}catch(_){}});
+      await context.addInitScript(()=>{try{localStorage.setItem('circleMixLastSeenVersion','0.9.35');}catch(_){}});
       const page=await context.newPage();
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
       try{

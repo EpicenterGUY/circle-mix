@@ -23,7 +23,7 @@ assert.match(pkg.scripts?.['desktop:build']||'',/cargo tauri build$/,'desktop bu
 assert.doesNotMatch(pkg.scripts?.['desktop:build']||'',/--no-bundle/,'desktop build must not suppress installer generation');
 assert.match(cargo,new RegExp(`version = "${tauri.version.replaceAll('.','\\.')}"`),'Cargo and Tauri desktop versions must match');
 assert.equal(pkg.version,tauri.version,'npm and desktop versions must match for updater releases');
-assert.equal(tauri.version,'0.9.53','Windows installer must publish the unlimited-content release');
+assert.equal(tauri.version,'0.9.54','Windows installer must publish the unlimited-content release');
 assert.deepEqual(windowsTauri.bundle?.fileAssociations?.[0]?.ext,['cmix'],'Windows installer must associate .cmix files');
 assert.equal(windowsTauri.bundle?.fileAssociations?.[0]?.mimeType,'application/vnd.circle-mix.cmix');
 assert.match(cargo,/tauri-plugin-single-instance = "2"/,'desktop must keep one running instance for repeated map opens');

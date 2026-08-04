@@ -7,16 +7,16 @@ const Android=require('../src/android-platform');
 const Updater=require('../src/android-updater');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 
-test('Android platform configuration uses the 0.9.53 unlimited-content shell',()=>{
+test('Android platform configuration uses the 0.9.54 unlimited-content shell',()=>{
   const config=JSON.parse(read('src-tauri/tauri.android.conf.json'));
   const packageJson=JSON.parse(read('package.json'));
-  assert.equal(config.version,'0.9.53');
-  assert.equal(packageJson.version,'0.9.53','the Windows and Android packages publish the same release');
+  assert.equal(config.version,'0.9.54');
+  assert.equal(packageJson.version,'0.9.54','the Windows and Android packages publish the same release');
   assert.equal(config.build.frontendDist,'../android-dist');
   assert.equal(config.app.windows[0].fullscreen,true);
   assert.equal(config.app.windows[0].decorations,false);
   assert.equal(config.bundle.android.minSdkVersion,24);
-  assert.equal(config.bundle.android.versionCode,9053);
+  assert.equal(config.bundle.android.versionCode,9054);
   assert.match(config.app.security.csp,/connect-src 'self' https:\/\/api\.github\.com/);
 });
 
@@ -49,19 +49,19 @@ test('fold viewport classification and Android back policy are deterministic',()
 
 test('Android release metadata selects only a newer exact signed ARM64 APK',()=>{
   assert.equal(Updater.VERSION,'android-updater-v1');
-  assert.equal(Updater.compareVersions('0.9.53','0.9.52'),1);
-  assert.equal(Updater.compareVersions('0.9.53','0.9.53'),0);
+  assert.equal(Updater.compareVersions('0.9.54','0.9.52'),1);
+  assert.equal(Updater.compareVersions('0.9.54','0.9.54'),0);
   assert.equal(Updater.releaseVersion('android-v0.9.54'),'0.9.54');
   assert.equal(Updater.releaseVersion('v0.9.54'),'');
   const release={
     tag_name:'android-v0.9.54',draft:false,prerelease:false,body:'notes',published_at:'2026-08-02T00:00:00Z',
     assets:[{name:'circle-mix-0.9.54-android-arm64-release.apk',state:'uploaded',size:123,digest:`sha256:${'a'.repeat(64)}`,browser_download_url:'https://github.com/EpicenterGUY/circle-mix/releases/download/android-v0.9.54/circle-mix-0.9.54-android-arm64-release.apk'}]
   };
-  const update=Updater.releaseToUpdate(release,'0.9.53');
+  const update=Updater.releaseToUpdate(release,'0.9.54');
   assert.equal(update.version,'0.9.54');
   assert.equal(update.sha256,'a'.repeat(64));
   assert.equal(Updater.releaseToUpdate(release,'0.9.54'),null);
-  assert.equal(Updater.releaseToUpdate({...release,assets:[{...release.assets[0],digest:null}]},'0.9.53'),null);
+  assert.equal(Updater.releaseToUpdate({...release,assets:[{...release.assets[0],digest:null}]},'0.9.54'),null);
   assert.match(Updater.RELEASE_API,/releases\?per_page=20/);
 });
 
@@ -113,7 +113,7 @@ test('Android production release uses persistent secrets and does not replace de
 test('Android distribution, editor safety, updater bridge, native patch, and release workflow stay wired together',()=>{
   const packageJson=JSON.parse(read('package.json'));
   const prepare=read('scripts/prepare-android.js');
-  const releasePass=read('scripts/prepare-android-0.9.53.js');
+  const releasePass=read('scripts/prepare-android-0.9.54.js');
   const patch=read('scripts/patch-android-project.js');
   const distAudit=read('scripts/audit-android-dist.js');
   const projectAudit=read('scripts/audit-android-project.js');
