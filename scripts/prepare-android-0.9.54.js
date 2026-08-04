@@ -13,7 +13,7 @@ if(!fs.existsSync(sourceCss))throw new Error('song-select-fixes.css is missing')
 fs.copyFileSync(sourceCss,targetCss);
 const release=`(function(){
   "use strict";
-  const release={version:"${VERSION}",date:"${BUILD_DATE}",title:"ANDROID 0.9.54",summary:"작성 LEVEL과 자동 별을 분리 표시하고 자동 난이도의 15★ 상한을 제거한 Android 업데이트입니다.",changes:[
+  const release={version:"${VERSION}",date:"${BUILD_DATE}",title:"ANDROID 0.9.54 · UNLIMITED DIFFICULTY DISPLAY",summary:"작성 LEVEL과 자동 별을 분리 표시하고 자동 난이도의 15★ 상한을 제거한 Android 업데이트입니다.",changes:[
     {category:"LEVEL",text:"LOCAL 난이도 버튼과 곡 목록에 작성 LEVEL을 그대로 표시합니다."},
     {category:"AUTO",text:"자동 난이도를 별도 AUTO 값으로 표시하며 15★ 이상의 결과도 자르지 않습니다."},
     {category:"POWER",text:"정렬과 POWER는 자동 별을 계속 사용해 작성 LEVEL 조작의 영향을 받지 않습니다."},
