@@ -5,7 +5,7 @@ const path=require('path');
 const root=path.resolve(__dirname,'..');
 const out=path.join(root,'android-dist');
 const VERSION='0.9.54';
-const BUILD_DATE='2026-08-02';
+const BUILD_DATE='2026-08-05';
 if(!fs.existsSync(path.join(out,'index.html')))throw new Error('android-dist must be prepared before the 0.9.54 release pass');
 const sourceCss=path.join(root,'song-select-fixes.css');
 const targetCss=path.join(out,'song-select-fixes.css');
@@ -13,7 +13,7 @@ if(!fs.existsSync(sourceCss))throw new Error('song-select-fixes.css is missing')
 fs.copyFileSync(sourceCss,targetCss);
 const release=`(function(){
   "use strict";
-  const release={version:"${VERSION}",date:"${BUILD_DATE}",title:"ANDROID 0.9.54",summary:"난이도와 맵·채보·노트 개수의 고정 상한을 제거한 Android 업데이트입니다.",changes:[
+  const release={version:"${VERSION}",date:"${BUILD_DATE}",title:"ANDROID 0.9.54",summary:"작성 LEVEL과 자동 별을 분리 표시하고 자동 난이도의 15★ 상한을 제거한 Android 업데이트입니다.",changes:[
     {category:"LEVEL",text:"LOCAL 난이도 버튼과 곡 목록에 작성 LEVEL을 그대로 표시합니다."},
     {category:"AUTO",text:"자동 난이도를 별도 AUTO 값으로 표시하며 15★ 이상의 결과도 자르지 않습니다."},
     {category:"POWER",text:"정렬과 POWER는 자동 별을 계속 사용해 작성 LEVEL 조작의 영향을 받지 않습니다."},
@@ -47,4 +47,4 @@ const css=fs.readFileSync(targetCss,'utf8');
 for(const needle of ['overflow-x:auto','flex-wrap:nowrap','touch-action:pan-x','scroll-snap-type:x proximity']){
   if(!css.includes(needle))throw new Error(`Android 0.9.54 payload is missing ${needle}`);
 }
-console.log(`Applied Android ${VERSION} unlimited-content release pass.`);
+console.log(`Applied Android ${VERSION} difficulty-display release pass.`);
