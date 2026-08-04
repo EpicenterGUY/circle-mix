@@ -7,7 +7,7 @@ const Android=require('../src/android-platform');
 const Updater=require('../src/android-updater');
 const read=file=>fs.readFileSync(path.join(__dirname,'..',file),'utf8');
 
-test('Android platform configuration uses the 0.9.54 unlimited-content shell',()=>{
+test('Android platform configuration uses the 0.9.54 difficulty-display shell',()=>{
   const config=JSON.parse(read('src-tauri/tauri.android.conf.json'));
   const packageJson=JSON.parse(read('package.json'));
   assert.equal(config.version,'0.9.54');
@@ -49,19 +49,19 @@ test('fold viewport classification and Android back policy are deterministic',()
 
 test('Android release metadata selects only a newer exact signed ARM64 APK',()=>{
   assert.equal(Updater.VERSION,'android-updater-v1');
-  assert.equal(Updater.compareVersions('0.9.54','0.9.52'),1);
+  assert.equal(Updater.compareVersions('0.9.54','0.9.53'),1);
   assert.equal(Updater.compareVersions('0.9.54','0.9.54'),0);
   assert.equal(Updater.releaseVersion('android-v0.9.54'),'0.9.54');
   assert.equal(Updater.releaseVersion('v0.9.54'),'');
   const release={
-    tag_name:'android-v0.9.54',draft:false,prerelease:false,body:'notes',published_at:'2026-08-02T00:00:00Z',
+    tag_name:'android-v0.9.54',draft:false,prerelease:false,body:'notes',published_at:'2026-08-05T00:00:00Z',
     assets:[{name:'circle-mix-0.9.54-android-arm64-release.apk',state:'uploaded',size:123,digest:`sha256:${'a'.repeat(64)}`,browser_download_url:'https://github.com/EpicenterGUY/circle-mix/releases/download/android-v0.9.54/circle-mix-0.9.54-android-arm64-release.apk'}]
   };
-  const update=Updater.releaseToUpdate(release,'0.9.54');
+  const update=Updater.releaseToUpdate(release,'0.9.53');
   assert.equal(update.version,'0.9.54');
   assert.equal(update.sha256,'a'.repeat(64));
   assert.equal(Updater.releaseToUpdate(release,'0.9.54'),null);
-  assert.equal(Updater.releaseToUpdate({...release,assets:[{...release.assets[0],digest:null}]},'0.9.54'),null);
+  assert.equal(Updater.releaseToUpdate({...release,assets:[{...release.assets[0],digest:null}]},'0.9.53'),null);
   assert.match(Updater.RELEASE_API,/releases\?per_page=20/);
 });
 
@@ -110,7 +110,7 @@ test('Android production release uses persistent secrets and does not replace de
   assert.doesNotMatch(workflow,/keytool -genkeypair/,'production workflow must never generate a replacement signing key');
 });
 
-test('Android distribution, editor safety, updater bridge, native patch, and release workflow stay wired together',()=>{
+test('Android distribution, difficulty display, updater bridge, native patch, and release workflow stay wired together',()=>{
   const packageJson=JSON.parse(read('package.json'));
   const prepare=read('scripts/prepare-android.js');
   const releasePass=read('scripts/prepare-android-0.9.54.js');
@@ -120,9 +120,12 @@ test('Android distribution, editor safety, updater bridge, native patch, and rel
   const verificationWorkflow=read('.github/workflows/android-app.yml');
   const releaseWorkflow=read('.github/workflows/android-release.yml');
   for(const needle of ['includeBundledSongs:false','enableServiceWorker:false','src/android-platform.js','src/android-updater.js','enableAndroidUpdater:true'])assert.match(prepare,new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
-  assert.match(releasePass,/VERSION='0\.9\.53'/);
-  assert.match(releasePass,/ANDROID 0\.9\.53/);
-  assert.match(releasePass,/CONTENT LIMITS/);
+  assert.match(releasePass,/VERSION='0\.9\.54'/);
+  assert.match(releasePass,/ANDROID 0\.9\.54/);
+  assert.match(releasePass,/UNLIMITED DIFFICULTY DISPLAY/);
+  assert.match(releasePass,/declaredDifficultyLevel/);
+  assert.match(releasePass,/formatDifficultyView/);
+  assert.match(releasePass,/MAX_STARS=Number\.POSITIVE_INFINITY/);
   assert.match(releasePass,/maxNotesPerChart/);
   assert.match(releasePass,/Math\.min\(20/);
   assert.match(releasePass,/song-select-fixes\.css/);
@@ -130,8 +133,11 @@ test('Android distribution, editor safety, updater bridge, native patch, and rel
   assert.match(distAudit,/data:audio\//,'distribution audit rejects embedded audio');
   assert.match(distAudit,/src\/android-updater\.js/);
   assert.match(distAudit,/api\.github\.com/);
-  assert.match(distAudit,/version:"0\.9\.53"/);
-  assert.match(distAudit,/CONTENT LIMITS/);
+  assert.match(distAudit,/version:"0\.9\.54"/);
+  assert.match(distAudit,/UNLIMITED DIFFICULTY DISPLAY/);
+  assert.match(distAudit,/MAX_STARS=Number\.POSITIVE_INFINITY/);
+  assert.match(distAudit,/declaredDifficultyLevel/);
+  assert.match(distAudit,/formatDifficultyView/);
   assert.match(distAudit,/maxNotesPerChart/);
   assert.match(distAudit,/touch-action:pan-x/);
   assert.match(distAudit,/mergeLocalDifficulty/);
@@ -143,7 +149,7 @@ test('Android distribution, editor safety, updater bridge, native patch, and rel
   assert.match(distAudit,/Android distribution audit passed/);
   assert.match(projectAudit,/Generated Android project audit passed/);
   assert.equal(packageJson.scripts.tauri,'tauri');
-  assert.match(packageJson.scripts['android:prepare'],/prepare-android-0\.9\.53\.js/);
+  assert.match(packageJson.scripts['android:prepare'],/prepare-android-0\.9\.54\.js/);
   assert.match(packageJson.scripts['android:icons'],/tauri icon src-tauri\/app-icon\.svg -o src-tauri\/icons/);
   assert.match(packageJson.scripts['android:init'],/^npm run android:icons/);
   assert.match(packageJson.scripts['android:build:apk'],/^npm run android:icons/);
