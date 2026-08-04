@@ -17,7 +17,7 @@ const signingHelper=fs.readFileSync(path.join(root,'scripts/prepare-updater-sign
 
 assert.equal(tauri.version,'0.9.54');
 assert.equal(pkg.version,tauri.version,'npm and desktop updater versions must match');
-assert.match(cargo,/version = "0\.9\.53"/,'Rust package must match Windows 0.9.54');
+assert.match(cargo,/version = "0\.9\.54"/,'Rust package must match Windows 0.9.54');
 assert.equal(tauri.app?.withGlobalTauri,true,'desktop updater UI needs the global Tauri core bridge');
 assert.equal(tauri.bundle?.createUpdaterArtifacts,false,'normal PR installers must not require the private signing key');
 assert.equal(releaseConfig.bundle?.createUpdaterArtifacts,true,'release builds must create signed updater artifacts');
