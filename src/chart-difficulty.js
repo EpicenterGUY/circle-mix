@@ -1,6 +1,6 @@
 /* Shared, data-only LOCAL chart difficulty estimator. */
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;if(root)root.CircleMixChartDifficulty=api;})(typeof globalThis!=='undefined'?globalThis:this,function(){'use strict';
-  const VERSION='local-v5',MAX_STARS=15,TAU=Math.PI*2,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const VERSION='local-v6',MAX_STARS=Number.POSITIVE_INFINITY,TAU=Math.PI*2,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const angle=n=>((Number(n?.angle??((n?.directionIndex??n?.lane??0)*45))%360)+360)%360;
   const signedDistance=(a,b)=>((b-a+540)%360)-180;
   const distance=(a,b)=>Math.abs(signedDistance(a,b));
@@ -50,7 +50,7 @@
     const core=1+Math.sqrt(components.density)*.32+Math.sqrt(components.speed)*.32+Math.sqrt(sustain)*.12+components.aim*.08+components.rotation*.24+rotationChain*.90+components.overlap*.16+components.pulseOverlap*.24+components.complexity*.12+burst;
     const perceived=core<=8?core:8+Math.pow(core-8,1.20)*1.12;
     const scaled=displayScale(perceived);
-    return {stars:Math.round(clamp(scaled,1,MAX_STARS)*10)/10,raw:Math.round(raw*100)/100,version:VERSION,components};
+    return {stars:Math.round(Math.max(1,scaled)*10)/10,raw:Math.round(raw*100)/100,version:VERSION,components};
   }
   return Object.freeze({VERSION,MAX_STARS,calculate,displayScale,signedSweep,family,localRates,localPeak,upperMean,rotationTransitions,rotationWindowStrains});
 });

@@ -857,8 +857,17 @@
     return source.notes.map(localNoteToGame).sort((a,b)=>a.hitTime-b.hitTime);
   }
 
+  function declaredDifficultyLevel(songData,difficultyId){
+    const meta=songData?.difficulties?.[difficultyId];
+    const value=Number(meta?.level??meta?.declaredStars??meta?.stars);
+    return Number.isFinite(value)&&value>=1?value:null;
+  }
   function getDifficulty(mode=mapMode){
-    if(isLocalSong(selectedSong)){ const c=selectedSong.charts?.[mode]; return c ? chartDifficulty.calculate(c) : null; }
+    if(isLocalSong(selectedSong)){
+      const c=selectedSong.charts?.[mode];
+      if(!c)return null;
+      return {...chartDifficulty.calculate(c),declaredLevel:declaredDifficultyLevel(selectedSong,mode)};
+    }
     const meta=selectedSong?.difficulties?.[mode];
     if(meta && Number.isFinite(Number(meta.stars))) return {stars:Number(meta.stars), raw:null, bundleStars:true};
     if(!songs.hasDifficulty(selectedSong, mode)) return null;
@@ -869,6 +878,15 @@
   function formatStarValue(stars){
     const value=Number(stars);
     return Number.isFinite(value) ? value.toFixed(1)+"★" : "—";
+  }
+  function formatLevelValue(level){
+    const value=Number(level);
+    if(!Number.isFinite(value))return "";
+    return Number.isInteger(value)?String(value):value.toFixed(1).replace(/\.0$/,'');
+  }
+  function formatDifficultyView(diff){
+    const auto=formatStarValue(diff?.stars),level=formatLevelValue(diff?.declaredLevel);
+    return level?`LV ${level} · AUTO ${auto}`:auto;
   }
 
   function getDifficultySafe(mode=mapMode){
@@ -882,7 +900,7 @@
 
   function formatDifficulty(mode=mapMode){
     const d=getDifficultySafe(mode);
-    return d ? formatStarValue(d.stars) : "—";
+    return d ? formatDifficultyView(d) : "—";
   }
 
   function difficultyViewForSong(songData, difficultyId){
@@ -895,7 +913,7 @@
     }
     const chart=songData.charts?.[difficultyId]; let stars;
     if(chart){ try{ stars=chartDifficulty.calculate(chart).stars; }catch(error){ console.error("[Difficulty Calculation Failed]", error); } }
-    return {id:difficultyId, label, stars};
+    return {id:difficultyId, label, stars, declaredLevel:declaredDifficultyLevel(songData,difficultyId)};
   }
 
   function addCutRun(n,start,step,lanes,types={}){
@@ -5766,7 +5784,7 @@ settingsOrigin=${settingsOrigin}`);
     songCarousel.innerHTML = tabHtml + (list.length ? list.map(songData => {
       const active = songData.id === selectedSongId;
       const chartEntries = isLocalSong(songData) ? localChartEntries(songData) : difficultyIds(songData).map(id=>({id}));
-      const diffs=chartEntries.map(({id})=>{ const diff=difficultyViewForSong(songData,id); return `${escapeHtml(diff?.label || id.toUpperCase())} ${escapeHtml(formatStarValue(diff?.stars))}`; }).join(" · ");
+      const diffs=chartEntries.map(({id})=>{ const diff=difficultyViewForSong(songData,id); return `${escapeHtml(diff?.label || id.toUpperCase())} ${escapeHtml(formatDifficultyView(diff))}`; }).join(" · ");
       const songIdAttr=escapeAttribute(songData.id);
       const songTitle=escapeHtml(songData.title || "UNKNOWN");
       const artist=escapeHtml(songData.artist || "UNKNOWN");
@@ -5821,7 +5839,7 @@ settingsOrigin=${settingsOrigin}`);
         const label = getActiveDifficultyLabel(selectedSong,id);
         const best = getBestRecord(id, selectedSong);
         const diff=difficultyViewForSong(selectedSong,id);
-        const stars = formatStarValue(diff?.stars);
+        const stars = formatDifficultyView(diff);
         const bestHtml = best ? `<small>BEST SCORE ${String(best.bestScore || 0).padStart(7,"0")}<br>BEST POWER ${Number.isFinite(best.bestPower) ? best.bestPower : "---"}<br>BEST RANK ${best.bestRank || "---"}<br>BEST ACCURACY ${Number.isFinite(best.bestAccuracy) ? (best.bestAccuracy*100).toFixed(2)+"%" : "---"}</small>` : `<small>BEST SCORE ---<br>BEST POWER ---<br>BEST RANK ---<br>BEST ACCURACY ---</small>`;
         return `<button class="songDiffBtn${selectedDifficultyId===id ? " on" : ""}" type="button" data-difficulty="${escapeAttribute(id)}">${escapeHtml(label)} <span>${escapeHtml(stars)}</span>${bestHtml}</button>`;
       }).join("");

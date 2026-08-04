@@ -2,11 +2,11 @@
 (function(root){
   const supplied=root.CircleMixBuildConfig || {};
   root.CircleMixBuildConfig=Object.freeze({...supplied,includeBundledSongs:supplied.includeBundledSongs !== false});
-  const sharedRelease={version:"0.9.34",date:"2026-08-02",title:"CONTENT LIMITS REMOVED",summary:"난이도와 맵·채보·노트 개수에 걸려 있던 고정 상한을 제거했습니다.",changes:[
-    {category:"DIFFICULTY",text:"표시 난이도 20 상한을 제거해 20보다 높은 레벨도 가져오고 내보낼 수 있습니다."},
-    {category:"MAPS",text:"LOCAL SONGS와 .cmix 패키지의 곡·채보·파일 개수에 고정된 256개·32개·64개 제한을 두지 않습니다."},
-    {category:"NOTES",text:"채보당 100,000노트 고정 상한을 제거하고 에디터의 전체 난이도 내보내기 레벨 클램프도 없앴습니다."},
-    {category:"SAFETY",text:"파일 용량, 전체 압축 해제 용량, 압축률, 경로와 금지 확장자 검사는 그대로 유지됩니다."}
+  const sharedRelease={version:"0.9.35",date:"2026-08-05",title:"UNLIMITED DIFFICULTY DISPLAY",summary:"작성 LEVEL과 자동 별을 분리 표시하고 자동 난이도의 15★ 상한을 제거했습니다.",changes:[
+    {category:"LEVEL",text:"LOCAL 난이도 버튼과 곡 목록에 .cmix 작성 LEVEL을 그대로 표시합니다."},
+    {category:"AUTO",text:"자동 난이도를 별도 AUTO 값으로 함께 표시하며 15★ 이상도 그대로 표시합니다."},
+    {category:"POWER",text:"정렬·POWER·플레이 계산은 자동 별을 계속 사용해 작성 LEVEL 조작의 영향을 받지 않습니다."},
+    {category:"COMPATIBILITY",text:"기존 LOCAL 곡·채보·기록과 설정을 유지합니다."}
   ]};
   if(Array.isArray(root.CircleMixChangelog))root.CircleMixChangelog=[sharedRelease,...root.CircleMixChangelog.filter(entry=>entry?.version!==sharedRelease.version)];
 

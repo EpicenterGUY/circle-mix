@@ -21,7 +21,9 @@ for(const needle of ['androidBackCallback','foldExpanded','circlemix:viewportcha
 const mobileInput=fs.readFileSync(path.join(out,'src/mobile-layout-v2.js'),'utf8');
 for(const needle of ['mobile-input-v3','BALANCED','PRECISION','SPEED','stopImmediatePropagation','mobileAimRecontactGuard','mobileGestureGuard'])if(!mobileInput.includes(needle))throw new Error(`Android mobile input layer is missing ${needle}`);
 const release=fs.readFileSync(path.join(out,'src/android-release.js'),'utf8');
-for(const needle of ['version:"0.9.53"','ANDROID 0.9.53','CONTENT LIMITS','100,000개를 넘는 노트','압축률'])if(!release.includes(needle))throw new Error(`Android release metadata is missing ${needle}`);
+for(const needle of ['version:"0.9.54"','ANDROID 0.9.54','UNLIMITED DIFFICULTY DISPLAY','LEVEL','AUTO','POWER'])if(!release.includes(needle))throw new Error(`Android release metadata is missing ${needle}`);
+const difficulty=fs.readFileSync(path.join(out,'src/chart-difficulty.js'),'utf8');
+if(!difficulty.includes('MAX_STARS=Number.POSITIVE_INFINITY'))throw new Error('Android automatic difficulty still has a hard star cap');
 const validator=fs.readFileSync(path.join(out,'src/cmix-validator.js'),'utf8');
 for(const removed of ['maxFiles:','maxCharts:','maxNotesPerChart:'])if(validator.includes(removed))throw new Error(`Android validator still contains ${removed}`);
 for(const needle of ['charts must contain at least 1 entry','notes must contain at least 1 entry','Package must contain at least 1 file','Chart level must be a finite number >= 1'])if(!validator.includes(needle))throw new Error(`Android unlimited-content validator is missing ${needle}`);
@@ -38,5 +40,5 @@ for(const needle of ['api.github.com/repos/EpicenterGUY/circle-mix/releases?per_
 const powerModel=fs.readFileSync(path.join(out,'src/power.js'),'utf8');
 for(const needle of ['calculatePower','previewForStars','ACCURACY_STEPS'])if(!powerModel.includes(needle))throw new Error(`Android POWER forecast model is missing ${needle}`);
 const game=fs.readFileSync(path.join(out,'src/game.js'),'utf8');
-for(const needle of ['function checkScratch','sortDifficultyEntriesByStars','editorPlaytestSession'])if(!game.includes(needle))throw new Error(`Android game payload is missing ${needle}`);
+for(const needle of ['function checkScratch','sortDifficultyEntriesByStars','editorPlaytestSession','declaredDifficultyLevel','formatDifficultyView'])if(!game.includes(needle))throw new Error(`Android game payload is missing ${needle}`);
 console.log(`Android distribution audit passed: ${files.length} files.`);
